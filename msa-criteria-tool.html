@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSA 診断基準マッピングツール — Gilman 2008</title>
+<style>
+:root {
+  --msa: #065f46;
+  --msa-mid: #047857;
+  --msa-light: #d1fae5;
+  --msa-border: #6ee7b7;
+  --probable-bg: #d1fae5;
+  --probable-border: #059669;
+  --probable-text: #064e3b;
+  --possible-bg: #dbeafe;
+  --possible-border: #3b82f6;
+  --possible-text: #1e3a8a;
+  --non-bg: #f3f4f6;
+  --non-border: #9ca3af;
+  --non-text: #374151;
+  --warn-bg: #fef3c7;
+  --warn-border: #f59e0b;
+  --warn-text: #78350f;
+  --danger-bg: #fee2e2;
+  --danger-border: #f87171;
+  --danger-text: #991b1b;
+  --text: #111827;
+  --text-light: #6b7280;
+  --bg: #f3f4f6;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --radius: 10px;
+  --shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 16px;
+  line-height: 1.5;
+}
+
+.app { max-width: 760px; margin: 0 auto; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 60%, #047857 100%);
+  color: white;
+  padding: 22px 28px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.header h1 { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em; }
+.header p  { font-size: 0.8rem; opacity: 0.8; margin-top: 4px; }
+
+/* Progress */
+.progress-wrap {
+  background: white;
+  padding: 14px 24px 10px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.progress-row { display: flex; align-items: center; gap: 0; }
+.s-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+  transition: all 0.2s;
+}
+.s-dot.done   { background: var(--msa); color: white; }
+.s-dot.active { background: var(--msa); color: white; box-shadow: 0 0 0 3px rgba(6,95,70,0.22); }
+.s-dot.pending{ background: #e5e7eb; color: #9ca3af; }
+.s-line { flex: 1; height: 2px; background: #e5e7eb; transition: background 0.2s; }
+.s-line.done  { background: var(--msa); }
+.p-labels {
+  display: flex; margin-top: 6px; gap: 0;
+}
+.p-label {
+  flex: 1; text-align: center; font-size: 0.6rem;
+  color: var(--text-light); line-height: 1.2;
+}
+
+/* Content area */
+#stepContent { margin-top: 0; }
+
+/* Card */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 20px 24px;
+  margin-top: 12px;
+  box-shadow: var(--shadow);
+}
+.card:first-child { border-radius: 0; margin-top: 0; }
+
+.step-title {
+  font-size: 1.05rem; font-weight: 800;
+  color: var(--msa); margin-bottom: 4px;
+}
+.step-desc {
+  font-size: 0.82rem; color: var(--text-light);
+  margin-bottom: 18px; line-height: 1.55;
+}
+
+/* Questions */
+.qg { margin-bottom: 18px; }
+.ql { font-size: 0.88rem; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.4; }
+.qs { font-size: 0.75rem; color: var(--text-light); margin-bottom: 7px; line-height: 1.4; }
+.rg { display: flex; gap: 7px; flex-wrap: wrap; }
+.rb {
+  padding: 5px 15px; border: 1.5px solid var(--border);
+  border-radius: 20px; cursor: pointer; font-size: 0.82rem;
+  background: white; color: var(--text); transition: all 0.13s; user-select: none;
+}
+.rb:hover { border-color: var(--msa); background: var(--msa-light); }
+.rb.sy { background: #d1fae5; border-color: #059669; color: #064e3b; font-weight: 700; }
+.rb.sn { background: #f3f4f6; border-color: #9ca3af; color: #374151; font-weight: 700; }
+.rb.su { background: #eff6ff; border-color: #93c5fd; color: #1e40af; font-weight: 700; }
+.rb.sl { background: #dbeafe; border-color: #3b82f6; color: #1e40af; font-weight: 700; }
+
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+.sub-head {
+  font-size: 0.72rem; font-weight: 800; color: var(--text-light);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+}
+.info-note {
+  background: #f0fdf4; border-left: 3px solid var(--msa);
+  padding: 9px 13px; font-size: 0.78rem; color: #166534;
+  border-radius: 0 4px 4px 0; margin-bottom: 12px; line-height: 1.5;
+}
+
+/* Nav */
+.nav {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 24px; background: white;
+  border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow);
+}
+.btn {
+  padding: 9px 22px; border-radius: 6px; border: none;
+  cursor: pointer; font-size: 0.875rem; font-weight: 700; transition: all 0.13s;
+}
+.btn-p { background: var(--msa); color: white; }
+.btn-p:hover { background: var(--msa-mid); }
+.btn-s { background: white; color: var(--text); border: 1.5px solid var(--border); }
+.btn-s:hover { background: #f3f4f6; }
+.btn-r { background: none; color: var(--text-light); font-size: 0.75rem; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+
+/* Results */
+.res-box {
+  border-radius: var(--radius); padding: 18px 22px;
+  margin-bottom: 14px; border: 2px solid;
+}
+.res-probable { background: var(--probable-bg); border-color: var(--probable-border); color: var(--probable-text); }
+.res-possible  { background: var(--possible-bg);  border-color: var(--possible-border);  color: var(--possible-text); }
+.res-non       { background: var(--non-bg);        border-color: var(--non-border);        color: var(--non-text); }
+.res-title     { font-size: 1.45rem; font-weight: 900; margin-bottom: 3px; }
+.res-sub       { font-size: 1rem; font-weight: 700; margin-top: 5px; }
+.res-basis     { font-size: 0.8rem; margin-top: 8px; line-height: 1.55; opacity: 0.9; }
+
+/* Criteria check path */
+.path-box {
+  background: white; border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 18px; margin-bottom: 10px;
+}
+.path-title { font-size: 0.78rem; font-weight: 800; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+.path-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 10px; border-radius: 6px; margin-bottom: 4px;
+  font-size: 0.84rem; line-height: 1.4;
+}
+.path-met     { background: #d1fae5; }
+.path-unmet   { background: #fee2e2; }
+.path-unknown { background: #eff6ff; }
+.path-icon    { font-size: 0.95rem; flex-shrink: 0; }
+
+/* Criteria items */
+.ci-section { margin-bottom: 0; }
+.ci-head {
+  font-size: 0.72rem; font-weight: 800; color: var(--text-light);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+}
+.ci {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 9px; border-radius: 6px; margin-bottom: 3px;
+  font-size: 0.83rem; line-height: 1.4;
+}
+.ci-met     { background: #d1fae5; }
+.ci-unmet   { background: #fee2e2; }
+.ci-unknown { background: #eff6ff; }
+.ci-warn    { background: #fef3c7; }
+.ci-neutral { background: #f3f4f6; }
+.ci-icon    { font-size: 0.9rem; flex-shrink: 0; margin-top: 1px; }
+.ci-lbl     { font-weight: 600; }
+.ci-sub     { font-size: 0.72rem; color: var(--text-light); margin-top: 1px; }
+
+/* Tags */
+.tag { display: inline-block; padding: 2px 9px; border-radius: 11px; font-size: 0.72rem; font-weight: 700; }
+.t-probable { background: #d1fae5; color: #064e3b; }
+.t-possible  { background: #dbeafe; color: #1e3a8a; }
+.t-non       { background: #f3f4f6; color: #4b5563; }
+.t-msap     { background: #ede9fe; color: #4c1d95; }
+.t-msac     { background: #fce7f3; color: #831843; }
+.t-mixed    { background: #fef3c7; color: #78350f; }
+
+/* Alert boxes */
+.alert-warn {
+  background: var(--warn-bg); border: 1.5px solid var(--warn-border);
+  border-radius: 8px; padding: 11px 15px; margin-bottom: 12px;
+  font-size: 0.82rem; color: var(--warn-text); line-height: 1.5;
+}
+.alert-danger {
+  background: var(--danger-bg); border: 1.5px solid var(--danger-border);
+  border-radius: 8px; padding: 11px 15px; margin-bottom: 12px;
+  font-size: 0.82rem; color: var(--danger-text); line-height: 1.5;
+}
+.disclaimer {
+  font-size: 0.75rem; color: var(--text-light);
+  background: #f9fafb; border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 16px; line-height: 1.55; margin-top: 12px;
+}
+
+@media print {
+  .nav, .progress-wrap { display: none !important; }
+  body { background: white; padding: 0; }
+  .card { box-shadow: none; }
+  .res-box { border: 2px solid currentColor !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>MSA 診断基準マッピングツール</h1>
+    <p>Gilman S et al. Second consensus statement on the diagnosis of MSA. Neurology 2008;71:670-676</p>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap"></div>
+  <div id="stepContent"></div>
+  <div class="nav" id="navBar">
+    <button class="btn btn-s" id="btnBack" onclick="goBack()">← 戻る</button>
+    <span>
+      <button class="btn-r" onclick="resetAll()">最初から</button>
+      &nbsp;
+      <button class="btn btn-p" id="btnNext" onclick="goNext()">次へ →</button>
+    </span>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+const state = { step: 1, data: {} };
+const TOTAL = 7;
+const STEP_LABELS = ['基本情報','除外項目','自律神経','Parkinson','小脳症状','補足徴候','結果'];
+
+// ===== HELPERS =====
+function set(k, v) { state.data[k] = v; render(); }
+function get(k) { return state.data[k]; }
+function yes(k) { return state.data[k] === 'yes'; }
+function no(k)  { return state.data[k] === 'no'; }
+
+function radio(k, opts) {
+  const defs = [{v:'yes',l:'はい'},{v:'no',l:'いいえ'},{v:'unknown',l:'不明'}];
+  const list = opts || defs;
+  const cur = get(k);
+  return `<div class="rg">${list.map(o => {
+    const sc = cur === o.v
+      ? (o.v==='yes' ? 'sy' : o.v==='no' ? 'sn' : o.v==='unknown' ? 'su' : 'sl')
+      : '';
+    return `<button class="rb ${sc}" onclick="set('${k}','${o.v}')">${o.l}</button>`;
+  }).join('')}</div>`;
+}
+
+function qg(k, label, sub, opts) {
+  return `<div class="qg">
+    <div class="ql">${label}</div>
+    ${sub ? `<div class="qs">${sub}</div>` : ''}
+    ${radio(k, opts)}
+  </div>`;
+}
+
+function ci(status, label, detail) {
+  const map = { met:'ci-met', unmet:'ci-unmet', unknown:'ci-unknown', warn:'ci-warn', neutral:'ci-neutral' };
+  const icons = { met:'✅', unmet:'❌', unknown:'❓', warn:'⚠️', neutral:'—' };
+  return `<div class="ci ${map[status]||'ci-neutral'}">
+    <span class="ci-icon">${icons[status]||'—'}</span>
+    <div><div class="ci-lbl">${label}</div>${detail?`<div class="ci-sub">${detail}</div>`:''}</div>
+  </div>`;
+}
+
+function pathRow(status, label) {
+  const map = { met:'path-met', unmet:'path-unmet', unknown:'path-unknown' };
+  const icons = { met:'✅', unmet:'❌', unknown:'❓' };
+  return `<div class="path-row ${map[status]||'path-unknown'}">
+    <span class="path-icon">${icons[status]||'❓'}</span>
+    <span>${label}</span>
+  </div>`;
+}
+
+// ===== CLASSIFICATION =====
+function classify() {
+  const d = state.data;
+  const isMale = d.sex !== 'female';
+
+  // --- Basic ---
+  const sporadicOK = yes('sporadic') && yes('adult_onset') && yes('progressive');
+
+  // --- Exclusions ---
+  const EX = {
+    pill_rolling:   yes('excl_pill'),
+    neuropathy:     yes('excl_neuro'),
+    hallucinations: yes('excl_halluc'),
+    onset75:        yes('excl_onset75'),
+    family_hx:      yes('excl_family'),
+    dementia:       yes('excl_dementia'),
+    ms_wm:          yes('excl_ms_wm'),
+  };
+  const EX_LABELS = {
+    pill_rolling:   '安静時丸薬丸め様振戦（pill-rolling tremor）',
+    neuropathy:     '臨床的に有意な末梢神経障害',
+    hallucinations: '薬剤非投与下での幻覚',
+    onset75:        '75歳以降の発症',
+    family_hx:      '類似疾患の家族歴',
+    dementia:       'DSM-IV基準を満たす認知症',
+    ms_wm:          'MS示唆MRI白質病変',
+  };
+  const activeExcl = Object.entries(EX).filter(([,v])=>v).map(([k])=>EX_LABELS[k]);
+  const hasExcl = activeExcl.length > 0;
+
+  // --- Autonomic — Probable ---
+  const urinIncontin   = yes('urin_incontin');
+  const erectileDys    = isMale && yes('erectile_dys');
+  const ohProbable     = yes('oh_probable');
+
+  let autoProbable = false;
+  let autoProbBasis = [];
+  if (d.sex === 'female') {
+    if (urinIncontin) { autoProbable = true; autoProbBasis.push('尿失禁'); }
+  } else {
+    if (urinIncontin && erectileDys) { autoProbable = true; autoProbBasis.push('尿失禁＋勃起障害'); }
+  }
+  if (ohProbable) { autoProbable = true; autoProbBasis.push('体位性低血圧（≥30/15 mmHg）'); }
+
+  // --- Autonomic — Possible ---
+  const ohPossible       = yes('oh_possible');
+  const urinUrgency      = yes('urin_urgency');
+  const incompBladder    = yes('incomp_bladder');
+  const anyAutoPossible  = urinIncontin || ohProbable || ohPossible || urinUrgency || incompBladder || erectileDys;
+
+  // --- Parkinsonism ---
+  const bradykin   = yes('bradykin');
+  const rigidity   = yes('rigidity');
+  const restTremor = yes('rest_tremor');
+  const posturalIS = yes('postural_is');
+  const parkinsonism = bradykin && (rigidity || restTremor || posturalIS);
+
+  const levoTrial  = yes('levo_trial');
+  const levoResp   = d.levo_resp; // 'good' | 'partial' | 'poor' | 'none'
+  const levoResist = levoTrial && (levoResp === 'poor' || levoResp === 'none');
+  const levoRespLabel = { good:'良好', partial:'部分的', poor:'不良', none:'無効' };
+
+  const ldResistParkin = parkinsonism && levoResist;
+
+  // --- Cerebellar ---
+  const ataxicGait   = yes('ataxic_gait');
+  const cerebDysarth = yes('cereb_dysarth');
+  const limbAtaxia   = yes('limb_ataxia');
+  const cerebOcul    = yes('cereb_ocul');
+  const anyCereb     = ataxicGait || cerebDysarth || limbAtaxia || cerebOcul;
+  const cerebSyndrome = ataxicGait && (cerebDysarth || limbAtaxia || cerebOcul);
+
+  // --- Supplementary ---
+  const suppBabinski    = yes('supp_babinski');
+  const suppStridor     = yes('supp_stridor');
+  const suppRapidPark   = yes('supp_rapid_park');
+  const suppPostural3y  = yes('supp_postural_3y');
+  const suppCerebInMsap = yes('supp_cereb_msap');   // cerebellar features in MSA-P
+  const suppDysphagia5y = yes('supp_dysphagia_5y');
+  const suppMriPutamen  = yes('supp_mri_putamen');
+  const suppMriMcp      = yes('supp_mri_mcp');
+  const suppMriPons     = yes('supp_mri_pons');
+  const suppMriCereb    = yes('supp_mri_cereb');
+  const suppFdgPet      = yes('supp_fdg_pet');
+  const suppSpect       = yes('supp_spect');
+  const suppParkInMsac  = yes('supp_park_msac');    // parkinsonism in MSA-C
+  const suppPoorLevo    = levoResist;
+
+  const anySupp = suppBabinski || suppStridor || suppRapidPark || suppPoorLevo ||
+    suppPostural3y || suppCerebInMsap || suppDysphagia5y ||
+    suppMriPutamen || suppMriMcp || suppMriPons || suppMriCereb ||
+    suppFdgPet || suppSpect || suppParkInMsac;
+
+  // --- VERDICT ---
+  const probConds = {
+    basic:       sporadicOK,
+    autonomic:   autoProbable,
+    motor:       ldResistParkin || cerebSyndrome,
+    noExcl:      !hasExcl,
+  };
+  const isProbable = Object.values(probConds).every(Boolean);
+
+  const possConds = {
+    basic:       sporadicOK,
+    motor:       parkinsonism || cerebSyndrome,
+    autonomic:   anyAutoPossible,
+    supp:        anySupp,
+    noExcl:      !hasExcl,
+  };
+  const isPossible = !isProbable && Object.values(possConds).every(Boolean);
+
+  const cert = isProbable ? 'probable' : isPossible ? 'possible' : 'non-qualifying';
+
+  // --- Subtype ---
+  let subtype = null;
+  if (isProbable || isPossible) {
+    const dom = d.dominant;
+    if (dom === 'parkinson' || (parkinsonism && !anyCereb)) {
+      subtype = 'MSA-P';
+    } else if (dom === 'cerebellar' || (anyCereb && !parkinsonism)) {
+      subtype = 'MSA-C';
+    } else if (dom === 'equal') {
+      subtype = 'mixed';
+    } else if (parkinsonism && anyCereb) {
+      subtype = 'unknown'; // needs dominant feature input
+    } else if (parkinsonism) {
+      subtype = 'MSA-P';
+    } else if (anyCereb) {
+      subtype = 'MSA-C';
+    }
+  }
+
+  return {
+    cert, isProbable, isPossible,
+    sporadicOK, autoProbable, autoProbBasis, anyAutoPossible,
+    parkinsonism, ldResistParkin, cerebSyndrome, anyCereb,
+    bradykin, rigidity, restTremor, posturalIS,
+    ataxicGait, cerebDysarth, limbAtaxia, cerebOcul,
+    levoTrial, levoResist, levoResp, levoRespLabel,
+    urinIncontin, erectileDys, ohProbable, ohPossible, urinUrgency, incompBladder, isMale,
+    anySupp, suppBabinski, suppStridor, suppRapidPark, suppPoorLevo,
+    suppPostural3y, suppCerebInMsap, suppDysphagia5y,
+    suppMriPutamen, suppMriMcp, suppMriPons, suppMriCereb,
+    suppFdgPet, suppSpect, suppParkInMsac,
+    EX, EX_LABELS, activeExcl, hasExcl,
+    probConds, possConds, subtype,
+  };
+}
+
+// ===== STEPS =====
+function step1() {
+  return `<div class="card">
+    <div class="step-title">基本情報</div>
+    <div class="step-desc">Gilman 2008基準では「孤発性・進行性・成人発症（30歳以上）」がすべての診断分類の共通必須要件です。</div>
+
+    ${qg('sex', '性別', '自律神経障害の評価（勃起障害の有無）に影響します。', [
+      {v:'male',l:'男性'},{v:'female',l:'女性'},{v:'unknown',l:'不明'}
+    ])}
+
+    ${qg('adult_onset', '発症年齢は30歳以上ですか？',
+      'Gilman基準では30歳以降の成人発症が必須要件です。')}
+
+    ${qg('sporadic', '孤発性（同様の疾患の明確な家族歴なし）ですか？',
+      '小脳失調症やParkinson症候群などの家族歴を確認します。')}
+
+    ${qg('progressive', '症状は進行性の経過をたどっていますか？',
+      '徐々に症状が進行していることが必要です。')}
+  </div>`;
+}
+
+function step2() {
+  return `<div class="card">
+    <div class="step-title">除外項目（MSA診断を支持しない特徴）</div>
+    <div class="step-desc">以下の特徴はGilman基準においてMSA診断を支持しないとされています。</div>
+    <div class="alert-danger">⚠️ いずれかに「はい」と回答すると、MSA Probable / Possible の診断基準を満たさなくなります。</div>
+
+    ${qg('excl_pill', '安静時に丸薬丸め様振戦（pill-rolling tremor, 3–4 Hz）がありますか？',
+      'Parkinson病に特徴的な振戦。MSA診断を支持しない。')}
+
+    ${qg('excl_neuro', '臨床的に有意な末梢神経障害がありますか？',
+      'アキレス腱反射消失のみは除く。EMGや神経生検で確認された多発神経障害など。')}
+
+    ${qg('excl_halluc', '薬剤投与なしで幻覚（主に視覚性幻覚）が出現していますか？',
+      'レボドパ・ドパミンアゴニストなどと無関係な幻覚。DLBを示唆する。')}
+
+    ${qg('excl_onset75', '発症年齢は75歳以降でしたか？',
+      'MSAは通常75歳以前に発症する。')}
+
+    ${qg('excl_family', '類似疾患（小脳失調症、Parkinson症候群等）の家族歴がありますか？',
+      '遺伝性脊髄小脳変性症や遺伝性Parkinson症候群を示唆する。')}
+
+    ${qg('excl_dementia', 'DSM-IV基準を満たす認知症がありますか？',
+      '日常生活に支障をきたす認知機能低下。DLBやPDDを示唆する。')}
+
+    ${qg('excl_ms_wm', '多発性硬化症（MS）を示唆する脳MRI白質病変がありますか？',
+      'Dawson指、皮質/傍皮質病変など、MS特有のMRI所見。')}
+  </div>`;
+}
+
+function step3() {
+  const isMale = get('sex') !== 'female';
+  return `<div class="card">
+    <div class="step-title">自律神経障害</div>
+    <div class="step-desc">Probable基準とPossible基準では、要求される自律神経障害の程度が異なります。</div>
+
+    <div class="sub-head">▶ Probable MSA の自律神経基準（いずれか1つで充足）</div>
+    <div class="info-note">以下のいずれかを満たすと、Probable MSAの自律神経要件を充足します。</div>
+
+    ${qg('urin_incontin', '尿失禁（urinary incontinence）がありますか？',
+      isMale
+        ? '男性では「尿失禁＋勃起障害」の両方でProbable自律神経基準を充足します（下の質問もご確認ください）。'
+        : '女性では尿失禁単独でProbable自律神経基準を充足します。')}
+
+    ${isMale ? qg('erectile_dys', '勃起障害（erectile dysfunction）がありますか？（男性のみ）',
+      '男性では尿失禁と勃起障害の両方が必要です（Probable基準）。') : ''}
+
+    ${qg('oh_probable', '体位性低血圧（Probable基準）：起立3分以内に収縮期血圧≥30 mmHg低下 または 拡張期血圧≥15 mmHg低下',
+      'チルト試験または臥位→立位での測定。この基準を単独で充足する場合、Probable自律神経要件を満たします。')}
+
+    <div class="divider"></div>
+    <div class="sub-head">▶ Possible MSA の自律神経徴候（上記未達の場合）</div>
+    <div class="info-note">Probable基準を満たさない場合でも、以下のいずれかがあればPossible MSAの自律神経要件として評価されます（補足的徴候との組み合わせが必要）。</div>
+
+    ${qg('oh_possible', '体位性低血圧症状があるが、Probable基準（≥30/15 mmHg）に達しない起立性血圧低下がありますか？',
+      '起立時のめまい・前失神症状があるが、血圧降下がProbable基準値に届かない場合。')}
+
+    ${qg('urin_urgency', '尿意切迫感または頻尿がありますか？',
+      '突然の強い尿意、または日中・夜間の頻繁な排尿。')}
+
+    ${qg('incomp_bladder', '膀胱排尿不全（残尿）がありますか？',
+      '超音波で確認された有意な残尿量、または導尿が必要な状況。')}
+  </div>`;
+}
+
+function step4() {
+  return `<div class="card">
+    <div class="step-title">Parkinson症状</div>
+    <div class="step-desc">MSAに認められるParkinson症状（MSA-Pの主徴）を評価します。レボドパ反応性がProbable基準の判定に影響します。</div>
+
+    <div class="sub-head">▶ Parkinson症状の構成要素</div>
+    <div class="info-note">「動作緩慢（無動）」が必須で、さらに筋強剛・振戦・姿勢保持障害のいずれか1つ以上が必要です。</div>
+
+    ${qg('bradykin', '動作緩慢（無動・運動緩慢）がありますか？',
+      '随意運動の遅さ・振幅の減少・運動の疲弊。Parkinson症状の必須要件。')}
+
+    ${qg('rigidity', '筋強剛（筋固縮）がありますか？',
+      '鉛管様または歯車様強剛。')}
+
+    ${qg('rest_tremor', '安静時振戦がありますか？',
+      '安静時（体が支持された状態）に出現する振戦。典型的なpill-rolling tremorはMSAを支持しない（Step2参照）。')}
+
+    ${qg('postural_is', '姿勢保持障害がありますか？',
+      '視覚・前庭・小脳・深部感覚障害に起因しない姿勢保持の困難。プルテスト陽性など。')}
+
+    <div class="divider"></div>
+    <div class="sub-head">▶ レボドパ試験（Probable基準の判定に必要）</div>
+
+    ${qg('levo_trial', 'レボドパ（L-DOPA）を治療として試みましたか？', null, [
+      {v:'yes',l:'はい（試みた）'},{v:'no',l:'いいえ（未使用）'},{v:'unknown',l:'不明'}
+    ])}
+
+    ${yes('levo_trial') ? qg('levo_resp', 'レボドパへの反応はどの程度ですか？',
+      'Probable MSAの「レボドパ抵抗性Parkinson症状」の判定に用います。', [
+      {v:'good',l:'良好（ADL改善あり）'},{v:'partial',l:'部分的（軽度改善）'},
+      {v:'poor',l:'不良（わずかな改善のみ）'},{v:'none',l:'無効（改善なし）'},
+    ]) : '<div class="qg"><div class="qs" style="color:#9ca3af;">レボドパを試みた場合、ここで反応性を選択してください。</div></div>'}
+
+    <div class="divider"></div>
+    <div class="sub-head">▶ 経過に関する補足徴候（Possible MSA評価に使用）</div>
+
+    ${qg('supp_rapid_park', '急速進行性のParkinson症状がありますか？',
+      '典型的なPDより明らかに急速な進行。MSA-P補足的徴候。')}
+
+    ${qg('supp_postural_3y', '運動症状発症から3年以内に姿勢保持障害が出現しましたか？',
+      '早期の姿勢保持障害はMSA-Pに特徴的。MSA-P補足的徴候。')}
+
+    ${qg('supp_dysphagia_5y', '運動症状発症から5年以内に嚥下障害が出現しましたか？',
+      '早期嚥下障害はMSA-Pに特徴的。MSA-P補足的徴候。')}
+  </div>`;
+}
+
+function step5() {
+  return `<div class="card">
+    <div class="step-title">小脳症候群</div>
+    <div class="step-desc">MSAに認められる小脳症状（MSA-Cの主徴）を評価します。</div>
+
+    <div class="info-note">Gilman基準では「歩行失調」が必須で、さらに「小脳性構音障害 / 四肢失調 / 小脳性眼運動障害」のいずれか1つ以上を要します。</div>
+
+    ${qg('ataxic_gait', '歩行失調がありますか？',
+      '小脳性の歩行失調（幅広基底、ふらつき）。小脳症候群の必須要件。')}
+
+    ${qg('cereb_dysarth', '小脳性構音障害がありますか？',
+      '不規則・爆発性・断続性の構音障害（スキャン構音）。')}
+
+    ${qg('limb_ataxia', '四肢失調がありますか？',
+      '鼻指鼻試験・膝踵試験での測距障害、運動分解。')}
+
+    ${qg('cereb_ocul', '小脳性眼運動障害がありますか？',
+      '眼振（注視眼振・反跳眼振）、滑動性追跡障害、方形波急速眼球運動など。')}
+  </div>`;
+}
+
+function step6() {
+  const hasParkin = yes('bradykin') && (yes('rigidity') || yes('rest_tremor') || yes('postural_is'));
+  const hasCereb  = yes('ataxic_gait') || yes('cereb_dysarth') || yes('limb_ataxia') || yes('cereb_ocul');
+  const showDominant = hasParkin && hasCereb;
+
+  return `<div class="card">
+    <div class="step-title">補足的徴候・神経画像所見</div>
+    <div class="step-desc">Possible MSAの判定と、MSA-P / MSA-Cサブタイプの評価に使用します。Probable MSAの診断確信度を高める根拠ともなります。</div>
+
+    <div class="sub-head">▶ 共通補足的徴候（MSA-P・MSA-C 両者）</div>
+
+    ${qg('supp_babinski', 'バビンスキー徴候＋腱反射亢進がありますか？',
+      '錐体路障害の徴候。MSA-P・MSA-C共通の補足的徴候。')}
+
+    ${qg('supp_stridor', '喘鳴（stridor）がありますか？',
+      '睡眠中または覚醒時の吸気性・呼気性喘鳴。声帯外転障害による。MSAに特徴的。')}
+
+    <div class="divider"></div>
+    <div class="sub-head">▶ MSA-P 特有の補足的徴候</div>
+
+    ${qg('supp_cereb_msap', 'Parkinson症状が主体の中に小脳徴候（歩行失調・小脳性構音障害・四肢失調・小脳性眼運動障害）がありますか？',
+      'Parkinson症状優位だが小脳症状も伴う場合。MSA-P補足的徴候。')}
+
+    <div class="divider"></div>
+    <div class="sub-head">▶ MSA-C 特有の補足的徴候</div>
+
+    ${qg('supp_park_msac', '小脳症状が主体の中にParkinson症状（動作緩慢＋筋強剛）がありますか？',
+      '小脳症状優位だがParkinson症状も伴う場合。MSA-C補足的徴候。')}
+
+    ${qg('supp_spect', 'SPECT/PETで線条体（被殻）の前シナプスドパミン神経変性の証拠がありますか？',
+      'DATスキャン（123I-FP-CIT SPECT）での線条体取り込み低下。MSA-C補足的徴候。')}
+
+    <div class="divider"></div>
+    <div class="sub-head">▶ 神経画像・核医学所見</div>
+
+    ${qg('supp_mri_putamen', 'MRIで被殻の萎縮または信号異常がありますか？',
+      'T2/FLAIRで被殻外側縁の低信号（slit sign）、または被殻萎縮。主にMSA-Pに特徴的。')}
+
+    ${qg('supp_mri_mcp', 'MRIで中小脳脚（MCP）の萎縮または信号異常がありますか？',
+      'T2でのMCP高信号（MCP sign）。MSA-Cに特異度が高い。')}
+
+    ${qg('supp_mri_pons', 'MRIで橋の萎縮または信号異常がありますか？',
+      '"hot cross bun sign"（橋十字徴候）または橋萎縮。MSA-Cに特徴的。')}
+
+    ${qg('supp_mri_cereb', 'MRIで小脳の萎縮がありますか？',
+      '小脳半球または虫部の萎縮。MSA-Cに特徴的。')}
+
+    ${qg('supp_fdg_pet', 'FDG-PETで被殻・脳幹・小脳の代謝低下がありますか？',
+      'FDG-PETでの被殻、脳幹、または小脳の代謝低下。')}
+
+    ${showDominant ? `
+      <div class="divider"></div>
+      <div class="sub-head">▶ サブタイプ判定（Parkinson症状と小脳症状の両方を認める場合）</div>
+      ${qg('dominant', 'どちらの症状が優位ですか？',
+        'MSA-P（Parkinson症状優位）とMSA-C（小脳症状優位）の分類に使用します。', [
+        {v:'parkinson', l:'Parkinson症状が優位'},
+        {v:'cerebellar', l:'小脳症状が優位'},
+        {v:'equal',     l:'同程度（混合型）'},
+      ])}
+    ` : ''}
+  </div>`;
+}
+
+function step7() {
+  const r = classify();
+
+  // ---- Main result box ----
+  const CERT_LABEL = {
+    probable:        'Probable MSA',
+    possible:        'Possible MSA',
+    'non-qualifying':'MSA診断基準を満たさない',
+  };
+  const CERT_CLS = {
+    probable:        'res-probable',
+    possible:        'res-possible',
+    'non-qualifying':'res-non',
+  };
+  const CERT_ICON = { probable:'🟢', possible:'🔵', 'non-qualifying':'⬜' };
+  const SUB_TAG = {
+    'MSA-P':'<span class="tag t-msap">MSA-P（Parkinson症状優位型）</span>',
+    'MSA-C':'<span class="tag t-msac">MSA-C（小脳症状優位型）</span>',
+    'mixed':'<span class="tag t-mixed">MSA-P / MSA-C（混合型）</span>',
+    'unknown':'<span class="tag t-mixed">サブタイプ要確認（優位症状を入力してください）</span>',
+  };
+
+  let basisArr = [];
+  if (r.cert === 'probable') {
+    basisArr = [
+      '孤発性・進行性・成人発症',
+      `自律神経障害: ${r.autoProbBasis.join('、')}`,
+      r.ldResistParkin ? 'レボドパ抵抗性Parkinson症状' : '',
+      r.cerebSyndrome  ? '小脳症候群' : '',
+    ].filter(Boolean);
+  } else if (r.cert === 'possible') {
+    basisArr = [
+      '孤発性・進行性・成人発症',
+      r.parkinsonism   ? 'Parkinson症状' : '',
+      r.cerebSyndrome || r.anyCereb ? '小脳症状' : '',
+      '自律神経機能不全（Possible基準）',
+      '補足的徴候 1項目以上',
+    ].filter(Boolean);
+  }
+
+  // ---- Alerts ----
+  let alertsHTML = '';
+  if (r.hasExcl) {
+    alertsHTML += `<div class="alert-danger">
+      <strong>⚠️ 除外項目に該当 — MSA診断を支持しない特徴が存在します</strong><br>
+      ${r.activeExcl.map(e => `• ${e}`).join('<br>')}
+    </div>`;
+  }
+  if (r.cert === 'non-qualifying' && !r.hasExcl) {
+    const reasons = [];
+    if (!r.sporadicOK) reasons.push('孤発性・成人発症（>30歳）・進行性の基本条件が未充足');
+    if (!r.autoProbable && !r.anyAutoPossible) reasons.push('自律神経障害/機能不全が未充足');
+    if (!r.parkinsonism && !r.cerebSyndrome && !r.anyCereb) reasons.push('Parkinson症状および小脳症候群が未充足');
+    if (!r.anySupp) reasons.push('補足的徴候が未充足（Possible基準に必要）');
+    if (reasons.length) {
+      alertsHTML += `<div class="alert-warn"><strong>診断基準未充足の主な理由:</strong><br>${reasons.map(x=>`• ${x}`).join('<br>')}</div>`;
+    }
+  }
+
+  // ---- Decision path boxes ----
+  function condStatus(v) { return v ? 'met' : 'unmet'; }
+
+  const probPathHTML = `<div class="path-box">
+    <div class="path-title">Probable MSA 判定ロジック（全4条件必須）</div>
+    ${pathRow(condStatus(r.probConds.basic),     '① 孤発性・進行性・成人発症（>30歳）')}
+    ${pathRow(condStatus(r.probConds.autonomic), `② 自律神経障害: ${r.autoProbable ? r.autoProbBasis.join('、') : '未充足'}`)}
+    ${pathRow(condStatus(r.probConds.motor),     `③ レボドパ抵抗性Parkinson症状${r.ldResistParkin ? '✓' : ''} または 小脳症候群${r.cerebSyndrome ? '✓' : ''}`)}
+    ${pathRow(condStatus(r.probConds.noExcl),    `④ 除外項目なし${r.hasExcl ? '（除外項目該当あり）' : ''}`)}
+  </div>`;
+
+  const possPathHTML = `<div class="path-box">
+    <div class="path-title">Possible MSA 判定ロジック（全5条件必須）</div>
+    ${pathRow(condStatus(r.possConds.basic),     '① 孤発性・進行性・成人発症（>30歳）')}
+    ${pathRow(condStatus(r.possConds.motor),     `② Parkinson症状${r.parkinsonism ? '✓' : ''} または 小脳症候群${r.cerebSyndrome||r.anyCereb ? '✓' : ''}`)}
+    ${pathRow(condStatus(r.possConds.autonomic), '③ 自律神経機能不全（尿意切迫感・頻尿・残尿・体位性低血圧症状・勃起障害など）')}
+    ${pathRow(condStatus(r.possConds.supp),      '④ 補足的徴候 1項目以上')}
+    ${pathRow(condStatus(r.possConds.noExcl),    `⑤ 除外項目なし${r.hasExcl ? '（除外項目該当あり）' : ''}`)}
+  </div>`;
+
+  // ---- Domain details ----
+
+  // Autonomic
+  const autoHTML = [
+    `<div class="sub-head" style="margin-top:0">Probable基準</div>`,
+    ci(r.urinIncontin ? 'met' : get('urin_incontin')==='no' ? 'unmet' : 'unknown',
+       '尿失禁', ''),
+    r.isMale ? ci(r.erectileDys ? 'met' : get('erectile_dys')==='no' ? 'unmet' : 'unknown',
+       '勃起障害（男性）', '男性では尿失禁と組み合わせてProbable基準') : '',
+    ci(r.ohProbable ? 'met' : get('oh_probable')==='no' ? 'unmet' : 'unknown',
+       '体位性低血圧（≥30/15 mmHg）', '単独でProbable自律神経基準を充足'),
+    ci(r.autoProbable ? 'met' : 'unmet',
+       '【Probable自律神経基準 総合】', r.autoProbable ? `充足: ${r.autoProbBasis.join('、')}` : '未充足'),
+    `<div class="sub-head" style="margin-top:10px">Possible基準（追加徴候）</div>`,
+    ci(r.ohPossible ? 'met' : get('oh_possible')==='no' ? 'unmet' : 'unknown',
+       '体位性低血圧症状（Probable基準未達）', ''),
+    ci(r.urinUrgency ? 'met' : get('urin_urgency')==='no' ? 'unmet' : 'unknown',
+       '尿意切迫感・頻尿', ''),
+    ci(r.incompBladder ? 'met' : get('incomp_bladder')==='no' ? 'unmet' : 'unknown',
+       '膀胱排尿不全（残尿）', ''),
+    ci(r.anyAutoPossible ? 'met' : 'unmet',
+       '【Possible自律神経基準 総合】', r.anyAutoPossible ? '1項目以上充足' : '未充足'),
+  ].join('');
+
+  // Parkinsonism
+  const levStatus = !r.levoTrial ? 'unknown'
+    : r.levoResist ? 'met' : 'unmet';
+  const levDetail = !r.levoTrial ? 'レボドパ試験未実施'
+    : `反応性: ${r.levoRespLabel[r.levoResp]||'不明'}`;
+
+  const parkHTML = [
+    ci(r.bradykin ? 'met' : get('bradykin')==='no' ? 'unmet' : 'unknown',
+       '動作緩慢（無動）', '必須要件'),
+    ci(r.rigidity ? 'met' : get('rigidity')==='no' ? 'unmet' : 'unknown',
+       '筋強剛', ''),
+    ci(r.restTremor ? 'met' : get('rest_tremor')==='no' ? 'unmet' : 'unknown',
+       '安静時振戦', ''),
+    ci(r.posturalIS ? 'met' : get('postural_is')==='no' ? 'unmet' : 'unknown',
+       '姿勢保持障害', ''),
+    ci(r.parkinsonism ? 'met' : 'unmet',
+       '【Parkinson症状 総合】', r.parkinsonism ? '動作緩慢＋筋強剛/振戦/姿勢保持障害 → 充足' : '動作緩慢が必須（未充足）'),
+    ci(levStatus, 'レボドパ抵抗性', levDetail),
+    ci(r.ldResistParkin ? 'met' : r.parkinsonism && r.levoTrial && !r.levoResist ? 'unmet' : 'unknown',
+       '【レボドパ抵抗性Parkinson症状】（Probable基準）',
+       r.ldResistParkin ? '充足' : 'Possible基準の評価には不要'),
+  ].join('');
+
+  // Cerebellar
+  const cerebHTML = [
+    ci(r.ataxicGait ? 'met' : get('ataxic_gait')==='no' ? 'unmet' : 'unknown',
+       '歩行失調', '小脳症候群の必須要件'),
+    ci(r.cerebDysarth ? 'met' : get('cereb_dysarth')==='no' ? 'unmet' : 'unknown',
+       '小脳性構音障害', ''),
+    ci(r.limbAtaxia ? 'met' : get('limb_ataxia')==='no' ? 'unmet' : 'unknown',
+       '四肢失調', ''),
+    ci(r.cerebOcul ? 'met' : get('cereb_ocul')==='no' ? 'unmet' : 'unknown',
+       '小脳性眼運動障害', ''),
+    ci(r.cerebSyndrome ? 'met' : r.ataxicGait && !r.cerebSyndrome ? 'unmet' : 'unknown',
+       '【小脳症候群 総合】',
+       r.cerebSyndrome ? '歩行失調＋追加小脳徴候 → 充足' : r.ataxicGait ? '歩行失調あり・追加徴候が必要' : '歩行失調が必須'),
+  ].join('');
+
+  // Supplementary
+  function suppCI(val, key, label, note) {
+    return ci(yes(key) ? 'met' : get(key)==='no' ? 'unmet' : 'unknown', label, note);
+  }
+  const suppHTML = [
+    `<div class="sub-head" style="margin-top:0">共通（MSA-P・MSA-C）</div>`,
+    suppCI(r.suppBabinski, 'supp_babinski', 'バビンスキー徴候＋腱反射亢進', '共通補足徴候'),
+    suppCI(r.suppStridor,  'supp_stridor',  '喘鳴（stridor）', '共通補足徴候'),
+    `<div class="sub-head" style="margin-top:10px">MSA-P 特有</div>`,
+    suppCI(r.suppRapidPark,   'supp_rapid_park',  '急速進行性Parkinson症状', ''),
+    ci(r.suppPoorLevo ? 'met' : r.levoTrial && !r.suppPoorLevo ? 'unmet' : 'unknown',
+       'レボドパ反応不良', r.levoTrial ? `反応性: ${r.levoRespLabel[r.levoResp]||'不明'}` : '試験未実施'),
+    suppCI(r.suppPostural3y,  'supp_postural_3y', '運動発症から3年以内の姿勢保持障害', ''),
+    suppCI(r.suppCerebInMsap, 'supp_cereb_msap',  'Parkinson症状主体における小脳徴候', ''),
+    suppCI(r.suppDysphagia5y, 'supp_dysphagia_5y','運動発症から5年以内の嚥下障害', ''),
+    `<div class="sub-head" style="margin-top:10px">MSA-C 特有</div>`,
+    suppCI(r.suppParkInMsac, 'supp_park_msac', '小脳症状主体におけるParkinson症状', ''),
+    suppCI(r.suppSpect,      'supp_spect',     'SPECT/PET: 線条体ドパミン神経変性', ''),
+    `<div class="sub-head" style="margin-top:10px">神経画像・核医学</div>`,
+    suppCI(r.suppMriPutamen, 'supp_mri_putamen', 'MRI: 被殻萎縮/信号異常', 'MSA-P特徴的'),
+    suppCI(r.suppMriMcp,     'supp_mri_mcp',     'MRI: 中小脳脚萎縮/信号異常（MCP sign）', 'MSA-C特徴的'),
+    suppCI(r.suppMriPons,    'supp_mri_pons',     'MRI: 橋萎縮/hot cross bun sign', 'MSA-C特徴的'),
+    suppCI(r.suppMriCereb,   'supp_mri_cereb',    'MRI: 小脳萎縮', 'MSA-C特徴的'),
+    suppCI(r.suppFdgPet,     'supp_fdg_pet',      'FDG-PET: 被殻・脳幹・小脳の代謝低下', ''),
+    ci(r.anySupp ? 'met' : 'unmet',
+       '【補足的徴候 総合】', r.anySupp ? '1項目以上充足' : '未充足（Possible基準に必要）'),
+  ].join('');
+
+  // Exclusions
+  const EX_KEYS = {
+    pill_rolling:   'excl_pill',
+    neuropathy:     'excl_neuro',
+    hallucinations: 'excl_halluc',
+    onset75:        'excl_onset75',
+    family_hx:      'excl_family',
+    dementia:       'excl_dementia',
+    ms_wm:          'excl_ms_wm',
+  };
+  const exclHTML = Object.entries(r.EX).map(([k,v]) => {
+    const st = v ? 'unmet' : get(EX_KEYS[k])==='no' ? 'met' : 'unknown';
+    return ci(st, r.EX_LABELS[k], v ? '⚠️ 該当あり — MSA診断を支持しない' : '');
+  }).join('') +
+  ci(r.hasExcl ? 'unmet' : r.activeExcl.length === 0 && Object.values(r.EX).some((_,i)=>get(Object.values(EX_KEYS)[i])==='no') ? 'met' : 'unknown',
+     '【除外項目 総合】', r.hasExcl ? `${r.activeExcl.length}項目該当` : '除外項目なし（診断を否定しない）');
+
+  const subtypeDisplay = r.subtype ? (SUB_TAG[r.subtype] || r.subtype) : '';
+
+  return `
+    <div class="res-box ${CERT_CLS[r.cert]}">
+      <div style="font-size:0.75rem;opacity:0.7;margin-bottom:3px">Gilman 2008 MSA診断基準 — 判定結果</div>
+      <div class="res-title">${CERT_ICON[r.cert]} ${CERT_LABEL[r.cert]}</div>
+      ${subtypeDisplay ? `<div class="res-sub">サブタイプ: ${subtypeDisplay}</div>` : ''}
+      ${basisArr.length ? `<div class="res-basis">根拠: ${basisArr.join(' ／ ')}</div>` : ''}
+    </div>
+
+    ${alertsHTML}
+
+    ${probPathHTML}
+    ${possPathHTML}
+
+    <div class="card" style="margin-top:12px">
+      <div class="ci-head">🫀 自律神経障害</div>
+      ${autoHTML}
+    </div>
+
+    <div class="card">
+      <div class="ci-head">🚶 Parkinson症状</div>
+      ${parkHTML}
+    </div>
+
+    <div class="card">
+      <div class="ci-head">🎯 小脳症候群</div>
+      ${cerebHTML}
+    </div>
+
+    <div class="card">
+      <div class="ci-head">➕ 補足的徴候（Gilman 2008 Table）</div>
+      ${suppHTML}
+    </div>
+
+    <div class="card">
+      <div class="ci-head">🚫 除外項目</div>
+      <div style="font-size:0.72rem;color:#6b7280;margin-bottom:8px">✅ = 該当なし（診断を否定しない）　❌ = 該当あり（MSA診断を支持しない）</div>
+      ${exclHTML}
+    </div>
+
+    <div class="disclaimer">
+      <strong>⚕️ 免責事項</strong><br>
+      本ツールは Gilman S et al. "Second consensus statement on the diagnosis of multiple system atrophy." <em>Neurology</em> 2008;71:670-676 に基づく診断基準マッピングツールです。本ツールは「診断するAI」ではなく、入力された臨床情報をGilman基準の各項目に機械的に照合し、該当性を整理する補助ツールです。診断の最終判断は必ず専門医が臨床全体を評価したうえで行ってください。経過観察・追加検査により診断分類が変わる場合があります。
+    </div>
+  `;
+}
+
+// ===== PROGRESS =====
+function renderProgress() {
+  const dots = STEP_LABELS.map((lbl, i) => {
+    const n = i + 1;
+    const cls = n < state.step ? 'done' : n === state.step ? 'active' : 'pending';
+    const inner = n < state.step ? '✓' : n;
+    const line = i < TOTAL - 1
+      ? `<div class="s-line ${n < state.step ? 'done' : ''}"></div>`
+      : '';
+    return `<div class="s-dot ${cls}">${inner}</div>${line}`;
+  }).join('');
+
+  const labels = STEP_LABELS.map(l =>
+    `<div class="p-label">${l}</div>`
+  ).join('');
+
+  document.getElementById('progressWrap').innerHTML =
+    `<div class="progress-row">${dots}</div><div class="p-labels">${labels}</div>`;
+}
+
+// ===== MAIN RENDER =====
+function render() {
+  renderProgress();
+
+  const renderers = [null, step1, step2, step3, step4, step5, step6, step7];
+  document.getElementById('stepContent').innerHTML = renderers[state.step]();
+
+  const btnBack = document.getElementById('btnBack');
+  const btnNext = document.getElementById('btnNext');
+  btnBack.style.visibility = state.step === 1 ? 'hidden' : 'visible';
+
+  if (state.step === TOTAL) {
+    btnNext.textContent = '🖨️ 印刷';
+    btnNext.onclick = () => window.print();
+  } else {
+    btnNext.textContent = '次へ →';
+    btnNext.onclick = goNext;
+  }
+}
+
+function goNext() {
+  if (state.step < TOTAL) { state.step++; render(); scrollTo(0, 0); }
+}
+function goBack() {
+  if (state.step > 1) { state.step--; render(); scrollTo(0, 0); }
+}
+function resetAll() {
+  if (confirm('すべての入力をリセットしますか？')) {
+    state.step = 1; state.data = {}; render(); scrollTo(0, 0);
+  }
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>パーキンソン症候群 診断基準整理支援ツール</title>
+<!--
+  パーキンソン症候群 診断基準整理支援ツール v1.0
+  ================================================
+  対象疾患と基準:
+    PD  — MDS Clinical Diagnostic Criteria (Postuma RB et al. Movement Disorders 2015)
+    PSP — MDS-PSP Criteria (Höglinger GU et al. Movement Disorders 2017)
+    MSA — Consensus Statement (Gilman S et al. Neurology 2008)
+    CBS — Clinical Criteria for CBD (Armstrong MJ et al. Neurology 2013)
+    DLB — DLB Consortium Criteria 4th Report (McKeith IG et al. Neurology 2017)
+
+  方針: AI推測・確率推定・独自スコアリングは一切行わない
+        各診断基準の文言定義に従い、入力情報を機械的に項目マッピングする
+        結果は「満たす／満たさない／不明」と「レッドフラッグ」のみで表示する
+-->
+<style>
+:root{
+  --pd:#1a4f8a; --pd-l:#dbeafe; --pd-b:#93c5fd;
+  --psp:#6b21a8; --psp-l:#f3e8ff; --psp-b:#c084fc;
+  --msa:#065f46; --msa-l:#d1fae5; --msa-b:#6ee7b7;
+  --cbs:#c2410c; --cbs-l:#ffedd5; --cbs-b:#fb923c;
+  --dlb:#0f5156; --dlb-l:#cffafe; --dlb-b:#67e8f9;
+  --rf:#991b1b; --rf-l:#fef2f2; --rf-b:#fca5a5;
+  --ok:#166534; --ok-l:#f0fdf4; --ok-b:#86efac;
+  --warn:#78350f; --warn-l:#fffbeb; --warn-b:#fde68a;
+  --excl:#7f1d1d; --excl-l:#fef2f2; --excl-b:#fca5a5;
+  --neutral:#374151; --bg:#f0f4f8; --card:#fff;
+  --border:#d1d9e0; --text:#111827; --muted:#6b7280;
+  --font:-apple-system,'Helvetica Neue',Arial,'Hiragino Sans','Yu Gothic UI',sans-serif;
+  --mono:'SF Mono','Menlo','Consolas',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13.5px;line-height:1.65}
+#app{max-width:1000px;margin:0 auto;padding:14px 12px 40px}
+
+/* HEADER */
+.hdr{background:linear-gradient(135deg,#1e1b4b,#312e81);color:#fff;padding:16px 22px;border-radius:10px 10px 0 0}
+.hdr h1{font-size:16px;font-weight:800;letter-spacing:.02em}
+.hdr p{font-size:11px;opacity:.75;margin-top:3px}
+.disease-pills{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.dp{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;border:1px solid rgba(255,255,255,.3)}
+
+/* DISCLAIMER */
+.disc{background:#fffbeb;border-left:4px solid #d97706;padding:9px 14px;font-size:11.5px;color:#78350f;border-bottom:1px solid #fde68a}
+.disc strong{display:block;margin-bottom:2px}
+
+/* PROGRESS */
+.pbar{display:flex;background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;margin-bottom:12px;overflow:hidden}
+.ps{flex:1;padding:6px 2px;text-align:center;font-size:10px;color:var(--muted);cursor:pointer;border-right:1px solid var(--border);line-height:1.3;user-select:none;transition:background .12s}
+.ps:last-child{border-right:none}
+.ps:hover{background:#f0f4f8}
+.ps.active{background:#1e1b4b;color:#fff;font-weight:700}
+.ps.done{background:#dcfce7;color:var(--ok);font-weight:600}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 18px;margin:9px 0;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.ct{font-size:14px;font-weight:700;color:#1e1b4b;margin-bottom:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cs{font-size:11px;color:var(--muted);margin-bottom:13px;line-height:1.5}
+.badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;white-space:nowrap}
+
+/* DOMAIN BANNER */
+.dbanner{background:#eef2ff;border-left:4px solid #6366f1;border-radius:0 6px 6px 0;padding:7px 13px;margin:12px 0 9px;font-size:12px;color:#3730a3;font-weight:600}
+
+/* FORM ITEMS */
+.fg{margin-bottom:9px;padding:10px 13px;background:#f8fafc;border-radius:6px;border:1px solid var(--border);transition:border-color .13s}
+.fg:hover{border-color:#818cf8}
+.fg.fy{border-color:var(--ok);background:var(--ok-l)}
+.fg.fex{border-color:var(--rf);background:var(--rf-l)}
+.fl{font-weight:700;font-size:12px;margin-bottom:3px;display:flex;align-items:flex-start;gap:5px;flex-wrap:wrap}
+.fc{font-size:10px;color:#fff;padding:1px 6px;border-radius:3px;flex-shrink:0;font-family:var(--mono);font-weight:700;margin-top:1px}
+.fd{font-size:11px;color:var(--muted);margin:3px 0 7px;line-height:1.5;border-left:2px solid #e5e7eb;padding-left:7px}
+.fo{display:flex;gap:5px;flex-wrap:wrap;margin-top:1px}
+.rb{display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border:1.5px solid var(--border);border-radius:14px;cursor:pointer;font-size:12px;transition:all .11s;background:#fff;user-select:none}
+.rb:hover{border-color:#818cf8;background:#f5f3ff}
+.rb.sy{background:#dcfce7;border-color:#22c55e;color:var(--ok);font-weight:700}
+.rb.sn{background:#fee2e2;border-color:#ef4444;color:var(--rf);font-weight:700}
+.rb.su{background:#fef9c3;border-color:#ca8a04;color:var(--warn);font-weight:700}
+
+/* CHOICE BUTTONS */
+.cb-group{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.cb{padding:4px 10px;border:1.5px solid var(--border);border-radius:14px;cursor:pointer;font-size:12px;background:#fff;transition:all .11s;user-select:none}
+.cb:hover{border-color:#818cf8}
+.cb.sel{background:#1e1b4b;color:#fff;border-color:#1e1b4b;font-weight:600}
+
+/* NUMBER INPUT */
+.ni{padding:4px 8px;border:1.5px solid var(--border);border-radius:5px;width:80px;font-size:13px;font-family:var(--mono)}
+.ni:focus{outline:none;border-color:#818cf8}
+
+/* ALERTS */
+.al{padding:9px 13px;border-radius:6px;margin:7px 0;font-size:11.5px;line-height:1.55}
+.al-info{background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;color:#1e3a8a}
+.al-warn{background:var(--warn-l);border:1px solid var(--warn-b);border-left:4px solid #d97706;color:var(--warn)}
+.al-danger{background:var(--rf-l);border:1px solid var(--rf-b);border-left:4px solid #dc2626;color:var(--rf)}
+.al-ok{background:var(--ok-l);border:1px solid var(--ok-b);border-left:4px solid #16a34a;color:var(--ok)}
+
+/* BUTTONS */
+.nav-btns{display:flex;gap:8px;margin-top:16px;justify-content:space-between;align-items:center}
+.btn{padding:7px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;transition:all .13s;font-family:var(--font)}
+.btn-p{background:#1e1b4b;color:#fff}
+.btn-p:hover{background:#312e81;transform:translateY(-1px)}
+.btn-s{background:#e5e7eb;color:var(--text)}
+.btn-s:hover{background:#d1d5db}
+.btn-prt{background:var(--neutral);color:#fff}
+.btn-rst{background:#fff;color:#dc2626;border:1.5px solid #dc2626}
+
+/* ─── RESULTS ─── */
+/* Disease summary grid */
+.disease-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0 4px}
+@media(max-width:700px){.disease-grid{grid-template-columns:repeat(2,1fr)}}
+.dc{border-radius:8px;padding:12px;text-align:center;border:2px solid transparent;cursor:default;transition:transform .12s}
+.dc:hover{transform:translateY(-2px)}
+.dc-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.8;margin-bottom:2px}
+.dc-cert{font-size:13px;font-weight:800;line-height:1.2;margin:4px 0}
+.dc-sub{font-size:10px;opacity:.75;margin-bottom:4px;min-height:14px}
+.dc-flags{font-size:11px;font-weight:700;margin-top:4px}
+
+/* Red flag section */
+.rf-section{background:var(--rf-l);border:2px solid var(--rf-b);border-radius:8px;padding:14px;margin:10px 0}
+.rf-title{font-size:14px;font-weight:800;color:var(--rf);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.rf-row{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--rf-b);font-size:12px}
+.rf-row:last-child{border-bottom:none}
+.rf-disease{font-weight:700;min-width:80px;flex-shrink:0}
+.rf-items{flex:1;display:flex;flex-direction:column;gap:2px}
+.rf-item{display:inline-flex;align-items:center;gap:4px}
+.rf-code{font-family:var(--mono);font-size:10px;color:#fff;padding:1px 5px;border-radius:3px;background:#dc2626}
+.rf-excl{background:#7f1d1d}
+.rf-none{color:var(--muted);font-style:italic}
+
+/* Criteria result table */
+.crit-section{margin:10px 0}
+.crit-hdr{font-size:13px;font-weight:700;padding:7px 12px;border-radius:6px 6px 0 0;color:#fff;display:flex;align-items:center;gap:6px}
+.crit-body{border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
+.cr{display:flex;align-items:flex-start;padding:6px 11px;border-bottom:1px solid #f0f4f8;gap:7px;font-size:11.5px}
+.cr:last-child{border-bottom:none}
+.cr:nth-child(even){background:#fafbfc}
+.cr-code{font-family:var(--mono);font-size:10px;color:#fff;padding:1px 5px;border-radius:3px;flex-shrink:0;margin-top:2px;font-weight:700}
+.cr-st{flex-shrink:0;font-size:11px;font-weight:700;white-space:nowrap;min-width:60px}
+.st-met{color:var(--ok)}
+.st-not{color:#dc2626}
+.st-unk{color:#92400e}
+.st-rf{color:var(--rf);font-weight:800}
+.cr-txt{flex:1}
+
+/* Subtype table */
+.sub-tbl{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0}
+.sub-tbl th{padding:6px 10px;text-align:left;font-weight:600;color:#fff}
+.sub-tbl td{padding:6px 10px;border-bottom:1px solid var(--border)}
+.sub-tbl tr:last-child td{border-bottom:none}
+.sub-tbl tr:nth-child(even) td{background:#f8fafc}
+.cert-prob{color:var(--ok);font-weight:700}
+.cert-poss{color:#1d4ed8;font-weight:700}
+.cert-sugg{color:#d97706;font-weight:700}
+.cert-none{color:var(--muted)}
+
+/* Detail accordion */
+.detail-wrap{margin:6px 0}
+.detail-toggle{width:100%;text-align:left;background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:9px 14px;cursor:pointer;font-weight:600;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;transition:background .12s}
+.detail-toggle:hover{background:#f0f4f8}
+.detail-body{display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
+.detail-body.open{display:block}
+
+/* Disease accent classes */
+.acc-pd{background:var(--pd);color:#fff}
+.acc-psp{background:var(--psp);color:#fff}
+.acc-msa{background:var(--msa);color:#fff}
+.acc-cbs{background:var(--cbs);color:#fff}
+.acc-dlb{background:var(--dlb);color:#fff}
+
+.dc-pd{background:var(--pd-l);border-color:var(--pd-b);color:var(--pd)}
+.dc-psp{background:var(--psp-l);border-color:var(--psp-b);color:var(--psp)}
+.dc-msa{background:var(--msa-l);border-color:var(--msa-b);color:var(--msa)}
+.dc-cbs{background:var(--cbs-l);border-color:var(--cbs-b);color:var(--cbs)}
+.dc-dlb{background:var(--dlb-l);border-color:var(--dlb-b);color:var(--dlb)}
+.dc-excl{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.dc-none{background:#f3f4f6;border-color:#d1d5db;color:#6b7280}
+
+@media print{
+  .nav-btns,.pbar,.hdr .version{display:none}
+  .card{box-shadow:none;break-inside:avoid}
+  body{background:#fff}
+  #steps{display:none!important}
+  #results{display:block!important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<div class="hdr">
+  <h1>🧠 パーキンソン症候群 診断基準整理支援ツール</h1>
+  <p>一度の入力で5疾患の診断基準への該当性を並列整理 — レッドフラッグを可視化 — AI推測なし</p>
+  <div class="disease-pills">
+    <span class="dp" style="background:var(--pd);color:#fff">PD：MDS 2015</span>
+    <span class="dp" style="background:var(--psp);color:#fff">PSP：MDS 2017</span>
+    <span class="dp" style="background:var(--msa);color:#fff">MSA：Gilman 2008</span>
+    <span class="dp" style="background:var(--cbs);color:#fff">CBS：Armstrong 2013</span>
+    <span class="dp" style="background:var(--dlb);color:#fff">DLB：McKeith 2017</span>
+  </div>
+</div>
+<div class="disc">
+  <strong>⚠️ 本ツールについて</strong>
+  本ツールは各疾患の公表された診断基準に従い、入力された臨床情報を機械的に項目マッピングする整理支援ツールです。AI推論・確率推定・独自スコアリングは一切行いません。確定診断は神経内科専門医が総合的に判断してください。
+</div>
+
+<div class="pbar" id="pbar">
+  <div class="ps" id="tab-0" onclick="go(0)">①<br>基本情報</div>
+  <div class="ps" id="tab-1" onclick="go(1)">②<br>運動症状</div>
+  <div class="ps" id="tab-2" onclick="go(2)">③<br>Levo・眼球</div>
+  <div class="ps" id="tab-3" onclick="go(3)">④<br>非運動症状</div>
+  <div class="ps" id="tab-4" onclick="go(4)">⑤<br>小脳・皮質</div>
+  <div class="ps" id="tab-5" onclick="go(5)">⑥<br>画像・除外</div>
+  <div class="ps" id="tab-6" onclick="go(6)">⑦<br>結果</div>
+</div>
+
+<div id="steps"></div>
+<div id="results" style="display:none"></div>
+</div>
+
+<script>
+'use strict';
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  step: 0,
+  d: {
+    // Step 0
+    case_id:'', age_onset:'', duration_months:'',
+    sporadic:'unknown',
+    onset_side:'unknown',       // asymmetric / symmetric / unknown
+    progression_rate:'unknown', // slow / moderate / rapid / unknown
+
+    // Step 1: Motor
+    bradykinesia:'unknown',
+    rigidity:'unknown',
+    rigidity_axial:'unknown',     // axial predominant rigidity/akinesia
+    rest_tremor:'unknown',
+    rest_tremor_pillrolling:'unknown',  // classic prominent pill-rolling
+    gait_freezing:'unknown',     // progressive gait freezing (within 3y for PSP)
+    falls_repeated:'unknown',    // ≥2 unprovoked falls
+    falls_3y:'unknown',          // within 3 years of onset
+    pull_test:'unknown',         // normal / p3_steps / p2_fall
+    anterocollis:'unknown',      // disproportionate
+    lower_body_only:'unknown',   // parkinsonism restricted to lower limbs >3y
+    limb_dystonia:'unknown',
+    focal_myoclonus:'unknown',
+    postural_instability:'unknown',
+
+    // Step 2: Levodopa + Oculomotor
+    levodopa_tried:'unknown',
+    levodopa_response:'unknown', // dramatic / moderate / mild / none
+    levodopa_dyskinesia:'unknown',
+    vsgp:'unknown',              // vertical supranuclear gaze palsy (O1)
+    slow_vert_saccades:'unknown',// slow vertical saccades (O2)
+    macro_swj_eyelid:'unknown',  // macro SWJ or eyelid opening apraxia (O3)
+
+    // Step 3: Non-motor / Cognitive
+    olfactory_loss:'unknown',
+    rem_behavior_disorder:'unknown',  // RBD (polysomnography-confirmed or clinical)
+    fluctuating_cognition:'unknown',  // DLB core
+    hallucination_visual:'unknown',   // recurrent visual hallucinations
+    hallucination_drugfree:'unknown', // not induced by medication
+    orthostatic_hypotension:'unknown',// ≥30 mmHg systolic drop on standing
+    urinary_dysfunction:'unknown',    // incontinence or retention
+    autonomic_severe_early:'unknown', // severe autonomic failure within 5y (PD RF) / 3y (PSP excl)
+    cognitive_impairment:'unknown',
+    dementia_dsmiv:'unknown',         // dementia by DSM-IV criteria
+    dementia_early_5y:'unknown',      // dementia within 5 years
+    alzheimer_type_dementia:'unknown',// Alzheimer-type cortical dementia
+    frontal_cognitive_beh:'unknown',  // frontal cognitive/behavioral syndrome (≥2 items: C2 for PSP)
+    depression_anxiety:'unknown',
+
+    // Step 4: Cerebellar / Cortical / Additional
+    cerebellar_gait:'unknown',    // cerebellar gait ataxia
+    cerebellar_limb:'unknown',    // cerebellar limb ataxia
+    cerebellar_dysarthria:'unknown',
+    pyramidal_signs:'unknown',
+    cortical_sensory_loss:'unknown',
+    limb_apraxia:'unknown',
+    alien_limb:'unknown',
+    speech_language_aos:'unknown',// AOS or nfvPPA (C1 for PSP)
+    cbs_syndrome:'unknown',       // CBS complex (≥2 cortical: apraxia/cortical sensory/alien limb) (C3 for PSP)
+    inspiratory_stridor:'unknown',
+    dysphagia:'unknown',
+    severe_dysarthria_early:'unknown', // severe dysarthria in first 5y
+    neuropathy:'unknown',
+    no_progression_5y:'unknown',  // absence of motor progression over ≥5y
+    no_nonmotor_5y:'unknown',     // absence of nonmotor features despite ≥5y
+
+    // Step 5: Imaging / History / Exclusions
+    mri_midbrain_atrophy:'unknown',  // hummingbird / morning glory sign
+    mri_putaminal_abnorm:'unknown',  // putaminal atrophy or signal change
+    mri_hotcrossbun:'unknown',       // hot cross bun sign (pons)
+    mri_cerebellar_atrophy:'unknown',// cerebellar / MCP atrophy
+    mri_cortical_frontoparietal:'unknown', // focal frontal-parietal cortical atrophy
+    mri_structural_abnorm:'unknown', // infarct / tumor / relevant structural lesion
+    dat_scan_reduced:'unknown',
+    dat_scan_normal:'unknown',
+    mibg_reduced:'unknown',
+    drug_induced:'unknown',          // dopamine blocker / depleter exposure
+    encephalitis_hx:'unknown',
+    family_hx_parkinsonism:'unknown',// >1st degree relative
+    family_hx_ataxia:'unknown',      // >1st degree relative
+    ms_white_matter:'unknown',
+    whipple:'unknown',
+  }
+};
+
+// ============================================================
+// HELPERS
+// ============================================================
+const yes = k => S.d[k] === 'yes';
+const no  = k => S.d[k] === 'no';
+const unk = k => S.d[k] === 'unknown';
+
+function rg(key, opts=['yes','no','unknown']) {
+  const lab = {yes:'✓ あり', no:'✗ なし', unknown:'? 不明'};
+  return opts.map(o => {
+    const sel = S.d[key]===o ? `s${o[0]}` : '';
+    const cls = sel==='sy'?'rb sy':sel==='sn'?'rb sn':sel==='su'?'rb su':'rb';
+    return `<label class="${cls}" onclick="sv('${key}','${o}',this)"><input type="radio" style="display:none">${lab[o]||o}</label>`;
+  }).join('');
+}
+
+function sv(k,v,el) {
+  S.d[k]=v;
+  const p=el.parentElement;
+  p.querySelectorAll('.rb').forEach(b=>{b.className='rb'});
+  el.classList.add(v==='yes'?'sy':v==='no'?'sn':'su');
+  const fg=el.closest('.fg');
+  if(fg){fg.classList.remove('fy','fex');if(v==='yes')fg.classList.add('fy')}
+  // auto-update age eligibility
+  if(k==='age_onset'||k==='sporadic') return;
+}
+
+function choiceBtn(key, options, labels) {
+  return `<div class="cb-group">${options.map((o,i)=>{
+    const cls = S.d[key]===o?'cb sel':'cb';
+    return `<button class="${cls}" onclick="svc('${key}','${o}',this)">${labels?labels[i]:o}</button>`;
+  }).join('')}</div>`;
+}
+function svc(k,v,el){
+  S.d[k]=v;
+  el.closest('.cb-group').querySelectorAll('.cb').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
+  if(k==='age_onset_btn') return;
+}
+
+function fgItem(key,code,bga,label,desc,extra=''){
+  const val=S.d[key];
+  const hasCls=val==='yes'?'fg fy':val==='no'?'fg':'fg';
+  return `<div class="${hasCls}" id="fg-${key}">
+    <div class="fl"><span class="fc" style="background:${bga}">${code}</span>${label}${extra}</div>
+    <div class="fd">${desc}</div>
+    <div class="fo">${rg(key)}</div>
+  </div>`;
+}
+
+// ============================================================
+// STEP RENDERERS
+// ============================================================
+function step0(){return `
+<div class="card">
+  <div class="ct">📋 基本情報・経過 <span class="badge" style="background:#1e1b4b;color:#fff">Step 1/6</span></div>
+  <div class="cs">以下の情報はすべての疾患分類ロジックで参照されます</div>
+
+  <div class="fg"><div class="fl">症例識別子（任意）</div>
+    <div class="fd">個人情報は入力しないでください（匿名識別子のみ）</div>
+    <input type="text" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;width:180px" value="${S.d.case_id}" onchange="S.d.case_id=this.value" placeholder="例：PD-001">
+  </div>
+
+  <div class="fg"><div class="fl">発症年齢</div>
+    <div class="fd">最初の症状が出現した推定年齢</div>
+    <input type="number" class="ni" value="${S.d.age_onset}" onchange="S.d.age_onset=this.value" min="1" max="120" placeholder="例：65"> 歳
+  </div>
+
+  <div class="fg"><div class="fl">症状持続期間</div>
+    <div class="fd">最初の症状出現から現在まで（ヶ月）</div>
+    <input type="number" class="ni" value="${S.d.duration_months}" onchange="S.d.duration_months=this.value" min="0" max="600" placeholder="例：30"> ヶ月
+  </div>
+
+  <div class="fg"><div class="fl"><span class="fc" style="background:#374151">共通</span>孤発性発症</div>
+    <div class="fd">家族性遺伝パターン（常染色体優性・劣性・X連鎖）がない。既知の病的変異（MAPT, GRN, SNCA, PARK2等）が未検出。1〜2親等に偶発的な同様例は許容。</div>
+    <div class="fo">${rg('sporadic')}</div>
+  </div>
+
+  <div class="fg"><div class="fl"><span class="fc" style="background:#374151">共通</span>発症の左右差（対称性）</div>
+    <div class="fd">運動症状の発症時の左右差。CBS・PDでは非対称性が重要。DLBではパーキンソニズムは対称的なことが多い。</div>
+    ${choiceBtn('onset_side',['asymmetric','symmetric','unknown'],['非対称（一側優位）','両側対称','不明'])}
+  </div>
+
+  <div class="fg"><div class="fl"><span class="fc" style="background:#374151">共通</span>進行速度</div>
+    <div class="fd">緩徐＝月〜年単位でゆっくり進行、急速＝月以内に顕著に進行（プリオン病様）</div>
+    ${choiceBtn('progression_rate',['slow','moderate','rapid','unknown'],['緩徐','中等度','急速','不明'])}
+  </div>
+</div>`;}
+
+function step1(){return `
+<div class="card">
+  <div class="ct">🦾 主要運動症状 <span class="badge" style="background:#1e1b4b;color:#fff">Step 2/6</span></div>
+  <div class="cs">すべての疾患で共有される運動症候を評価します</div>
+
+  <div class="dbanner">🔵 パーキンソニズムのコア要素</div>
+  ${fgItem('bradykinesia','共通','#374151','無動（ブラジキネジア）',
+    'すべてのPD spectrum疾患の中核症候。動作の速度・振幅・正確性の低下。交互運動（手指叩き・手回し・足踏み）で振幅または速度が低下・変動する。')}
+  ${fgItem('rigidity','共通','#374151','筋固縮',
+    'Lead-pipe rigidity（鉛管様固縮）またはcogwheel rigidity（歯車様固縮）。受動運動に対する持続的な抵抗。')}
+  ${fgItem('rigidity_axial','共通','#374151','体軸優位の固縮／無動',
+    '頸部・体幹・四肢近位筋優位の固縮・無動。四肢遠位部よりも体軸が顕著に障害されている。PSP・MSA・CBSの特徴。PDでは典型的に四肢末梢優位となりやすい。')}
+  ${fgItem('rest_tremor','共通','#374151','安静時振戦',
+    '完全な安静時に出現し、随意運動で消失または減弱する振戦。PDで特徴的。PSP・MSAでは典型的でない。')}
+  ${fgItem('rest_tremor_pillrolling','共通','#374151','Pill-rolling振戦（典型的な安静時振戦）',
+    '拇指と示指の対立運動からなる典型的な丸薬まるめ様振戦。PDに特徴的。MSA・PSPでは通常みられず、存在するとMSAに対するレッドフラッグとなる。')}
+
+  <div class="dbanner">🟣 姿勢・歩行</div>
+  ${fgItem('gait_freezing','共通','#374151','進行性の歩行すくみ（Gait freezing）',
+    '歩行開始・方向転換・doorway通過時のすくみ足。PSPでは発症3年以内に顕在化が重要。')}
+  ${fgItem('falls_repeated','共通','#374151','反復性自発転倒（≥2回）',
+    '外的原因なく繰り返す転倒。2回以上。バランス障害・姿勢反射障害による。')}
+  ${fgItem('falls_3y','共通','#374151','発症3年以内の反復転倒',
+    '転倒が発症から3年以内に出現。PSP基準のP1に必要（発症3年以内）。PDではレッドフラッグ（3年以内の繰り返す転倒）。')}
+  <div class="fg"><div class="fl"><span class="fc" style="background:#374151">共通</span>プルテスト（pull test）の結果</div>
+    <div class="fd">後方への急な牽引テスト。P3（>2歩後退・転倒なし）/ P2（転倒または支える必要あり）/ 正常（≤2歩）</div>
+    ${choiceBtn('pull_test',['normal','p3_steps','p2_fall','unknown'],['正常（≤2歩安定）','P3：>2歩後退（転倒なし）','P2：転倒（要支持）','不明/未施行'])}
+  </div>
+  ${fgItem('postural_instability','共通','#374151','姿勢不安定性',
+    'バランス障害・転倒傾向全般（プルテスト異常または自発転倒傾向）。')}
+
+  <div class="dbanner">🟠 追加運動症状</div>
+  ${fgItem('anterocollis','共通','#374151','前傾姿勢（camptocormia / anterocollis）',
+    '体幹または頸部の著明な前傾。PDでも出現するが、不釣り合いな早期のanterocollis はPDに対するレッドフラッグ。MSAでも特徴的。')}
+  ${fgItem('lower_body_only','共通','#374151','下肢優位パーキンソニズム（>3年間、下肢のみ）',
+    '3年以上にわたりパーキンソニズムが下肢のみに限局している。PDに対するMDS基準の絶対的除外基準。')}
+  ${fgItem('limb_dystonia','共通','#374151','肢体ジストニア',
+    '四肢（特に上肢）の持続的な筋収縮による異常姿勢。CBSの運動症候の一つ。')}
+  ${fgItem('focal_myoclonus','共通','#374151','焦点性ミオクローヌス（肢体）',
+    '上肢などの局所的・分節的なミオクローヌス（素早い不随意収縮）。CBSの特徴。DLBでは皮質性ミオクローヌスも。')}
+</div>`;}
+
+function step2(){return `
+<div class="card">
+  <div class="ct">💊 Levodopa反応性・眼球運動 <span class="badge" style="background:#1e1b4b;color:#fff">Step 3/6</span></div>
+  <div class="cs">Levodopa反応性は複数疾患の分類に直結します。眼球運動はPSP診断の要です。</div>
+
+  <div class="dbanner">💊 Levodopa反応性</div>
+  ${fgItem('levodopa_tried','Levo','#374151','Levodopa試行の有無',
+    '適切な量（≥600mg/日）で4週間以上の試行があるか。試行なしの場合、A2（PSP）の評価は「不明」となる。')}
+  <div class="fg"><div class="fl"><span class="fc" style="background:#374151">Levo</span>Levodopa反応性（程度）</div>
+    <div class="fd">試行した場合のMDS-UPDRS Part IIIの改善度。劇的（≥30%改善）、中等度（20-30%）、軽度（<20%）、なし（0%）。PDの支持的基準は「明確で劇的な反応」。</div>
+    ${choiceBtn('levodopa_response',['dramatic','moderate','mild','none'],['劇的（≥30%）','中等度','軽度（<20%）','なし（無反応）'])}
+  </div>
+  ${fgItem('levodopa_dyskinesia','Levo','#374151','Levodopa誘発性ジスキネジア',
+    'Levodopa投与中に出現する不随意運動（ジスキネジア）。PDの強力な支持的基準。PSP・MSAでは通常みられない。')}
+
+  <div class="dbanner">👁 眼球運動（PSP・PD絶対除外基準に関連）</div>
+  ${fgItem('vsgp','O1','#6b21a8','垂直性核上性注視麻痺（vSGP）',
+    '上方または下方への随意眼球運動の完全制限。頭位変換（人形眼テスト）で誘発→核上性確認。PSPに高度に特異的（O1）。PD絶対除外基準に該当。')}
+  ${fgItem('slow_vert_saccades','O2','#6b21a8','垂直方向サッケードの緩徐化',
+    '上方・下方両方向のサッケード速度・振幅の低下（年齢標準値以下）。PSPの中核症候（O2）。PD絶対除外基準。')}
+  ${fgItem('macro_swj_eyelid','O3','#6b21a8','マクロ方形波急速眼球運動またはまぶた開失行',
+    '（1）Macro SWJ：視標固視中の振幅>5°・頻度>0.1HzのSWJ。（2）まぶた開失行：眼輪筋収縮なしに随意的眼瞼挙上が困難。PSP（O3）。')}
+
+  <div class="al al-info">💡 vSGP（O1）または垂直サッケード緩徐化（O2）が「あり」の場合、MDS-PD基準の絶対的除外基準（AE-PD2）に該当します。</div>
+</div>`;}
+
+function step3(){return `
+<div class="card">
+  <div class="ct">🌙 非運動症状・認知機能 <span class="badge" style="background:#1e1b4b;color:#fff">Step 4/6</span></div>
+  <div class="cs">自律神経・認知・感覚・睡眠症状は疾患特異性が高く、複数の診断基準に影響します</div>
+
+  <div class="dbanner">🔵 PD支持的特徴 / DLBコア症候</div>
+  ${fgItem('olfactory_loss','非運動','#1a4f8a','嗅覚障害（低嗅覚）',
+    '嗅覚検査（UPSIT、T&T嗅覚計等）での低嗅覚または無嗅覚。PDの支持的基準。MSAでは通常保たれる（PD vs MSA鑑別に有用）。')}
+  ${fgItem('rem_behavior_disorder','RBD','#0f5156','REM睡眠行動障害（RBD）',
+    'REM睡眠中に夢の内容を行動化（大声・身体動作）。ポリソムノグラフィーまたは臨床的に確認。DLBのコア症候。PDの支持的特徴。PSP・MSAでは通常みられない。')}
+  ${fgItem('fluctuating_cognition','DLBコア','#0f5156','認知・覚醒の著明な変動（Fluctuating cognition）',
+    '注意力と覚醒の著明な変動（日内・日間）。ぼんやりした状態と正常状態を繰り返す。DLBのコア症候。')}
+  ${fgItem('hallucination_visual','非運動','#0f5156','幻視（Visual hallucinations）',
+    '繰り返す明瞭な形のある幻視（人物・動物など）。DLBのコア症候。PDでも出現（通常薬剤関連）。MSAに対するレッドフラッグ。')}
+  ${fgItem('hallucination_drugfree','除外確認','#991b1b','薬剤によらない幻覚・幻視',
+    'Levodopa・抗コリン薬などと無関係に出現する幻覚。DLBでは薬剤非依存性が診断に重要。MSAおよびPSPに対する除外（または警告）基準。')}
+
+  <div class="dbanner">🟢 自律神経（MSA・PD関連）</div>
+  ${fgItem('orthostatic_hypotension','自律神経','#065f46','起立性低血圧（収縮期≥30mmHg低下）',
+    '起立後3分以内に収縮期血圧≥30mmHgまたは拡張期血圧≥15mmHgの低下。MSA確率診断の要件。早期・重篤な出現はPDのレッドフラッグ。')}
+  ${fgItem('urinary_dysfunction','自律神経','#065f46','尿症状（失禁・尿閉・切迫性）',
+    '神経因性膀胱症状（尿失禁・尿閉・切迫性尿意）。MSAで早期・顕著に出現。男性の勃起障害も重要。PDではより軽度・後期に。')}
+  ${fgItem('autonomic_severe_early','自律神経','#991b1b','早期・重篤な自律神経機能不全',
+    'PSP除外：発症3年以内の顕著な自律神経障害。PDレッドフラッグ：発症5年以内の重篤な自律神経障害。')}
+
+  <div class="dbanner">🧠 認知機能</div>
+  ${fgItem('cognitive_impairment','認知','#374151','認知機能障害（全般）',
+    '神経心理学的評価または臨床的に確認される認知機能の低下。')}
+  ${fgItem('dementia_dsmiv','認知','#374151','認知症（DSM-IV基準）',
+    '記憶を含む認知機能の低下が日常生活機能に支障をきたす。MSAに対するレッドフラッグ。')}
+  ${fgItem('dementia_early_5y','認知','#991b1b','発症5年以内の認知症',
+    '運動症状出現から5年以内の認知症。PDのレッドフラッグ（PDDではなくDLBを示唆する可能性）。')}
+  ${fgItem('alzheimer_type_dementia','認知','#991b1b','アルツハイマー型皮質性認知症',
+    '顕著なエピソード記憶障害・失語・失行・失認を主体とする皮質性認知症。PSPに対する絶対的除外基準（AE-PSP4）。')}
+  ${fgItem('frontal_cognitive_beh','C2','#6b21a8','前頭葉認知機能/行動症候（≥2項目）',
+    '以下の2項目以上：①アパシー、②言語流暢性低下、③前頭葉遂行機能障害（FAB<12など）、④模倣/道具使用行動、⑤前頭葉徴候（把握反射等）。PSPのC2。')}
+  ${fgItem('depression_anxiety','非運動','#374151','うつ症状または不安症状',
+    'PDの非運動症状として高頻度。DLBの支持的特徴。')}
+</div>`;}
+
+function step4(){return `
+<div class="card">
+  <div class="ct">🧬 小脳・皮質・追加徴候 <span class="badge" style="background:#1e1b4b;color:#fff">Step 5/6</span></div>
+  <div class="cs">小脳徴候はPD除外・MSA-Cの中心です。皮質徴候はCBSの核心です。</div>
+
+  <div class="dbanner">🟢 小脳症候（MSA-C中核 / PD除外基準）</div>
+  ${fgItem('cerebellar_gait','小脳','#065f46','小脳性歩行失調',
+    '小脳障害による失調性歩行（wide-based gait, 左右への揺れ）。MSA-Cの中核症候。PD・PSPに対する絶対的除外基準。')}
+  ${fgItem('cerebellar_limb','小脳','#065f46','四肢小脳失調（測定障害等）',
+    '四肢の測定障害・輪番運動障害・企図振戦など小脳性協調運動障害。MSA-Cに重要。PD・PSPに対する除外基準。')}
+  ${fgItem('cerebellar_dysarthria','小脳','#065f46','小脳型構音障害',
+    '断綴性・スキャニング・爆発性言語などの小脳型構音障害。MSA-Cのcerebellarsyndrome構成要素。')}
+
+  <div class="dbanner">🔴 皮質症候（CBS核心 / PD除外基準）</div>
+  ${fgItem('cortical_sensory_loss','皮質','#c2410c','皮質感覚障害',
+    '立体覚・2点識別覚障害（位置覚・振動覚は保たれる）。CBSの皮質症候。PD除外基準（上肢に存在する場合）。')}
+  ${fgItem('limb_apraxia','皮質','#c2410c','肢体失行（Limb apraxia）',
+    '道具使用や模倣動作の障害（固縮に続発しない）。CBSの皮質症候。PD除外基準。通常は上肢、非対称性が重要。')}
+  ${fgItem('alien_limb','皮質','#c2410c','Alien limb現象',
+    '自己意図と無関係な手の動き（levitation, intermanual conflict）。CBSの強力な皮質症候。PSP除外基準（focal frontoparietal atrophyを伴う場合）。')}
+  ${fgItem('speech_language_aos','C1','#6b21a8','発語失行（AOS）または非流暢性失語（nfvPPA）',
+    '（1）発語失行：音の歪み・置換・発話速度低下・プロソディ障害。（2）nfvPPA：発語失行または失文法（文理解は保たれる）。PSPのC1。CBS-nfvPPAにも関連。')}
+  ${fgItem('cbs_syndrome','C3','#6b21a8','皮質基底核症候群（CBS複合）',
+    '以下のうち≥2（非対称性が望ましい）：肢体失行・皮質感覚障害・alien limb・焦点性ミオクローヌス・肢体ジストニア。PSPのC3。')}
+
+  <div class="dbanner">⚡ 追加症候</div>
+  ${fgItem('pyramidal_signs','追加','#374151','錐体路徴候（Babinski徴候等）',
+    'Babinski徴候・腱反射亢進。MSA（Possible）の追加基準。PDの説明不能な錐体路徴候はレッドフラッグ。')}
+  ${fgItem('inspiratory_stridor','追加','#374151','吸気性喘鳴（Inspiratory stridor）',
+    '吸気時の甲高い異常呼吸音。MSA（Possible）の追加基準。PDのレッドフラッグ。')}
+  ${fgItem('dysphagia','追加','#374151','嚥下障害',
+    '誤嚥・むせ・食事時間延長。MSA（5年以内）の追加基準。PSPの支持的特徴。早期重篤出現はPDのレッドフラッグ。')}
+  ${fgItem('severe_dysarthria_early','追加','#374151','早期の高度構音障害（発症5年以内）',
+    '重篤な構音障害が発症5年以内に出現。PDのレッドフラッグ（早期bulbar dysfunction）。')}
+  ${fgItem('neuropathy','追加','#374151','末梢神経障害（臨床的に有意）',
+    '電気生理学的または臨床的に確認される末梢神経障害。MSAに対するレッドフラッグ。')}
+  ${fgItem('no_progression_5y','経過','#374151','5年以上の経過で運動症状の進行なし',
+    '5年以上の経過にもかかわらず運動症状が進行していない。PDのレッドフラッグ。')}
+  ${fgItem('no_nonmotor_5y','経過','#374151','5年以上の経過で非運動症状が皆無',
+    '5年以上の経過で嗅覚障害・便秘・うつ・睡眠障害などの非運動症状がまったくない。PDのレッドフラッグ。')}
+</div>`;}
+
+function step5(){return `
+<div class="card">
+  <div class="ct">🔬 画像・検査所見・除外因子 <span class="badge" style="background:#1e1b4b;color:#fff">Step 6/6</span></div>
+  <div class="cs">神経画像所見と除外因子の評価。各疾患に特異的なMRI所見が含まれます。</div>
+
+  <div class="dbanner">🧲 MRI所見（疾患特異的パターン）</div>
+  ${fgItem('mri_midbrain_atrophy','MRI','#6b21a8','中脳萎縮（ハミングバードサイン・マリゴールドサイン）',
+    '矢状断でのハミングバードサイン（中脳被蓋萎縮）、軸位断でのマリゴールドサイン。PSPに特徴的。MCP比（中脳/橋断面積比）低下。')}
+  ${fgItem('mri_putaminal_abnorm','MRI','#065f46','MRI被殻萎縮または信号異常',
+    'T2/FLAIRでの被殻背外側縁の線状高信号（putaminal rim sign）、T2低信号、被殻萎縮。MSA-Pに特徴的。')}
+  ${fgItem('mri_hotcrossbun','MRI','#065f46','ホットクロスバンサイン（橋・十字サイン）',
+    'T2で橋前部に十字形の高信号。MSA-Cに特徴的。橋の傍正中線維の変性を示す。')}
+  ${fgItem('mri_cerebellar_atrophy','MRI','#065f46','小脳萎縮・中小脳脚（MCP）萎縮',
+    '小脳半球・虫部の萎縮、MCP萎縮（T2高信号を伴うことも）。MSA-Cの支持的画像所見。')}
+  ${fgItem('mri_cortical_frontoparietal','MRI','#c2410c','前頭・頭頂葉皮質萎縮（非対称性）',
+    '前頭葉・頭頂葉の非対称性皮質萎縮。CBS/CBDに特徴的。PSPにおけるalien limb+皮質萎縮の組み合わせは除外基準（AE-PSP6）。')}
+  ${fgItem('mri_structural_abnorm','MRI','#991b1b','神経画像上の関連する構造的異常',
+    '脳梗塞・腫瘍・正常圧水頭症・脱髄病変など。PD・PSPの絶対的除外基準。中脳萎縮はPSP除外しない。')}
+
+  <div class="dbanner">⚗️ 機能的検査</div>
+  ${fgItem('dat_scan_reduced','検査','#374151','DATスキャン（SPECT/PET）低下',
+    '線条体へのpresynaptic dopaminergic nerveterminalの低下。PDの支持的基準。DLBの指示的バイオマーカー。MSA・PSP・CBSでも低下しうる（非特異的）。')}
+  ${fgItem('dat_scan_normal','検査','#991b1b','DATスキャン正常',
+    'DATスキャンが正常（保たれた線条体取り込み）。MDS-PD基準の絶対的除外基準（AE-PD8）。ただしDATスキャン未施行の場合は評価不能。')}
+  ${fgItem('mibg_reduced','検査','#374151','MIBG心筋シンチグラフィー低下',
+    '心臓交感神経支配の低下。PDの支持的基準。DLBの指示的バイオマーカー。MSA・PSPでは通常保たれる（PD vs MSA/PSP鑑別に有用）。')}
+
+  <div class="dbanner">🔍 除外因子・既往歴</div>
+  ${fgItem('drug_induced','除外','#991b1b','パーキンソニズム誘発薬への曝露',
+    'ドパミン遮断薬（抗精神病薬・制吐薬）またはドパミン枯渇薬への曝露歴があり、症状との因果関係が否定できない。PD絶対除外基準。')}
+  ${fgItem('encephalitis_hx','除外','#991b1b','脳炎の既往（現在または最近）',
+    '自己免疫性・ウイルス性・細菌性脳炎の既往。PSPの絶対的除外基準。')}
+  ${fgItem('family_hx_parkinsonism','除外','#374151','パーキンソニズムの家族歴（1親等超）',
+    '1親等を超える親族にパーキンソニズムの既往。MSAに対するレッドフラッグ。孤発性の確認にも影響。')}
+  ${fgItem('family_hx_ataxia','除外','#374151','失調症の家族歴（1親等超）',
+    '1親等を超える親族に失調症の既往。MSAに対するレッドフラッグ。')}
+  ${fgItem('ms_white_matter','除外','#374151','多発性硬化症を示唆する白質病変',
+    'MRIで多発性硬化症を示唆する脱髄性白質病変パターン。MSAに対するレッドフラッグ。')}
+  ${fgItem('whipple','除外','#991b1b','Whipple病の診断',
+    'Tropheryma whipplei感染によるWhipple病が確認された場合。PSPの絶対的除外基準。')}
+</div>`;}
+
+// ============================================================
+// CLASSIFICATION LOGIC
+// All functions return structured objects; no AI, no probability
+// ============================================================
+
+// ── PD (MDS 2015) ──────────────────────────────────────────
+function classifyPD(){
+  const d=S.d; const has_parkinsonism = yes('bradykinesia')&&(yes('rigidity')||yes('rest_tremor'));
+  const abs_excl=[];
+  if(yes('cerebellar_gait')||yes('cerebellar_limb')) abs_excl.push({code:'AE-PD1',text:'小脳失調の存在'});
+  if(yes('vsgp')||yes('slow_vert_saccades')) abs_excl.push({code:'AE-PD2',text:'垂直方向眼球運動障害（vSGP/遅いサッケード）'});
+  if(yes('lower_body_only')) abs_excl.push({code:'AE-PD4',text:'下肢のみのパーキンソニズム（>3年）'});
+  if(yes('drug_induced')) abs_excl.push({code:'AE-PD5',text:'パーキンソニズム誘発薬の使用'});
+  if(yes('levodopa_tried')&&d.levodopa_response==='none') abs_excl.push({code:'AE-PD6',text:'適切なLevodopa試行にもかかわらず無反応'});
+  if(yes('dat_scan_normal')) abs_excl.push({code:'AE-PD8',text:'DATスキャン正常'});
+  if(yes('mri_structural_abnorm')) abs_excl.push({code:'AE-PD9',text:'神経画像上の構造的病変'});
+
+  const supp=[];
+  if(d.levodopa_response==='dramatic') supp.push({code:'SC1',text:'Levodopa劇的反応（≥30%改善）'});
+  if(yes('levodopa_dyskinesia')) supp.push({code:'SC2',text:'Levodopa誘発性ジスキネジア'});
+  if(yes('rest_tremor')) supp.push({code:'SC3',text:'四肢の安静時振戦（臨床確認）'});
+  if(yes('olfactory_loss')) supp.push({code:'SC4a',text:'嗅覚障害'});
+  if(yes('mibg_reduced')) supp.push({code:'SC4b',text:'MIBG心筋シンチ低下（交感神経変性）'});
+  if(yes('dat_scan_reduced')) supp.push({code:'SC5',text:'DATスキャン低下'});
+  if(yes('rem_behavior_disorder')) supp.push({code:'SC6',text:'REM睡眠行動障害'});
+
+  const rf=[];
+  if(yes('falls_repeated')&&yes('falls_3y')) rf.push({code:'RF-PD6',text:'発症3年以内の反復転倒（>1回/年）'});
+  if(yes('no_progression_5y')) rf.push({code:'RF-PD2',text:'5年以上の経過で運動症状の進行なし'});
+  if(yes('severe_dysarthria_early')) rf.push({code:'RF-PD3',text:'発症5年以内の重篤な球症状（構音・嚥下）'});
+  if(yes('inspiratory_stridor')) rf.push({code:'RF-PD4',text:'吸気性喘鳴'});
+  if(yes('autonomic_severe_early')) rf.push({code:'RF-PD5',text:'発症5年以内の重篤な自律神経障害'});
+  if(yes('anterocollis')) rf.push({code:'RF-PD7',text:'不釣り合いな前傾姿勢（camptocormia）'});
+  if(yes('no_nonmotor_5y')) rf.push({code:'RF-PD8',text:'5年以上の経過で非運動症状が皆無'});
+  if(yes('pyramidal_signs')) rf.push({code:'RF-PD9',text:'原因不明の錐体路徴候'});
+  if(d.onset_side==='symmetric') rf.push({code:'RF-PD10',text:'両側対称性パーキンソニズム（全経過を通じて）'});
+
+  if(!has_parkinsonism) return{cert:'no_core',abs_excl,supp,rf,note:'ブラジキネジア + 固縮または安静時振戦 のコア基準を満たさない'};
+  if(abs_excl.length>0) return{cert:'excluded',abs_excl,supp,rf};
+  if(rf.length===0&&supp.length>=2) return{cert:'established',abs_excl,supp,rf,note:'Clinically Established PD（研究診断基準相当）'};
+  if(rf.length<=2&&supp.length>=rf.length) return{cert:'probable',abs_excl,supp,rf,note:'Clinically Probable PD（臨床実用診断）'};
+  if(rf.length<=2) return{cert:'possible',abs_excl,supp,rf,note:'コア基準あり・除外基準なし・レッドフラッグあり'};
+  return{cert:'unlikely',abs_excl,supp,rf,note:'レッドフラッグが多く診断確実性が低い'};
+}
+
+// ── PSP (MDS 2017) ─────────────────────────────────────────
+function classifyPSP(){
+  const d=S.d;
+  // Eligibility
+  const elig_issues=[];
+  if(d.sporadic==='no') elig_issues.push('孤発性でない');
+  const age=parseInt(d.age_onset);
+  if(!isNaN(age)&&age<40) elig_issues.push('発症年齢<40歳');
+  if(d.progression_rate==='rapid') elig_issues.push('急速進行性');
+  if(elig_issues.length>0) return{cert:'ineligible',elig_issues,abs_excl:[],subtypes:{},allSubtypes:[]};
+
+  // Absolute exclusions
+  const abs_excl=[];
+  if(yes('cerebellar_gait')||yes('cerebellar_limb')) abs_excl.push({code:'AE-PSP1',text:'顕著な小脳失調'});
+  if(yes('autonomic_severe_early')) abs_excl.push({code:'AE-PSP2',text:'発症3年以内の顕著な自律神経障害'});
+  if(yes('rest_tremor_pillrolling')&&d.onset_side==='asymmetric') abs_excl.push({code:'AE-PSP3',text:'高度非対称性pill-rolling安静時振戦'});
+  if(yes('alzheimer_type_dementia')) abs_excl.push({code:'AE-PSP4',text:'アルツハイマー型皮質性認知症'});
+  if(yes('hallucination_drugfree')) abs_excl.push({code:'AE-PSP5',text:'薬剤非依存性の幻視・妄想'});
+  if(yes('alien_limb')&&yes('mri_cortical_frontoparietal')) abs_excl.push({code:'AE-PSP6',text:'Alien limb＋前頭頭頂葉萎縮（CBD示唆）'});
+  if(yes('mri_structural_abnorm')) abs_excl.push({code:'AE-PSP7',text:'神経画像上の構造的病変'});
+  if(yes('encephalitis_hx')) abs_excl.push({code:'AE-PSP8',text:'脳炎の既往'});
+  if(yes('whipple')) abs_excl.push({code:'AE-PSP9',text:'Whipple病'});
+  if(abs_excl.length>0) return{cert:'excluded',abs_excl,subtypes:{},allSubtypes:[]};
+
+  // Core features
+  const O1=yes('vsgp'),O2=yes('slow_vert_saccades'),O3=yes('macro_swj_eyelid');
+  const P1=yes('falls_repeated')&&yes('falls_3y');
+  const P2=d.pull_test==='p2_fall';
+  const P3=d.pull_test==='p3_steps';
+  const A1=yes('gait_freezing');
+  const lr=d.levodopa_response;
+  const levodopa_resistant=(lr==='none'||lr==='mild'||(d.levodopa_tried==='no'||d.levodopa_tried==='unknown'));
+  const levodopa_responsive=(lr==='dramatic'||lr==='moderate');
+  const axial_park=yes('bradykinesia')&&yes('rigidity_axial');
+  const A2=axial_park&&levodopa_resistant;
+  const A3=axial_park&&levodopa_responsive;
+  const C1=yes('speech_language_aos');
+  const C2=yes('frontal_cognitive_beh');
+  const C3=yes('cbs_syndrome');
+  const hasSupp=yes('mri_midbrain_atrophy')||yes('olfactory_loss');
+  const has_any_supp=hasSupp||yes('dysphagia');
+
+  const certOrd={probable:4,possible:3,suggestive:2,none:0};
+  function evalSub(rules){for(const r of rules){if(r.cond)return{cert:r.cert,basis:r.basis||[]}}return{cert:'none',basis:[]}}
+  function bb(codes,vals){return codes.filter((_,i)=>vals[i])}
+
+  const subtypes={};
+  // PSP-RS
+  const p_hasOcP=O2||O3||P2||P3;
+  subtypes['PSP-RS']=evalSub([
+    {cert:'probable',cond:(O1&&(P1||P2))||(O2&&P1),basis:bb(['O1','O2','P1','P2'],[O1,O2,P1,P2])},
+    {cert:'possible',cond:(O1&&P3)||(O2&&(P2||P3))||(O3&&(P1||P2)),basis:bb(['O1','O2','O3','P1','P2','P3'],[O1,O2,O3,P1,P2,P3])},
+    {cert:'suggestive',cond:(O2&&P3)||(O3&&P3),basis:bb(['O2','O3','P3'],[O2,O3,P3])},
+  ]);
+  // PSP-P
+  subtypes['PSP-P']=evalSub([
+    {cert:'probable',cond:A2&&p_hasOcP,basis:bb(['A2','O2','O3','P2','P3'],[A2,O2,O3,P2,P3])},
+    {cert:'possible',cond:A3&&p_hasOcP,basis:bb(['A3','O2','O3','P2','P3'],[A3,O2,O3,P2,P3])},
+    {cert:'suggestive',cond:A2||A3,basis:bb(['A2','A3'],[A2,A3])},
+  ]);
+  // PSP-PGF
+  subtypes['PSP-PGF']=evalSub([
+    {cert:'probable',cond:A1&&p_hasOcP,basis:bb(['A1','O2','O3','P2','P3'],[A1,O2,O3,P2,P3])},
+    {cert:'possible',cond:A1&&has_any_supp,basis:['A1','supp']},
+    {cert:'suggestive',cond:A1,basis:['A1']},
+  ]);
+  // PSP-F
+  const f_hm=O1||O2||P1||P2||A1||A2;
+  const f_lo=O3||P3||A3;
+  subtypes['PSP-F']=evalSub([
+    {cert:'probable',cond:C2&&f_hm,basis:bb(['C2','O1','O2','P1','P2','A1','A2'],[C2,O1,O2,P1,P2,A1,A2])},
+    {cert:'possible',cond:C2&&f_lo,basis:bb(['C2','O3','P3','A3'],[C2,O3,P3,A3])},
+    {cert:'suggestive',cond:C2&&has_any_supp,basis:['C2','supp']},
+  ]);
+  // PSP-SL
+  subtypes['PSP-SL']=evalSub([
+    {cert:'probable',cond:C1&&f_hm,basis:bb(['C1','O1','O2','P1','P2','A1','A2'],[C1,O1,O2,P1,P2,A1,A2])},
+    {cert:'possible',cond:C1&&f_lo,basis:bb(['C1','O3','P3','A3'],[C1,O3,P3,A3])},
+    {cert:'suggestive',cond:C1&&has_any_supp,basis:['C1','supp']},
+  ]);
+  // PSP-CBS
+  subtypes['PSP-CBS']=evalSub([
+    {cert:'probable',cond:C3&&(O1||O2||P1),basis:bb(['C3','O1','O2','P1'],[C3,O1,O2,P1])},
+    {cert:'possible',cond:C3&&(O3||P2||P3||A2),basis:bb(['C3','O3','P2','P3','A2'],[C3,O3,P2,P3,A2])},
+    {cert:'suggestive',cond:C3&&(A3||has_any_supp),basis:['C3']},
+  ]);
+  // PSP-OM
+  const noOtherPAC=!P1&&!P2&&!A1&&!A2&&!C1&&!C2&&!C3;
+  subtypes['PSP-OM']=evalSub([
+    {cert:'probable',cond:(O1||O2)&&noOtherPAC,basis:bb(['O1','O2'],[O1,O2])},
+    {cert:'possible',cond:(O1||O2)&&!A2&&!C1&&!C2&&!C3,basis:bb(['O1','O2'],[O1,O2])},
+  ]);
+  // PSP-PI
+  const noOC=!O1&&!O2&&!O3&&!C1&&!C2&&!C3;
+  subtypes['PSP-PI']=evalSub([
+    {cert:'probable',cond:P1&&A2&&noOC,basis:['P1','A2']},
+    {cert:'possible',cond:((P2&&A2)||(P1&&A3))&&noOC,basis:bb(['P1','P2','A2','A3'],[P1,P2,A2,A3])},
+    {cert:'suggestive',cond:(P1||P2||P3)&&(A2||A3)&&noOC,basis:bb(['P1','P2','P3','A2','A3'],[P1,P2,P3,A2,A3])},
+  ]);
+
+  let maxCert='none';const maxSubs=[];
+  const allSubtypes=[];
+  for(const [st,info] of Object.entries(subtypes)){
+    if(info.cert!=='none'){
+      allSubtypes.push({subtype:st,...info});
+      if(certOrd[info.cert]>certOrd[maxCert]){maxCert=info.cert;maxSubs.length=0;maxSubs.push(st);}
+      else if(certOrd[info.cert]===certOrd[maxCert]) maxSubs.push(st);
+    }
+  }
+  allSubtypes.sort((a,b)=>certOrd[b.cert]-certOrd[a.cert]);
+  return{cert:maxCert,primarySubtypes:maxSubs,subtypes,allSubtypes,abs_excl,core:{O1,O2,O3,P1,P2,P3,A1,A2,A3,C1,C2,C3}};
+}
+
+// ── MSA (Gilman 2008) ─────────────────────────────────────
+function classifyMSA(){
+  const d=S.d;
+  const has_parkinsonism=yes('bradykinesia')&&(yes('rigidity')||yes('rest_tremor'));
+  const has_cerebellar=yes('cerebellar_gait')&&(yes('cerebellar_dysarthria')||yes('cerebellar_limb'));
+  const has_autonomic_prob=yes('orthostatic_hypotension')||yes('urinary_dysfunction');
+  const lr=d.levodopa_response;
+  const levodopa_poor=lr==='none'||lr==='mild'||(!yes('levodopa_tried'));
+
+  const rf=[];
+  if(yes('rest_tremor_pillrolling')) rf.push({code:'RF-MSA1',text:'典型的なpill-rolling安静時振戦'});
+  if(yes('neuropathy')) rf.push({code:'RF-MSA2',text:'臨床的に有意な末梢神経障害'});
+  if(yes('hallucination_drugfree')) rf.push({code:'RF-MSA3',text:'薬剤非依存性幻覚'});
+  const age=parseInt(d.age_onset);
+  if(!isNaN(age)&&age>75) rf.push({code:'RF-MSA4',text:'75歳超での発症'});
+  if(yes('family_hx_parkinsonism')||yes('family_hx_ataxia')) rf.push({code:'RF-MSA5',text:'パーキンソニズムまたは失調症の家族歴（1親等超）'});
+  if(yes('dementia_dsmiv')) rf.push({code:'RF-MSA6',text:'認知症（DSM-IV基準）の存在'});
+  if(yes('ms_white_matter')) rf.push({code:'RF-MSA7',text:'多発性硬化症を示唆する白質病変'});
+
+  let subtype=null;
+  if(has_parkinsonism&&has_cerebellar) subtype='MSA-P/C混合';
+  else if(has_parkinsonism) subtype='MSA-P';
+  else if(has_cerebellar) subtype='MSA-C';
+
+  const additional=[];
+  if(yes('pyramidal_signs')) additional.push('錐体路徴候（Babinski等）');
+  if(yes('inspiratory_stridor')) additional.push('吸気性喘鳴');
+  if(yes('falls_3y')&&yes('falls_repeated')) additional.push('発症3年以内の姿勢不安定');
+  if(yes('dysphagia')) additional.push('嚥下障害（5年以内）');
+  if(yes('mri_putaminal_abnorm')||yes('mri_hotcrossbun')||yes('mri_cerebellar_atrophy')) additional.push('MRI支持所見（被殻/橋/小脳異常）');
+
+  if(!has_parkinsonism&&!has_cerebellar) return{cert:'none',subtype,rf,additional,note:'パーキンソニズムも小脳症候群も認められない'};
+
+  // Probable MSA: autonomic (OH≥30 or urinary+sexual) AND (poor-levo parkinsonism OR cerebellar syndrome)
+  if(has_autonomic_prob&&((has_parkinsonism&&levodopa_poor)||has_cerebellar)&&rf.length===0)
+    return{cert:'probable',subtype,rf,additional,note:`Probable ${subtype||'MSA'}：自律神経障害＋（levodopa抵抗性パーキンソニズムまたは小脳症候群）`};
+
+  // Possible MSA: parkinsonism or cerebellar + some autonomic + additional
+  if((has_parkinsonism||has_cerebellar)&&has_autonomic_prob&&additional.length>0)
+    return{cert:'possible',subtype,rf,additional,note:`Possible ${subtype||'MSA'}：パーキンソニズム/小脳症候群＋自律神経症状＋追加所見`};
+
+  return{cert:'features_present',subtype,rf,additional,note:'部分的な特徴あり。Probable/Possible基準の完全充足には至らない'};
+}
+
+// ── CBS (Armstrong 2013) ───────────────────────────────────
+function classCBS(){
+  const d=S.d;
+  const isAsymm=d.onset_side==='asymmetric';
+
+  // Motor features
+  const motor=[];
+  if(yes('bradykinesia')&&yes('rigidity')&&isAsymm) motor.push('非対称性肢体固縮/無動');
+  else if(yes('bradykinesia')&&yes('rigidity')) motor.push('肢体固縮/無動（対称性）');
+  if(yes('limb_dystonia')) motor.push('肢体ジストニア');
+  if(yes('focal_myoclonus')) motor.push('焦点性肢体ミオクローヌス');
+
+  // Cortical features
+  const cortical=[];
+  if(yes('limb_apraxia')) cortical.push('肢体失行');
+  if(yes('cortical_sensory_loss')) cortical.push('皮質感覚障害');
+  if(yes('alien_limb')) cortical.push('Alien limb現象');
+
+  // Additional phenotypes
+  const phenotypes=[];
+  if(yes('frontal_cognitive_beh')&&motor.length>=2) phenotypes.push('CBS-FBCS（前頭葉症候型）');
+  if(yes('speech_language_aos')&&motor.length>=2) phenotypes.push('CBS-nfvPPA（非流暢性失語型）');
+  if((yes('vsgp')||yes('slow_vert_saccades')||yes('falls_3y'))&&motor.length>=2) phenotypes.push('CBS-PSPS（PSP表現型）');
+
+  const rf=[];
+  if(yes('hallucination_visual')||yes('rem_behavior_disorder')) rf.push({code:'RF-CBS1',text:'Lewy小体病を示唆する特徴（幻視/RBD）'});
+  if(d.onset_side==='symmetric'&&motor.length>0) rf.push({code:'RF-CBS2',text:'早期からの対称性運動障害（Probable CBSは非対称が必要）'});
+  if(yes('vsgp')&&!phenotypes.some(p=>p.includes('PSP'))) rf.push({code:'RF-CBS3',text:'vSGP：PSPのRS型を強く示唆（CBS-PSPSも検討）'});
+
+  const mc=motor.length, cc=cortical.length;
+  if(!has_parkinsonism_for_cbs()) return{cert:'none',motor,cortical,phenotypes,rf,note:'CBSの運動症候の基準要素が不十分'};
+
+  const age=parseInt(d.age_onset);
+  const age_ok=isNaN(age)||age>=50;
+  if(!age_ok) return{cert:'features_present',motor,cortical,phenotypes,rf,note:'発症年齢が50歳未満（Armstrong 2013の要件は≥50歳）'};
+
+  if(isAsymm&&mc>=2&&cc>=2) return{cert:'probable',motor,cortical,phenotypes,rf,note:'Probable CBS：非対称性＋運動≥2＋皮質≥2'};
+  if(mc>=2&&cc>=1) return{cert:'possible',motor,cortical,phenotypes,rf,note:'Possible CBS：運動≥2＋皮質≥1（対称性可）'};
+  if(mc>=1||cc>=1) return{cert:'features_present',motor,cortical,phenotypes,rf,note:'CBS要素の一部が存在。基準の完全充足には至らない'};
+  return{cert:'none',motor,cortical,phenotypes,rf};
+}
+function has_parkinsonism_for_cbs(){return yes('bradykinesia')&&yes('rigidity')||(yes('limb_dystonia')||yes('focal_myoclonus'));}
+
+// ── DLB (McKeith 2017) ────────────────────────────────────
+function classifyDLB(){
+  const core=[];
+  if(yes('fluctuating_cognition')) core.push({code:'Core1',text:'認知・覚醒の著明な変動'});
+  if(yes('hallucination_visual')) core.push({code:'Core2',text:'繰り返す明瞭な幻視'});
+  if(yes('rem_behavior_disorder')) core.push({code:'Core3',text:'REM睡眠行動障害（RBD）'});
+  if(yes('bradykinesia')||yes('rest_tremor')||yes('rigidity')) core.push({code:'Core4',text:'パーキンソニズムの自発的特徴（≥1つ）'});
+
+  const bio=[];
+  if(yes('dat_scan_reduced')) bio.push({code:'Bio1',text:'DATスキャン低下（基底核ドパミン取り込み低下）'});
+  if(yes('mibg_reduced')) bio.push({code:'Bio2',text:'MIBG心筋シンチ低下（心臓交感神経変性）'});
+
+  const supp=[];
+  if(yes('olfactory_loss')) supp.push('低嗅覚');
+  if(yes('autonomic_severe_early')||yes('orthostatic_hypotension')||yes('urinary_dysfunction')) supp.push('自律神経障害');
+  if(yes('depression_anxiety')) supp.push('うつ/不安');
+  if(yes('hallucination_drugfree')) supp.push('その他の幻覚・妄想');
+
+  // Warnings
+  const warnings=[];
+  const dur=parseInt(S.d.duration_months);
+  if(yes('bradykinesia')&&!yes('cognitive_impairment')&&!yes('dementia_dsmiv'))
+    warnings.push('パーキンソニズムのみで認知症が前景でない場合、PDDとの区別に注意（1年ルール：パーキンソニズムが認知症に≥1年先行する場合はPDDを示唆）');
+  if(yes('alzheimer_type_dementia')) warnings.push('アルツハイマー型皮質性認知症の存在はDLBの可能性を下げる');
+
+  const cc=core.length, bc=bio.length;
+  let cert='none';
+  if(cc>=2||(cc>=1&&bc>=1)) cert='probable';
+  else if(cc===1&&bc===0) cert='possible';
+  else if(bc>=1&&cc===0) cert='possible';
+
+  return{cert,core,bio,supp,warnings,note:cert==='probable'?'Probable DLB：コア≥2またはコア≥1＋指示的バイオマーカー≥1':cert==='possible'?'Possible DLB：コア1つのみ、または指示的バイオマーカーのみ':''};
+}
+
+// ============================================================
+// RESULTS RENDERER
+// ============================================================
+function renderResults(){
+  const pd=classifyPD(), psp=classifyPSP(), msa=classifyMSA(), cbs=classCBS(), dlb=classifyDLB();
+
+  const certLabelJa={
+    established:'Established PD', probable:'Probable', possible:'Possible',
+    unlikely:'診断確実性 低', excluded:'基準除外', ineligible:'対象外',
+    no_core:'コア基準なし', none:'基準非該当', features_present:'一部特徴あり',
+  };
+  const certColors={
+    established:'dc-pd', probable:'dc-pd', possible:'dc-psp',
+    unlikely:'dc-none', excluded:'dc-excl', ineligible:'dc-none',
+    no_core:'dc-none', none:'dc-none', features_present:'dc-none',
+  };
+  function certJa(c){ return certLabelJa[c]||c; }
+  function certColor(c){ return certColors[c]||'dc-none'; }
+
+  // Disease-specific cert labels
+  const pdLabel=certJa(pd.cert);
+  const pspLabel=psp.cert==='excluded'?'除外基準該当':psp.cert==='ineligible'?'対象外':psp.primarySubtypes&&psp.primarySubtypes.length?`${certJa(psp.cert)} (${psp.primarySubtypes[0]})`:certJa(psp.cert);
+  const msaLabel=msa.subtype?`${certJa(msa.cert)}\n${msa.subtype}`:certJa(msa.cert);
+  const cbsLabel=certJa(cbs.cert);
+  const dlbLabel=certJa(dlb.cert);
+
+  // Red flag counts
+  const pdRFcount=(pd.rf||[]).length+(pd.abs_excl||[]).length;
+  const pspRFcount=psp.cert==='excluded'?(psp.abs_excl||[]).length:0;
+  const msaRFcount=(msa.rf||[]).length;
+  const cbsRFcount=(cbs.rf||[]).length;
+
+  const pdColor=pd.cert==='excluded'?'dc-excl':pd.cert==='no_core'?'dc-none':pd.cert==='established'||pd.cert==='probable'?'dc-pd':'dc-psp';
+  const pspColor=psp.cert==='excluded'?'dc-excl':psp.cert==='ineligible'?'dc-none':psp.cert==='probable'?'dc-psp':psp.cert==='possible'?'dc-cbs':psp.cert==='suggestive'?'dc-dlb':'dc-none';
+  const msaColor=msa.cert==='probable'?'dc-msa':msa.cert==='possible'?'dc-cbs':msa.cert==='features_present'?'dc-dlb':'dc-none';
+  const cbsColor=cbs.cert==='probable'?'dc-cbs':cbs.cert==='possible'?'dc-dlb':'dc-none';
+  const dlbColor=dlb.cert==='probable'?'dc-dlb':dlb.cert==='possible'?'dc-psp':'dc-none';
+
+  function rfFlag(c){return`<span class="rf-code">${c}</span>`;}
+  function exclFlag(c){return`<span class="rf-code rf-excl">${c}</span>`;}
+
+  function rfRow(diseaseLabel,color,rfs,absExcls){
+    const allRFs=[...(absExcls||[]).map(e=>({...e,excl:true})),...(rfs||[])];
+    const hasRFs=allRFs.length>0;
+    return`<div class="rf-row">
+      <div class="rf-disease" style="color:${color}">${diseaseLabel}</div>
+      <div class="rf-items">${hasRFs?allRFs.map(r=>`<div class="rf-item">${r.excl?exclFlag(r.code):rfFlag(r.code)}<span>${r.text}</span></div>`).join(''):'<span class="rf-none">レッドフラッグ・除外基準 なし</span>'}</div>
+    </div>`;
+  }
+
+  const hasAnyRF=(pd.rf&&pd.rf.length)+(pd.abs_excl&&pd.abs_excl.length)+(psp.abs_excl&&psp.abs_excl.length)+(msa.rf&&msa.rf.length)+(cbs.rf&&cbs.rf.length)>0;
+
+  // Detailed criteria rows
+  function crRow(code,bga,status,text){
+    const icon=status==='met'?'✅':status==='not'?'❌':'❓';
+    const stCls=status==='met'?'st-met':status==='not'?'st-not':'st-unk';
+    const stTxt=status==='met'?'あり':status==='not'?'なし':'不明';
+    return`<div class="cr"><span class="cr-code" style="background:${bga}">${code}</span><span class="cr-st ${stCls}">${icon} ${stTxt}</span><span class="cr-txt">${text}</span></div>`;
+  }
+  function sts(key){return yes(key)?'met':no(key)?'not':'unk';}
+
+  // PSP subtype rows
+  const pspSubRows=psp.cert!=='excluded'&&psp.cert!=='ineligible'?Object.entries(psp.subtypes||{}).map(([st,info])=>{
+    const cls=info.cert==='probable'?'cert-prob':info.cert==='possible'?'cert-poss':info.cert==='suggestive'?'cert-sugg':'cert-none';
+    const la={probable:'Probable',possible:'Possible',suggestive:'Suggestive',none:'非該当（—）'};
+    return`<tr><td><strong>${st}</strong></td><td class="${cls}">${la[info.cert]}</td><td style="font-size:10px;color:var(--muted)">${(info.basis||[]).join('，')||'—'}</td></tr>`;
+  }).join(''):'';
+
+  // CBS phenotype rows
+  const cbsPhenRows=(cbs.phenotypes||[]).map(p=>`<div class="cr"><span class="cr-code" style="background:var(--cbs)">型</span><span class="cr-st st-met">✅ 該当</span><span class="cr-txt">${p}</span></div>`).join('');
+
+  const dateStr=new Date().toLocaleDateString('ja-JP');
+
+  return`
+<div class="card" style="border-top:4px solid #1e1b4b">
+  <div class="ct">📊 診断基準整理結果 <span class="badge" style="background:#1e1b4b;color:#fff">5疾患並列</span></div>
+  <div class="cs">出力日：${dateStr}${S.d.case_id?'　症例ID：'+S.d.case_id:''} — 以下はすべて診断基準への機械的マッピング結果です</div>
+
+  <!-- 5DISEASE SUMMARY GRID -->
+  <div class="disease-grid">
+    <div class="dc ${pdColor}">
+      <div class="dc-name">PD（パーキンソン病）</div>
+      <div class="dc-cert">${pdLabel}</div>
+      <div class="dc-sub">${pd.note||''}</div>
+      <div class="dc-flags">🚩 RF:${(pd.rf||[]).length}件 / ⛔ 除外:${(pd.abs_excl||[]).length}件</div>
+    </div>
+    <div class="dc ${pspColor}">
+      <div class="dc-name">PSP（進行性核上性麻痺）</div>
+      <div class="dc-cert">${psp.cert==='excluded'?'除外基準該当':psp.cert==='ineligible'?'対象外（適格基準外）':psp.cert==='none'?'基準非該当':certJa(psp.cert)}</div>
+      <div class="dc-sub">${psp.primarySubtypes&&psp.primarySubtypes.length?'主：'+psp.primarySubtypes.join('，'):''}</div>
+      <div class="dc-flags">${psp.cert==='excluded'?'⛔ 除外基準：'+(psp.abs_excl||[]).length+'件':'全型：'+(psp.allSubtypes||[]).length+'型が部分的に該当'}</div>
+    </div>
+    <div class="dc ${msaColor}">
+      <div class="dc-name">MSA（多系統萎縮症）</div>
+      <div class="dc-cert">${certJa(msa.cert)}</div>
+      <div class="dc-sub">${msa.subtype||''}</div>
+      <div class="dc-flags">🚩 RF:${(msa.rf||[]).length}件</div>
+    </div>
+    <div class="dc ${cbsColor}">
+      <div class="dc-name">CBS（皮質基底核症候群）</div>
+      <div class="dc-cert">${certJa(cbs.cert)}</div>
+      <div class="dc-sub">${(cbs.phenotypes||[]).join(' / ')||''}</div>
+      <div class="dc-flags">🚩 RF:${(cbs.rf||[]).length}件 / 運動:${(cbs.motor||[]).length}・皮質:${(cbs.cortical||[]).length}</div>
+    </div>
+    <div class="dc ${dlbColor}">
+      <div class="dc-name">DLB（レビー小体型認知症）</div>
+      <div class="dc-cert">${certJa(dlb.cert)}</div>
+      <div class="dc-sub">コア:${(dlb.core||[]).length}件 / 指示的バイオ:${(dlb.bio||[]).length}件</div>
+      <div class="dc-flags">ℹ️ ${dlb.warnings&&dlb.warnings.length?dlb.warnings.length+'件の注意事項':'特記事項なし'}</div>
+    </div>
+  </div>
+
+  <!-- RED FLAG SECTION -->
+  ${hasAnyRF?`
+  <div class="rf-section">
+    <div class="rf-title">🚩 レッドフラッグ・除外基準 一覧（各疾患に対するもの）</div>
+    <div class="al al-info" style="margin-bottom:8px;font-size:11px">
+      ⛔ <strong>赤背景</strong>：絶対的除外基準（その疾患の診断を除外）　🚩 <strong>赤コード</strong>：レッドフラッグ（診断確実性を低下させる）
+    </div>
+    ${rfRow('PD','var(--pd)',pd.rf,pd.cert==='excluded'||pd.cert==='no_core'?pd.abs_excl:pd.abs_excl)}
+    ${rfRow('PSP','var(--psp)',null,psp.abs_excl)}
+    ${rfRow('MSA','var(--msa)',msa.rf,null)}
+    ${rfRow('CBS','var(--cbs)',cbs.rf,null)}
+    ${rfRow('DLB','var(--dlb)',null,null)}
+  </div>`:`
+  <div class="al al-ok">✅ 現在の入力では、各疾患に対するレッドフラッグ・除外基準への該当はありません。</div>`}
+
+  <!-- DETAIL: PD -->
+  <div class="detail-wrap">
+    <button class="detail-toggle" onclick="tog('pd-det')">
+      <span style="color:var(--pd)">🔵 PD詳細 — MDS-PD Criteria 2015</span> <span>▼</span>
+    </button>
+    <div class="detail-body" id="pd-det">
+      <div class="crit-hdr acc-pd">コア基準 / 支持的基準</div>
+      <div class="crit-body">
+        ${crRow('Core','var(--pd)',yes('bradykinesia')&&(yes('rigidity')||yes('rest_tremor'))?'met':'not','パーキンソニズム（ブラジキネジア＋固縮または安静時振戦）')}
+        ${(pd.supp||[]).map(s=>crRow(s.code,'#22c55e','met',s.text)).join('')}
+        ${(pd.supp||[]).length===0?crRow('SC','#9ca3af','unk','支持的基準：現時点では該当なし'):''}
+      </div>
+      <div class="crit-hdr acc-pd" style="margin-top:4px">絶対的除外基準</div>
+      <div class="crit-body">
+        ${(pd.abs_excl||[]).length?pd.abs_excl.map(e=>crRow(e.code,'#dc2626','not',e.text)).join('')
+          :crRow('AE','var(--ok)','met','絶対的除外基準：なし')}
+      </div>
+      <div class="crit-hdr acc-pd" style="margin-top:4px">レッドフラッグ（該当するもの）</div>
+      <div class="crit-body">
+        ${(pd.rf||[]).length?pd.rf.map(r=>crRow(r.code,'#ef4444','not',r.text)).join('')
+          :crRow('RF','var(--ok)','met','レッドフラッグ：なし')}
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL: PSP -->
+  <div class="detail-wrap">
+    <button class="detail-toggle" onclick="tog('psp-det')">
+      <span style="color:var(--psp)">🟣 PSP詳細 — MDS-PSP Criteria 2017（8臨床型）</span> <span>▼</span>
+    </button>
+    <div class="detail-body" id="psp-det">
+      ${psp.cert==='excluded'?`
+      <div class="crit-hdr acc-psp">絶対的除外基準（該当）</div>
+      <div class="crit-body">${(psp.abs_excl||[]).map(e=>crRow(e.code,'#dc2626','not',e.text)).join('')}</div>`:`
+      <div class="crit-hdr acc-psp">中核症候マッピング（O/P/A/C域）</div>
+      <div class="crit-body">
+        ${crRow('O1','#166534',sts('vsgp'),'垂直性核上性注視麻痺（vSGP）[確実性：高]')}
+        ${crRow('O2','#1d4ed8',sts('slow_vert_saccades'),'垂直サッケード緩徐化 [確実性：中]')}
+        ${crRow('O3','#92400e',sts('macro_swj_eyelid'),'マクロSWJ / まぶた開失行 [確実性：低]')}
+        ${crRow('P1','#166534',yes('falls_repeated')&&yes('falls_3y')?'met':no('falls_repeated')||no('falls_3y')?'not':'unk','反復自発転倒（発症3年以内） [確実性：高]')}
+        ${crRow('P2','#1d4ed8',S.d.pull_test==='p2_fall'?'met':S.d.pull_test==='normal'?'not':'unk','プルテスト転倒 [確実性：中]')}
+        ${crRow('P3','#92400e',S.d.pull_test==='p3_steps'?'met':S.d.pull_test==='normal'?'not':'unk','プルテスト>2歩後退 [確実性：低]')}
+        ${crRow('A1','#166534',sts('gait_freezing'),'進行性歩行すくみ（3年以内） [確実性：高]')}
+        ${crRow('A2','#1d4ed8',yes('bradykinesia')&&yes('rigidity_axial')&&(S.d.levodopa_response==='none'||S.d.levodopa_response==='mild'||S.d.levodopa_tried!=='yes')?'met':'unk','体軸優位パーキンソニズム・levodopa抵抗性 [確実性：中]')}
+        ${crRow('A3','#92400e',yes('bradykinesia')&&yes('rigidity_axial')&&(S.d.levodopa_response==='dramatic'||S.d.levodopa_response==='moderate')?'met':'unk','体軸優位パーキンソニズム・levodopa反応性 [確実性：低]')}
+        ${crRow('C1','#166534',sts('speech_language_aos'),'AOS または nfvPPA [確実性：高]')}
+        ${crRow('C2','#1d4ed8',sts('frontal_cognitive_beh'),'前頭葉認知/行動症候（≥2項目） [確実性：中]')}
+        ${crRow('C3','#92400e',sts('cbs_syndrome'),'皮質基底核症候群（CBS） [確実性：低]')}
+      </div>
+      <div class="crit-hdr acc-psp" style="margin-top:4px">臨床型ごとの判定（MAXルール適用前）</div>
+      <div class="crit-body">
+        <table class="sub-tbl"><thead><tr style="background:var(--psp)"><th>臨床型</th><th>確実性</th><th>根拠項目</th></tr></thead>
+        <tbody>${pspSubRows}</tbody></table>
+      </div>`}
+    </div>
+  </div>
+
+  <!-- DETAIL: MSA -->
+  <div class="detail-wrap">
+    <button class="detail-toggle" onclick="tog('msa-det')">
+      <span style="color:var(--msa)">🟢 MSA詳細 — Gilman et al. 2008</span> <span>▼</span>
+    </button>
+    <div class="detail-body" id="msa-det">
+      <div class="crit-hdr acc-msa">MSA分類基準</div>
+      <div class="crit-body">
+        ${crRow('Par','var(--msa)',yes('bradykinesia')&&(yes('rigidity')||yes('rest_tremor'))?'met':'unk','パーキンソニズム（ブラジキネジア＋固縮/振戦）')}
+        ${crRow('Cer','var(--msa)',yes('cerebellar_gait')&&(yes('cerebellar_dysarthria')||yes('cerebellar_limb'))?'met':'unk','小脳症候群（歩行失調＋構音障害/四肢失調）')}
+        ${crRow('Auto','var(--msa)',yes('orthostatic_hypotension')||yes('urinary_dysfunction')?'met':'unk','自律神経障害（起立性低血圧≥30mmHgまたは尿症状）')}
+        ${crRow('Levo','var(--msa)',S.d.levodopa_response==='none'||S.d.levodopa_response==='mild'?'met':S.d.levodopa_response==='dramatic'||S.d.levodopa_response==='moderate'?'not':'unk','Levodopa抵抗性（Probable MSAに必要）')}
+      </div>
+      ${msa.additional&&msa.additional.length?`
+      <div class="crit-hdr acc-msa" style="margin-top:4px">追加所見（Possible MSAのサポート）</div>
+      <div class="crit-body">${msa.additional.map(a=>crRow('追加','var(--msa)','met',a)).join('')}</div>`:''}
+      <div class="crit-hdr acc-msa" style="margin-top:4px">MSAに対するレッドフラッグ（該当するもの）</div>
+      <div class="crit-body">
+        ${(msa.rf||[]).length?msa.rf.map(r=>crRow(r.code,'#ef4444','not',r.text)).join('')
+          :crRow('RF','var(--ok)','met','MSAに対するレッドフラッグ：なし')}
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL: CBS -->
+  <div class="detail-wrap">
+    <button class="detail-toggle" onclick="tog('cbs-det')">
+      <span style="color:var(--cbs)">🟠 CBS詳細 — Armstrong et al. 2013</span> <span>▼</span>
+    </button>
+    <div class="detail-body" id="cbs-det">
+      <div class="crit-hdr acc-cbs">運動症候（Motor features）</div>
+      <div class="crit-body">
+        ${crRow('M1','var(--cbs)',yes('bradykinesia')&&yes('rigidity')?'met':'unk','肢体固縮/無動'+(S.d.onset_side==='asymmetric'?' [非対称性あり]':'[非対称性：不明/なし]'))}
+        ${crRow('M2','var(--cbs)',sts('limb_dystonia'),'肢体ジストニア')}
+        ${crRow('M3','var(--cbs)',sts('focal_myoclonus'),'焦点性肢体ミオクローヌス')}
+        <div class="cr"><span class="cr-code" style="background:var(--cbs)">合計</span><span class="cr-st">${(cbs.motor||[]).length}/3件</span><span class="cr-txt">運動症候（Probable CBS：≥2＋非対称性、Possible CBS：≥2）</span></div>
+      </div>
+      <div class="crit-hdr acc-cbs" style="margin-top:4px">皮質症候（Cortical features）</div>
+      <div class="crit-body">
+        ${crRow('C1','var(--cbs)',sts('limb_apraxia'),'肢体失行（Limb apraxia）')}
+        ${crRow('C2','var(--cbs)',sts('cortical_sensory_loss'),'皮質感覚障害')}
+        ${crRow('C3','var(--cbs)',sts('alien_limb'),'Alien limb現象')}
+        <div class="cr"><span class="cr-code" style="background:var(--cbs)">合計</span><span class="cr-st">${(cbs.cortical||[]).length}/3件</span><span class="cr-txt">皮質症候（Probable CBS：≥2、Possible CBS：≥1）</span></div>
+      </div>
+      ${cbsPhenRows?`<div class="crit-hdr acc-cbs" style="margin-top:4px">認められる臨床表現型</div><div class="crit-body">${cbsPhenRows}</div>`:''}
+      <div class="crit-hdr acc-cbs" style="margin-top:4px">CBSに対するレッドフラッグ</div>
+      <div class="crit-body">
+        ${(cbs.rf||[]).length?cbs.rf.map(r=>crRow(r.code,'#ef4444','not',r.text)).join('')
+          :crRow('RF','var(--ok)','met','CBSに対するレッドフラッグ：なし')}
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL: DLB -->
+  <div class="detail-wrap">
+    <button class="detail-toggle" onclick="tog('dlb-det')">
+      <span style="color:var(--dlb)">🩵 DLB詳細 — McKeith et al. 2017（第4次コンセンサス）</span> <span>▼</span>
+    </button>
+    <div class="detail-body" id="dlb-det">
+      <div class="crit-hdr acc-dlb">コア臨床症候（Core clinical features）</div>
+      <div class="crit-body">
+        ${crRow('Core1','var(--dlb)',sts('fluctuating_cognition'),'認知・覚醒の著明な変動（Fluctuating cognition）')}
+        ${crRow('Core2','var(--dlb)',sts('hallucination_visual'),'繰り返す明瞭な幻視（Recurrent visual hallucinations）')}
+        ${crRow('Core3','var(--dlb)',sts('rem_behavior_disorder'),'REM睡眠行動障害（RBD）')}
+        ${crRow('Core4','var(--dlb)',yes('bradykinesia')||yes('rest_tremor')||yes('rigidity')?'met':'unk','パーキンソニズム（ブラジキネジア/振戦/固縮 のいずれか）')}
+        <div class="cr"><span class="cr-code" style="background:var(--dlb)">合計</span><span class="cr-st">${(dlb.core||[]).length}/4件</span><span class="cr-txt">コア症候（Probable：≥2、Possible：1）</span></div>
+      </div>
+      <div class="crit-hdr acc-dlb" style="margin-top:4px">指示的バイオマーカー（Indicative biomarkers）</div>
+      <div class="crit-body">
+        ${crRow('Bio1','var(--dlb)',sts('dat_scan_reduced'),'DATスキャン低下（SPECT/PET）')}
+        ${crRow('Bio2','var(--dlb)',sts('mibg_reduced'),'MIBG心筋シンチ低下（心臓交感神経変性）')}
+        <div class="cr"><span class="cr-code" style="background:var(--dlb)">合計</span><span class="cr-st">${(dlb.bio||[]).length}/2件</span><span class="cr-txt">指示的バイオ（コア1件＋バイオ≥1件→Probable）</span></div>
+      </div>
+      ${dlb.warnings&&dlb.warnings.length?`
+      <div class="crit-hdr acc-dlb" style="margin-top:4px;background:#78350f">注意事項</div>
+      <div class="crit-body">${dlb.warnings.map(w=>`<div class="cr"><span class="cr-code" style="background:#d97706">注</span><span class="cr-st st-unk">⚠️ 注意</span><span class="cr-txt">${w}</span></div>`).join('')}</div>`:''}
+    </div>
+  </div>
+
+  <div class="al al-warn" style="margin-top:12px">
+    <strong>⚠️ 免責事項：</strong>本ツールは公表された診断基準への機械的マッピング支援ツールです。AI推論・確率推定・確定診断を行うものではありません。
+    本出力は診断の参考情報であり、確定診断・治療方針の決定は神経内科専門医が患者を直接診察した上で行ってください。
+  </div>
+
+  <div class="nav-btns">
+    <button class="btn btn-s" onclick="go(5)">← 入力に戻る</button>
+    <div style="display:flex;gap:7px">
+      <button class="btn btn-prt" onclick="window.print()">🖨️ 印刷</button>
+      <button class="btn btn-rst" onclick="resetAll()">🔄 リセット</button>
+    </div>
+  </div>
+</div>`;
+}
+
+// Toggle accordion
+function tog(id){
+  const el=document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function render(){
+  const sc=document.getElementById('steps'), rc=document.getElementById('results');
+  if(S.step===6){sc.style.display='none';rc.style.display='block';rc.innerHTML=renderResults();}
+  else{
+    sc.style.display='block';rc.style.display='none';
+    const rend=[step0,step1,step2,step3,step4,step5];
+    const isLast=S.step===5;
+    sc.innerHTML=rend[S.step]()+`
+    <div class="nav-btns">
+      ${S.step>0?`<button class="btn btn-s" onclick="prev()">← 戻る</button>`:'<div></div>'}
+      <button class="btn btn-p" onclick="next()">${isLast?'📊 5疾患並列結果を表示 →':'次へ →'}</button>
+    </div>`;
+  }
+  document.querySelectorAll('.ps').forEach((t,i)=>{
+    t.className='ps';
+    if(i===S.step) t.classList.add('active');
+    else if(i<S.step) t.classList.add('done');
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function next(){if(S.step<6){S.step++;render();}}
+function prev(){if(S.step>0){S.step--;render();}}
+function go(n){S.step=Math.max(0,Math.min(6,n));render();}
+function resetAll(){if(confirm('すべての入力をリセットしますか？')){location.reload();}}
+
+render();
+</script>
+</body>
+</html>
