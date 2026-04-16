@@ -224,6 +224,7 @@ a{color:var(--primary-light)}
 .btn-secondary{background:#e5e7eb;color:var(--text)}
 .btn-secondary:hover{background:#d1d5db}
 .btn-print{background:var(--neutral);color:white}
+.btn-copy{background:var(--secondary);color:white}
 .btn-reset{background:#fff;color:var(--danger-light);border:1.5px solid var(--danger-light)}
 .btn-reset:hover{background:#fee2e2}
 
@@ -297,13 +298,15 @@ a{color:var(--primary-light)}
 /* ============================================================
    PRINT
    ============================================================ */
+#print-only{display:none}
 @media print{
-  .nav-buttons,.progress-bar,.app-header .version{display:none}
-  .card{box-shadow:none;break-inside:avoid}
+  #app{display:none!important}
+  #print-only{display:block!important;padding:16px}
+  #print-only .nav-buttons{display:none!important}
   body{background:white;font-size:12px}
-  #step-container{display:none!important}
-  #result-container{display:block!important}
+  .card{box-shadow:none;break-inside:avoid}
   .disclaimer{border:1px solid #ddd;background:#fff}
+  .alert{border:1px solid #ddd}
 }
 
 /* ============================================================
@@ -392,7 +395,7 @@ const state = {
     // ── 中核症候：O域 (Oculomotor) ──
     O1: 'unknown',  // 垂直性核上性注視麻痺 [確実性：高]
     O2: 'unknown',  // 垂直方向サッケード緩徐化 [確実性：中]
-    O3: 'unknown',  // マクロSWJ/まぶた開失行 [確実性：低]
+    O3: 'unknown',  // マクロSWJ/開眼失行 [確実性：低]
 
     // ── 中核症候：P域 (Postural instability) ──
     P1: 'unknown',  // 反復性自発転倒 [確実性：高]
@@ -441,9 +444,9 @@ const CORE_CRITERIA = {
   },
   O3: {
     code:'O3', domain:'O', level:'low',
-    name:'マクロ方形波急速眼球運動（SWJ）またはまぶた開失行',
+    name:'マクロ方形波急速眼球運動（SWJ）または開眼失行',
     name_en:'Macro square wave jerks or eyelid opening apraxia',
-    definition:'（1）マクロ方形波急速眼球運動（Macro SWJ）：視標固視中に自発的に出現する振幅>5°のSWJ、頻度>0.1Hz。または（2）まぶた開失行（eyelid opening apraxia）：不随意の眼輪筋収縮（眼瞼痙攣）なしに随意的な眼瞼挙上ができない。',
+    definition:'（1）マクロ方形波急速眼球運動（Macro SWJ）：視標固視中に自発的に出現する振幅>5°のSWJ、頻度>0.1Hz。または（2）開眼失行（eyelid opening apraxia）：不随意の眼輪筋収縮（眼瞼痙攣）なしに随意的な眼瞼挙上ができない。',
     timeframe: null,
   },
 
@@ -1268,6 +1271,19 @@ function renderResults() {
   const now = new Date();
   const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
 
+  // ── Primary subtype: sort by clinical importance, show top one prominently ──
+  const subtypeOrder = ['PSP-RS','PSP-P','PSP-PI','PSP-PGF','PSP-OM','PSP-CBS','PSP-F','PSP-SL'];
+  const sortedPrimary = [...result.primarySubtypes].sort((a, b) => {
+    const ai = subtypeOrder.indexOf(a); const bi = subtypeOrder.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  const topSubtype = sortedPrimary[0] || null;
+  const otherSubtypes = sortedPrimary.slice(1);
+  const certPrefix = {probable:'Probable', possible:'Possible', suggestive:'Suggestive of', none:''};
+  const mainDxStr = topSubtype
+    ? `${certPrefix[result.primaryCertainty] || ''} ${topSubtype}`
+    : result.primaryDx;
+
   return `
 <div class="card" style="border-top:3px solid var(--primary)">
   <div class="card-title">📋 診断基準整理結果
@@ -1280,13 +1296,22 @@ function renderResults() {
 
   <!-- MAIN RESULT -->
   <div class="dx-result ${dxCls}">
-    <div class="dx-label">MDS-PSP Criteria 2017 による分類結果</div>
-    <div class="dx-value ${vCls}">${result.primaryDx}</div>
-    ${result.primarySubtypes.length > 0 ?
-      `<div class="dx-subtype">主たる臨床型（MAXルール適用）：${result.primarySubtypes.join('，')}</div>` : ''}
+    <div class="dx-label">MDS-PSP Criteria 2017 による主診断</div>
+    <div class="dx-value ${vCls}">${mainDxStr}</div>
+    ${topSubtype ? `
+      <div class="dx-subtype" style="margin-top:5px">
+        ${certJa[result.primaryCertainty] || ''}（MDS-PSP Criteria 2017）
+      </div>
+    ` : ''}
     <div class="dx-basis" style="margin-top:6px;font-size:11px;color:#374151">
       ${certDesc[result.primaryCertainty] || ''}
     </div>
+    ${otherSubtypes.length > 0 ? `
+      <div style="margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.75);border-radius:6px;font-size:11px;color:#374151;text-align:left;border:1px solid rgba(0,0,0,0.08)">
+        <strong>⚠️ 同時に基準を満たす他の臨床型：</strong>${otherSubtypes.join('，')}<br>
+        <span style="color:#6b7280">複数の臨床型が同等の確実性で成立しています（詳細は下表）。最終的な臨床型の選択は専門医の総合判断によります。</span>
+      </div>
+    ` : ''}
   </div>
 
   <!-- WARNINGS -->
@@ -1298,7 +1323,7 @@ function renderResults() {
 
   <!-- SUBTYPE TABLE -->
   <div class="result-section">
-    <div class="result-header">🏷️ 臨床型ごとの判定一覧（MAXルール適用前・全8型表示）</div>
+    <div class="result-header">🏷️ 臨床型ごとの判定一覧（参考：全8型・各基準への該当状況）</div>
     <div class="result-body">
       <table class="subtype-table">
         <thead><tr><th>臨床型</th><th>確実性</th><th>根拠となった項目（組み合わせ）</th></tr></thead>
@@ -1306,14 +1331,6 @@ function renderResults() {
       </table>
     </div>
   </div>
-
-  ${result.allSubtypes.length > 1 ? `
-  <div class="alert alert-info">
-    💡 <strong>MAXルールについて（複数型が成立した場合）：</strong>
-    複数の臨床型が同時に基準を満たす場合、最も確実性の高い型を主診断として報告します。
-    同等の確実性を持つ複数型がある場合は両方を記載します（例：PSP-RS Probable + PSP-F Probable）。
-    上記の一覧から根拠となる組み合わせを確認してください。
-  </div>` : ''}
 
   <!-- CORE FEATURES -->
   <div class="result-section">
@@ -1339,28 +1356,6 @@ function renderResults() {
     <div class="result-body">${exclRows}</div>
   </div>
 
-  <!-- REFERENCE NOTE -->
-  <div class="result-section">
-    <div class="result-header" style="background:var(--neutral)">📚 参考：他の診断基準について（将来実装予定）</div>
-    <div class="result-body">
-      <div class="result-row">
-        <span class="result-code" style="background:var(--neutral)">MSA</span>
-        <span class="result-status status-unknown">— 未実装</span>
-        <span class="result-text">MSA診断基準（Gilman et al. 2008）への対応 → 将来のMSAモジュールで実装予定</span>
-      </div>
-      <div class="result-row">
-        <span class="result-code" style="background:var(--neutral)">PD</span>
-        <span class="result-status status-unknown">— 未実装</span>
-        <span class="result-text">MDS-PD Criteria（Postuma et al. 2015）への対応 → 将来のPDモジュールで実装予定</span>
-      </div>
-      <div class="result-row">
-        <span class="result-code" style="background:var(--neutral)">難病</span>
-        <span class="result-status status-unknown">— 参考</span>
-        <span class="result-text">指定難病・NINDS-SPSP基準への参照整理 → 将来バージョンで追加予定</span>
-      </div>
-    </div>
-  </div>
-
   <!-- DISCLAIMER -->
   <div class="alert alert-warning" style="margin-top:14px">
     <strong>⚠️ 免責事項</strong><br>
@@ -1370,7 +1365,8 @@ function renderResults() {
   <div class="nav-buttons">
     <button class="btn btn-secondary" onclick="goToStep(5)">← 入力に戻る</button>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-print" onclick="window.print()">🖨️ 印刷</button>
+      <button class="btn btn-copy" id="copy-btn" onclick="copyResult()">📋 テキストコピー</button>
+      <button class="btn btn-print" onclick="printResults()">🖨️ 印刷・PDF保存</button>
       <button class="btn btn-reset" onclick="resetAll()">🔄 リセット</button>
     </div>
   </div>
@@ -1441,6 +1437,149 @@ function resetAll() {
   if (confirm('すべての入力データをリセットしますか？\nこの操作は元に戻せません。')) {
     location.reload();
   }
+}
+
+// ============================================================
+// PRINT
+// ============================================================
+function printResults() {
+  // ポップアップを使わず、同一ページ内の #print-only に結果をコピーして印刷
+  let printDiv = document.getElementById('print-only');
+  if (!printDiv) {
+    printDiv = document.createElement('div');
+    printDiv.id = 'print-only';
+    document.body.appendChild(printDiv);
+  }
+
+  // 結果HTMLをコピー（ナビボタンは除去）
+  const resultHTML = document.getElementById('result-container').innerHTML;
+  printDiv.innerHTML = resultHTML;
+  printDiv.querySelectorAll('.nav-buttons').forEach(el => el.remove());
+
+  window.print();
+
+  // 印刷ダイアログを閉じた後にクリーンアップ
+  setTimeout(() => { printDiv.innerHTML = ''; }, 1500);
+}
+
+// ============================================================
+// COPY TO CLIPBOARD
+// ============================================================
+function copyResult() {
+  const result = classifyPSP();
+  const d = state.data;
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+
+  const certJaFull = {
+    probable: 'Probable PSP（臨床的確診相当）',
+    possible: 'Possible PSP（臨床的疑い相当）',
+    suggestive: 'Suggestive of PSP（PSP関連示唆）',
+    none: 'PSP診断基準を満たさない（現時点）',
+    excluded: '絶対的除外基準に該当（MDS-PSP Criteria 適用外）',
+    ineligible: '基本適格基準を満たさない（評価対象外）',
+  };
+  const certRowJa = {probable:'Probable（確診相当）', possible:'Possible（疑い相当）', suggestive:'Suggestive（示唆）', none:'非該当（－）'};
+
+  let t = '';
+  t += '╔══════════════════════════════════════════════════╗\n';
+  t += '║       PSP 診断基準整理結果（MDS-PSP 2017）          ║\n';
+  t += '╚══════════════════════════════════════════════════╝\n';
+  t += `出力日：${dateStr}`;
+  if (d.case_id) t += `　症例ID：${d.case_id}`;
+  t += '\n\n';
+
+  t += '【▼ 分類結果】\n';
+  t += `  ${certJaFull[result.primaryCertainty] || certJaFull.none}\n`;
+  if (result.primarySubtypes.length > 0) {
+    t += `  主たる臨床型（MAXルール適用）：${result.primarySubtypes.join('，')}\n`;
+  }
+  t += '\n';
+
+  if (result.warnings.length > 0) {
+    t += '【▼ 警告・注意事項】\n';
+    result.warnings.forEach(w => { t += `  ⚠️ ${w}\n`; });
+    t += '\n';
+  }
+
+  t += '【▼ 臨床型ごとの判定一覧（全8型）】\n';
+  const subtypeOrder = ['PSP-RS','PSP-P','PSP-PI','PSP-PGF','PSP-OM','PSP-CBS','PSP-F','PSP-SL'];
+  subtypeOrder.forEach(st => {
+    const info = result.subtypes[st];
+    if (!info) return;
+    const certStr = certRowJa[info.cert] || '－';
+    const basisStr = (info.basis||[]).join('，') || '—';
+    t += `  ${st.padEnd(10)} ${certStr}　根拠：${basisStr}\n`;
+  });
+  t += '\n';
+
+  t += '【▼ 基本適格基準】\n';
+  const eligDefs = [
+    {key:'elig_sporadic', label:'孤発性発症'},
+    {key:'elig_age_over40', label:'40歳以上での発症'},
+    {key:'elig_gradual', label:'緩徐進行性経過'},
+    {key:'elig_duration_1y', label:'症状持続1年以上（参考）'},
+    {key:'elig_domain', label:'O/P/A/C域のいずれか存在'},
+  ];
+  eligDefs.forEach(e => {
+    const val = d[e.key];
+    const icon = val==='yes'?'✅ 満たす':val==='no'?'❌ 満たさない':'❓ 不明';
+    t += `  基 ${icon}　${e.label}\n`;
+  });
+  t += '\n';
+
+  t += '【▼ 中核症候（全12項目）】\n';
+  Object.entries(CORE_CRITERIA).forEach(([code, item]) => {
+    const val = d[code];
+    const icon = val==='yes'?'✅ あり':val==='no'?'❌ なし':'❓ 不明';
+    const lvl = {high:'高',intermediate:'中',low:'低'}[item.level]||'';
+    t += `  ${code.padEnd(4)} ${icon}　[${lvl}] ${item.name}\n`;
+  });
+  t += '\n';
+
+  t += '【▼ 支持的特徴（全6項目）】\n';
+  Object.entries(SUPPORTIVE_FEATURES).forEach(([code, item]) => {
+    const val = d[code];
+    const icon = val==='yes'?'✅ あり':val==='no'?'❌ なし':'❓ 不明';
+    t += `  ${code.padEnd(4)} ${icon}　${item.name}\n`;
+  });
+  t += '\n';
+
+  t += '【▼ 除外基準（絶対的9項目 + 状況依存的2項目）】\n';
+  [...ABS_EXCL_DEFS, ...CTX_EXCL_DEFS].forEach(def => {
+    const val = d[def.key];
+    const isAbs = ABS_EXCL_DEFS.some(d2 => d2.key === def.key);
+    const icon = val==='yes'?'⚠️ 該当':val==='no'?'✅ 非該当':'❓ 不明';
+    const kind = isAbs?'絶対':'依存';
+    t += `  ${def.code.padEnd(5)} ${icon}（${kind}）　${def.label}\n`;
+  });
+  t += '\n';
+
+  t += '──────────────────────────────────────────────────\n';
+  t += '⚠️ 免責事項：本出力は診断基準への機械的マッピング結果です。\n';
+  t += 'AI推論・確率推定は行っていません。確定診断は必ず神経内科専門医が判断してください。\n';
+
+  navigator.clipboard.writeText(t).then(() => {
+    const btn = document.getElementById('copy-btn');
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✅ コピーしました！';
+      btn.disabled = true;
+      setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+    }
+  }).catch(() => {
+    // フォールバック：テキストエリアに表示
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.style.cssText = 'position:fixed;top:10px;left:10px;right:10px;height:80vh;z-index:9999;font-size:12px;font-family:monospace;white-space:pre';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ 閉じる';
+    closeBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:10000;padding:4px 12px';
+    closeBtn.onclick = () => { document.body.removeChild(ta); document.body.removeChild(closeBtn); };
+    document.body.appendChild(ta);
+    document.body.appendChild(closeBtn);
+    ta.select();
+  });
 }
 
 // ============================================================
