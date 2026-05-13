@@ -344,7 +344,7 @@ a{color:var(--primary-light)}
     <div class="progress-step" id="tab-2" onclick="goToStep(2)">③<br>除外基準</div>
     <div class="progress-step" id="tab-3" onclick="goToStep(3)">④<br>中核O・P</div>
     <div class="progress-step" id="tab-4" onclick="goToStep(4)">⑤<br>中核A・C</div>
-    <div class="progress-step" id="tab-5" onclick="goToStep(5)">⑥<br>支持的特徴</div>
+    <div class="progress-step" id="tab-5" onclick="goToStep(5)">⑥<br>CC/IF</div>
     <div class="progress-step" id="tab-6" onclick="goToStep(6)">⑦<br>結果</div>
   </div>
 
@@ -377,20 +377,26 @@ const state = {
     elig_duration_1y: 'unknown',  // E-基4: 1年以上継続（参考）
     elig_domain: 'unknown',       // E-基5: O/P/A/C いずれか1つ以上
 
-    // ── 絶対的除外基準 (Absolute Exclusion) ──
-    exc_cerebellar: 'unknown',     // AE-1: 小脳失調
-    exc_autonomic_early: 'unknown',// AE-2: 早期自律神経障害
-    exc_asymm_tremor: 'unknown',   // AE-3: 高度非対称パーキンソニズム
-    exc_alz_dementia: 'unknown',   // AE-4: アルツハイマー型認知症
-    exc_hallucination: 'unknown',  // AE-5: 薬剤非依存性幻視/妄想
-    exc_alien_limb: 'unknown',     // AE-6: Alien limb/皮質感覚障害
-    exc_structural_mri: 'unknown', // AE-7: 画像上の構造的異常
-    exc_whipple: 'unknown',        // AE-8: ウィップル病
-    exc_encephalitis: 'unknown',   // AE-9: 脳炎の既往
+    // ── B2: 絶対的除外基準（臨床所見） ──
+    exc_alz_memory: 'unknown',     // B2-C1: Alzheimer病示唆のエピソード記憶障害
+    exc_autonomic: 'unknown',      // B2-C2: MSA/DLB示唆の自律神経障害
+    exc_hallucination: 'unknown',  // B2-C3: DLB示唆の幻視・覚醒度変容
+    exc_mnd: 'unknown',            // B2-C4: 運動ニューロン病示唆の多分節性徴候
+    exc_acute_rapid: 'unknown',    // B2-C5: 突然発症/急速進行＋画像/検査所見
+    exc_encephalitis: 'unknown',   // B2-C6: 脳炎の既往
+    exc_ataxia: 'unknown',         // B2-C7: 顕著な四肢の失調
+    exc_known_posture: 'unknown',  // B2-C8: 原因が判明している姿勢保持障害
+    // ── B2: 絶対的除外基準（画像所見） ──
+    exc_leukoencephalopathy: 'unknown', // B2-I1: 重度の白質脳症
+    exc_structural_mri: 'unknown',      // B2-I2: 関連する構造的異常
 
-    // ── 状況依存性除外基準 (Context-dependent Exclusion) ──
-    ctx_drug_induced: 'unknown',   // CE-1: 薬剤誘発性
-    ctx_paraneoplastic: 'unknown', // CE-2: 傍腫瘍性/代謝異常
+    // ── B3: 状況依存性除外基準 ──
+    ctx_imaging_sudden: 'unknown', // B3-画像1: 突然発症/階段状進行→DWI/FLAIR/T2*で脳卒中・CADASIL・CAA除外
+    ctx_imaging_rapid: 'unknown',  // B3-画像2: 急速進行→DWIでプリオン病除外
+    ctx_alz_psp_cbs: 'unknown',    // B3-検査1: PSP-CBS患者→Alzheimer病理除外
+    ctx_young45: 'unknown',        // B3-検査2: 45歳未満→代謝疾患等除外
+    ctx_prion_csf: 'unknown',      // B3-検査3: 急速進行→プリオン病/傍腫瘍性脳炎除外
+    ctx_whipple: 'unknown',        // B3-検査4: 示唆的所見→Whipple病除外
 
     // ── 中核症候：O域 (Oculomotor) ──
     O1: 'unknown',  // 垂直性核上性注視麻痺 [確実性：高]
@@ -520,13 +526,15 @@ const CORE_CRITERIA = {
   },
 };
 
+// 臨床的手がかり（CC）：CC1〜CC4
+// 画像所見（IF）：IF1〜IF2
 const SUPPORTIVE_FEATURES = {
-  S1:{code:'S1', name:'Levodopa抵抗性', definition:'Levodopa（≥600mg/日、≥4週間）への反応が不良（改善<30%）または無効。A2と重複することが多いが、支持的特徴としても記録する。'},
-  S2:{code:'S2', name:'低運動性構音障害', definition:'声量低下・発話速度低下・単調な音声・子音の不明瞭化を特徴とする低運動性（hypokinetic）構音障害。'},
-  S3:{code:'S3', name:'嚥下障害', definition:'誤嚥・むせ・食事時間の著明な延長などの嚥下困難。PEG挿入を要することも。'},
-  S4:{code:'S4', name:'羞明', definition:'光に対する過敏性（photophobia）。PSPに特徴的とされる。'},
-  S5:{code:'S5', name:'前頭葉型認知機能障害（C2基準未満）', definition:'前頭葉遂行機能検査（FAB等）での軽度の障害。C2の基準（≥2項目）には満たないが、前頭葉機能の低下が認められる。'},
-  S6:{code:'S6', name:'MRI中脳萎縮またはFDG-PET中脳低代謝', definition:'（1）MRIでの中脳被蓋萎縮：矢状断でのハミングバードサイン（蜂鳥徴候）、軸位断でのマリゴールドサイン（万寿菊徴候）。または（2）FDG-PETでの中脳・淡蒼球・視床の低代謝。'},
+  S1:{code:'S1', ccCode:'CC1', name:'CC1：レボドパ抵抗性', definition:'レボドパ抵抗性は、MDS-UPDRS 運動スケールの改善が30%以下と定義する。この基準を満たすためには、患者に1,000mg以上（もし耐えられれば）を1ヵ月以上投与して評価するか、もしくは患者がこの治療を受けた時点で、少なくとも200mgのchallenge doseのあとに正式に評価できる。'},
+  S2:{code:'S2', ccCode:'CC2', name:'CC2：運動減少性、痙性構音障害', definition:'緩徐で、音量とピッチの低い、耳障りな（harsh）声。'},
+  S3:{code:'S3', ccCode:'CC3', name:'CC3：嚥下障害', definition:'他の理由で説明できない、食事の調整を要するほど重度の嚥下困難。'},
+  S4:{code:'S4', ccCode:'CC4', name:'CC4：羞明', definition:'順応障害に起因する光知覚への不耐性。'},
+  S5:{code:'S5', ccCode:'IF1', name:'IF1：顕著な中脳萎縮ないし低代謝', definition:'例えばMRIもしくは[¹⁸F]DG-PETにより示される、橋と比較して中脳において顕著な萎縮または低代謝。'},
+  S6:{code:'S6', ccCode:'IF2', name:'IF2：シナプス後線条体ドパミン神経変性', definition:'例えば[¹²³I]IBZM-SPECTもしくは[¹⁸F]-DMFP-PETにより示されるシナプス後線条体ドパミン神経変性。'},
 };
 
 // ============================================================
@@ -553,9 +561,11 @@ function setValue(key, val, el) {
   if (fg) {
     fg.classList.remove('has-yes','has-exclusion');
     const key2 = key;
-    const absExcl = ['exc_cerebellar','exc_autonomic_early','exc_asymm_tremor',
-      'exc_alz_dementia','exc_hallucination','exc_alien_limb',
-      'exc_structural_mri','exc_whipple','exc_encephalitis'];
+    const absExcl = [
+      'exc_alz_memory','exc_autonomic','exc_hallucination','exc_mnd',
+      'exc_acute_rapid','exc_encephalitis','exc_ataxia','exc_known_posture',
+      'exc_leukoencephalopathy','exc_structural_mri'
+    ];
     if (val === 'yes' && absExcl.includes(key2)) fg.classList.add('has-exclusion');
     else if (val === 'yes') fg.classList.add('has-yes');
   }
@@ -616,7 +626,7 @@ function updateAgeElig() {
 function renderStep1() {
   return `
 <div class="card">
-  <div class="card-title">✅ 基本適格基準（Basic Eligibility Criteria）
+  <div class="card-title">✅ B1：必須の適格基準（Basic Eligibility Criteria）
     <span class="section-badge">ALL必須</span>
   </div>
   <div class="card-subtitle">
@@ -625,9 +635,9 @@ function renderStep1() {
   </div>
 
   <div class="form-group ${state.data.elig_sporadic === 'yes' ? 'has-yes' : state.data.elig_sporadic === 'no' ? 'has-exclusion' : ''}">
-    <div class="form-label"><span class="form-code">E-基1</span>孤発性発症</div>
+    <div class="form-label"><span class="form-code">B1-1</span>孤発性</div>
     <div class="form-desc">
-      家族性でない孤発性の疾患。常染色体優性・劣性・X連鎖遺伝パターンがないこと。
+      孤発性であること。常染色体優性・劣性・X連鎖遺伝パターンがないこと。
       1〜2親等に偶発的に類似疾患例がある場合は孤発性として扱いうる。
       既知の病的変異（MAPT, GRN, C9orf72等）が検出された場合は遺伝性と判断。
     </div>
@@ -635,18 +645,18 @@ function renderStep1() {
   </div>
 
   <div class="form-group ${state.data.elig_age_over40 === 'yes' ? 'has-yes' : state.data.elig_age_over40 === 'no' ? 'has-exclusion' : ''}">
-    <div class="form-label"><span class="form-code">E-基2</span>40歳以上での発症</div>
+    <div class="form-label"><span class="form-code">B1-2</span>PSP関連症状の初発年齢が40歳以上</div>
     <div class="form-desc">
-      症状出現時の年齢が40歳以上。発症年齢を基本情報に入力すると自動反映されます。
+      PSP関連症状の初発年齢が40歳以上であること。発症年齢を基本情報に入力すると自動反映されます。
     </div>
     <div class="form-options">${radioGroup('elig_age_over40')}</div>
     ${state.data.age_onset ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">※基本情報の発症年齢（${state.data.age_onset}歳）から自動判定</div>` : ''}
   </div>
 
   <div class="form-group ${state.data.elig_gradual === 'yes' ? 'has-yes' : ''}">
-    <div class="form-label"><span class="form-code">E-基3</span>緩徐進行性経過</div>
+    <div class="form-label"><span class="form-code">B1-3</span>PSP関連症状の緩徐な進行</div>
     <div class="form-desc">
-      症状が時間をかけて緩徐に進行すること。急性発症（脳卒中様）または亜急性の急速進行（プリオン病様）ではないこと。
+      PSP関連症状が緩徐に進行すること。急性発症（脳卒中様）または亜急性の急速進行（プリオン病様）ではないこと。
     </div>
     <div class="form-options">${radioGroup('elig_gradual')}</div>
   </div>
@@ -674,53 +684,77 @@ function renderStep1() {
 // ============================================================
 // STEP 2: 除外基準
 // ============================================================
+// B2: 絶対的除外基準（1項目でも該当→PSP診断基準適用不可）
 const ABS_EXCL_DEFS = [
+  // ── 臨床所見 ──
   {
-    key:'exc_cerebellar', code:'AE-1', label:'顕著な小脳失調',
-    detail:'四肢または体幹の小脳性運動失調が疾患経過を通じて顕著であること（測定障害・輪番運動障害・小脳型構音障害・歩行失調など）。単純な歩行バランス障害・姿勢不安定性とは区別すること。'
+    key:'exc_alz_memory', code:'B2-C1', label:'Alzheimer病を示唆する顕著なエピソード記憶障害',
+    detail:'Alzheimer病を示唆する、顕著な、他の理由で説明の付かないエピソード記憶障害。'
   },
   {
-    key:'exc_autonomic_early', code:'AE-2', label:'早期・説明不能な自律神経機能不全',
-    detail:'他の原因で説明できない自律神経障害が3年以内に顕在化：（a）起立性低血圧（起立後3分以内に収縮期血圧≥30mmHgまたは拡張期血圧≥15mmHgの低下）、または（b）尿失禁・尿閉（神経因性膀胱）。MSAとの鑑別で重要。'
+    key:'exc_autonomic', code:'B2-C2', label:'MSA/DLB示唆の顕著な自律神経障害',
+    detail:'多系統萎縮症あるいはLewy小体病を示唆する、顕著な、他の理由で説明の付かない、起立性低血圧（起立3分後の血圧低下が収縮期30mmHg以上、または拡張期15mmHg以上）などの自律神経障害。'
   },
   {
-    key:'exc_asymm_tremor', code:'AE-3', label:'高度の非対称性パーキンソニズム（安静時振戦）',
-    detail:'著明な左右差を伴う典型的なPD様安静時振戦（pill-rolling tremor）。体軸優位でなく四肢遠位部優位の非対称性振戦。'
+    key:'exc_hallucination', code:'B2-C3', label:'DLB示唆の顕著な幻視・覚醒度変容',
+    detail:'Lewy小体型認知症を示唆する、顕著な、他の理由で説明の付かない、幻視、ないし覚醒度の変容。'
   },
   {
-    key:'exc_alz_dementia', code:'AE-4', label:'アルツハイマー型皮質性認知症',
-    detail:'顕著なエピソード記憶障害・失語・失行・失認を呈するアルツハイマー型の皮質性認知症。PSPの前頭葉型認知症（実行機能障害主体）とは区別される。'
+    key:'exc_mnd', code:'B2-C4', label:'運動ニューロン病示唆の多分節性上下位MN徴候',
+    detail:'運動ニューロン病を示唆する、顕著な、他の理由で説明の付かない、複数の領域に渡る（multisegmental）上位および下位運動ニューロン徴候。なお、純粋な上位運動ニューロン徴候は除外基準ではない。'
   },
   {
-    key:'exc_hallucination', code:'AE-5', label:'薬剤によらない顕著な幻視・妄想',
-    detail:'抗パーキンソン薬（levodopa等）や抗コリン薬などと無関係に出現する顕著な幻視・妄想。DLBとの鑑別で重要。'
+    key:'exc_acute_rapid', code:'B2-C5', label:'突然発症/急速進行＋血管・自己免疫・代謝・プリオン示唆の所見',
+    detail:'血管障害、自己免疫性脳炎、代謝性脳症、もしくはプリオン病を示唆する、突然の発症、または症状の階段状ないし急速な進行と、かつそれに合致する画像あるいは臨床検査所見を伴うもの。'
   },
   {
-    key:'exc_alien_limb', code:'AE-6', label:'Alien limb現象・皮質感覚障害・焦点性前頭葉萎縮',
-    detail:'（1）Alien limb現象（他人の手徴候）：自己意図と無関係に手が動く、（2）顕著な皮質感覚障害（立体覚・2点識別覚の著明な障害）、（3）MRI上の焦点性の前頭葉・側頭頭頂葉萎縮（CBS/CBD、Pick病との鑑別）。'
+    key:'exc_encephalitis', code:'B2-C6', label:'脳炎の既往',
+    detail:'脳炎の既往。'
   },
   {
-    key:'exc_structural_mri', code:'AE-7', label:'神経画像上の関連する構造的異常',
-    detail:'MRI等で確認される関連する構造的病変（脳梗塞・脳腫瘍・正常圧水頭症・血管性病変・脱髄病変等）。中脳萎縮はPSPに一致するため除外しない。'
+    key:'exc_ataxia', code:'B2-C7', label:'顕著な四肢の失調',
+    detail:'顕著な四肢の失調。'
   },
   {
-    key:'exc_whipple', code:'AE-8', label:'Whipple病の診断',
-    detail:'Tropheryma whippleiによるWhipple病が検査で確認された場合。眼球運動障害・認知症・消化器症状を呈しうる。'
+    key:'exc_known_posture', code:'B2-C8', label:'原因が判明している姿勢保持障害',
+    detail:'原因が判明している姿勢保持障害。例えば、原発性感覚障害、前庭機能障害、重度の痙性、または下位運動ニューロン症候群。'
+  },
+  // ── 画像所見 ──
+  {
+    key:'exc_leukoencephalopathy', code:'B2-I1', label:'画像上の重度の白質脳症',
+    detail:'脳の画像検査により証明された重度の白質脳症。'
   },
   {
-    key:'exc_encephalitis', code:'AE-9', label:'脳炎の既往（現在または最近）',
-    detail:'自己免疫性脳炎・ウイルス性脳炎・細菌性脳炎・脳症などの既往が現在または最近にある場合。'
+    key:'exc_structural_mri', code:'B2-I2', label:'関連する構造的異常（画像）',
+    detail:'関連する構造的異常。例えば、正常圧ないし閉塞性水頭症、基底核・間脳・中脳・橋・延髄の脳梗塞、脳出血、低酸素性虚血性病変、腫瘍、あるいは奇形。'
   },
 ];
 
+// B3: 状況依存性除外基準（臨床的状況に応じて追加的に除外が必要）
 const CTX_EXCL_DEFS = [
   {
-    key:'ctx_drug_induced', code:'CE-1', label:'薬剤誘発性パーキンソニズムの可能性',
-    detail:'ドパミン遮断薬（抗精神病薬・制吐薬：メトクロプラミド等）や他のパーキンソニズム誘発薬への曝露歴があり、症状との因果関係が否定できない場合。薬剤中止後の経過も考慮すること。'
+    key:'ctx_imaging_sudden', code:'B3-画1', label:'突然発症/階段状進行例：DWI/FLAIR/T2*MRIで脳卒中・CADASIL・CAA除外',
+    detail:'突然発症もしくは階段状の進行を呈する症候群においては、拡散強調画像（DWI）、FLAIR画像、またはT2*MRI画像により証明された脳卒中、皮質下梗塞と白質脳症を伴う常染色体優性脳動脈症（CADASIL）または重症の脳アミロイド血管症を除外する。'
   },
   {
-    key:'ctx_paraneoplastic', code:'CE-2', label:'傍腫瘍性症候群・代謝異常・中毒の可能性',
-    detail:'悪性腫瘍（肺癌・乳癌等）に伴う傍腫瘍性神経症候群、肝性脳症・Wilson病等の代謝異常、マンガン・一酸化炭素等の中毒によるパーキンソニズムの可能性。'
+    key:'ctx_imaging_rapid', code:'B3-画2', label:'急速進行例：DWIで皮質・皮質下高信号のプリオン病除外',
+    detail:'非常に急速に進行する症例においては、拡散強調画像で皮質および皮質下の高信号域を呈するプリオン病を除外する。'
+  },
+  {
+    key:'ctx_alz_psp_cbs', code:'B3-検1', label:'PSP-CBS患者：CSF/βアミロイドPETでAlzheimer病理除外',
+    detail:'PSP-CBS患者においては、原発性のAlzheimer病理を除外する〔典型的な一連のCSF所見（すなわち、総タウ/リン酸化タウ・蛋白質上昇とβアミロイド42の減少の両方）またはβアミロイドPETでの異常所見〕。'
+  },
+  {
+    key:'ctx_young45', code:'B3-検2', label:'45歳未満：Wilson病・Niemann-Pick C型・副甲状腺機能低下症・神経有棘赤血球症・神経梅毒を除外',
+    detail:'45歳未満の患者において、下記を除外する：a. Wilson病（血清セルロプラスミン低下、総血清銅低下、24時間尿中銅増加、Kayser-Fleischer角膜輪）、b. Niemann-Pick病C型（血漿コレスタン3β、5α、6β-トリオールレベル、皮膚線維芽細胞filipin染色検査）、c. 副甲状腺機能低下症、d. 神経有棘赤血球症（Bassen-Kornzweig症候群、Levine Critchley症候群、McLeod症候群）、e. 神経梅毒。'
+  },
+  {
+    key:'ctx_prion_csf', code:'B3-検3', label:'急速進行例：CSF検査でプリオン病・傍腫瘍性脳炎を除外',
+    detail:'急速に進行する患者において、下記を除外する：a. プリオン病〔CSF中の14-3-3蛋白の高値、神経特異エノラーゼ（NSE）の高値、総タウ・蛋白質の著明高値（>1,200pg/mL）、またはRT-QUIC（real-time quaking-induced conversion）法陽性〕、b. 傍腫瘍性脳炎（例えば、抗Ma1、Ma2抗体）。'
+  },
+  {
+    key:'ctx_whipple', code:'B3-検4', label:'示唆的所見（胃腸症状・関節痛・発熱・若年・ミオリズミアなど）：CSF PCRでWhipple病除外',
+    detail:'示唆的所見（すなわち、胃腸症状、関節痛、発熱、若年、およびミオリズミアなどの非典型的神経所見）を呈する患者において、Whipple病を除外する（例えば、CSF T. Whipplei DNA-PCR）。'
   },
 ];
 
@@ -728,10 +762,10 @@ function renderStep2() {
   const activeAbsExcl = ABS_EXCL_DEFS.filter(d => state.data[d.key] === 'yes');
   return `
 <div class="card">
-  <div class="card-title">⛔ 絶対的除外基準（Absolute Exclusion Criteria）
+  <div class="card-title">⛔ B2：必須の除外基準（Absolute Exclusion Criteria）
     <span class="section-badge danger">1項目でも該当→評価対象外</span>
   </div>
-  <div class="card-subtitle">いずれか1項目でも「あり／該当」の場合、MDS-PSP criteriaによる分類は適用されません。</div>
+  <div class="card-subtitle">いずれか1項目でも「あり／該当」の場合、MDS-PSP criteriaによる分類は適用されません。臨床所見（C1〜C8）および画像所見（I1〜I2）から構成されます。</div>
 
   ${activeAbsExcl.length > 0 ? `
   <div class="alert alert-danger">
@@ -752,10 +786,10 @@ function renderStep2() {
 </div>
 
 <div class="card" style="margin-top:0">
-  <div class="card-title">🔶 状況依存性除外基準（Context-dependent Exclusion）
-    <span class="section-badge warn">文脈依存</span>
+  <div class="card-title">🔶 B3：状況依存性除外基準（Context-dependent Exclusion）
+    <span class="section-badge warn">状況に応じて判断</span>
   </div>
-  <div class="card-subtitle">以下は状況によって判断が異なります。該当する場合、PSP診断基準の解釈に注意が必要です。</div>
+  <div class="card-subtitle">画像所見（B3-画1〜2）および臨床検査所見（B3-検1〜4）から構成されます。該当する状況で適切な検査を行い、除外されない場合は診断の確実性が低下します。</div>
 
   ${CTX_EXCL_DEFS.map(def => `
   <div class="form-group ${state.data[def.key] === 'yes' ? 'has-exclusion' : ''}">
@@ -768,7 +802,7 @@ function renderStep2() {
   </div>`).join('')}
 
   <div class="alert alert-warning" style="margin-top:8px">
-    ⚠️ 状況依存性除外基準は絶対的除外基準ではありませんが、該当する場合は診断の確実性が低下します。結果画面に注記されます。
+    ⚠️ B3状況依存性除外基準は絶対的除外基準ではありませんが、該当する場合は診断の確実性が低下します。結果画面に注記されます。
   </div>
 </div>`;
 }
@@ -887,18 +921,18 @@ function renderStep4() {
 function renderStep5() {
   return `
 <div class="card">
-  <div class="card-title">📊 支持的特徴（Supportive Features）
+  <div class="card-title">📊 臨床的手がかり（CC）・画像所見（IF）
     <span class="section-badge" style="background:var(--neutral)">補助的基準</span>
   </div>
   <div class="card-subtitle">
-    支持的特徴は単独でPSPの診断確実性を決定しませんが、一部の臨床型（PSP-P, PSP-PGF, PSP-F, PSP-SLなど）の補助的判定基準として使用されます。
-    PSP特異的ではないことに注意してください。
+    臨床的手がかり（CC1〜CC4）および画像所見（IF1〜IF2）は単独でPSPの診断確実性を決定しませんが、
+    PSP-P（suggestive）の判定基準として CC1〜CC4 が使用されます。PSP特異的ではないことに注意してください。
   </div>
 
   ${Object.values(SUPPORTIVE_FEATURES).map(s => `
   <div class="form-group ${state.data[s.code] === 'yes' ? 'has-yes' : ''}">
     <div class="form-label">
-      <span class="form-code" style="background:var(--neutral)">${s.code}</span>
+      <span class="form-code" style="background:var(--neutral)">${s.ccCode||s.code}</span>
       ${s.name}
     </div>
     <div class="form-desc">${s.definition}</div>
@@ -906,8 +940,8 @@ function renderStep5() {
   </div>`).join('')}
 
   <div class="alert alert-info" style="margin-top:10px">
-    💡 支持的特徴（S1〜S6）は補助的情報として記録されます。結果画面では「支持的特徴あり」の項目が一覧表示されます。
-    MAXルール上の確実性レベル（probable / possible / suggestive）の算出には、一部臨床型で使用されます。
+    💡 CC1〜CC4（臨床的手がかり）はPSP-P suggestiveの判定に使用されます。IF1〜IF2（画像所見）は補助的情報として記録されます。
+    結果画面では該当項目が一覧表示されます。
   </div>
 </div>`;
 }
@@ -1014,115 +1048,88 @@ function classifyPSP() {
     return { cert: 'none', basis: [] };
   }
 
+  // CC（臨床的手がかり）の有無
+  const hasCC = yes('S1')||yes('S2')||yes('S3')||yes('S4');
+
   // PSP-RS (Richardson's syndrome)
-  // Probable: (O1 AND [P1 OR P2]) OR (O2 AND P1)
-  // Possible: (O1 AND P3) OR (O2 AND [P2 OR P3]) OR (O3 AND [P1 OR P2])
-  // Suggestive: (O2 AND P3) OR (O3 AND P3)
+  // Probable: (O1 OR O2) AND (P1 OR P2)
+  // Possible: O2 AND P3
+  // Suggestive: O3 AND (P2 OR P3)
   result.subtypes['PSP-RS'] = evalSubtype([
-    {cert:'probable', condition:(O1&&(P1||P2))||(O2&&P1),
+    {cert:'probable', condition:(O1||O2)&&(P1||P2),
      basis_keys: buildBasis(['O1','O2','P1','P2'],[O1,O2,P1,P2])},
-    {cert:'possible', condition:(O1&&P3)||(O2&&(P2||P3))||(O3&&(P1||P2)),
-     basis_keys: buildBasis(['O1','O2','O3','P1','P2','P3'],[O1,O2,O3,P1,P2,P3])},
-    {cert:'suggestive', condition:(O2&&P3)||(O3&&P3),
-     basis_keys: buildBasis(['O2','O3','P3'],[O2,O3,P3])},
-  ]);
-
-  // PSP-P (predominant parkinsonism)
-  // Probable: A2 AND (O2 OR O3 OR P2 OR P3)
-  // Possible: A3 AND (O2 OR O3 OR P2 OR P3)
-  // Suggestive: A2 or A3 alone (without other O/P findings), with or without supportive
-  const p_hasOcP = O2||O3||P2||P3;
-  result.subtypes['PSP-P'] = evalSubtype([
-    {cert:'probable', condition: A2 && p_hasOcP,
-     basis_keys: buildBasis(['A2','O2','O3','P2','P3'],[A2,O2,O3,P2,P3])},
-    {cert:'possible', condition: A3 && p_hasOcP,
-     basis_keys: buildBasis(['A3','O2','O3','P2','P3'],[A3,O2,O3,P2,P3])},
-    {cert:'suggestive', condition: (A2||A3),
-     basis_keys: buildBasis(['A2','A3'],[A2,A3])},
-  ]);
-
-  // PSP-PGF (pure akinesia / gait freezing)
-  // Probable: A1 AND (O2 OR O3 OR P2 OR P3)
-  // Possible: A1 with supportive features, or A1 alone
-  // Suggestive: A1 alone (minimal other findings)
-  const pgf_hasOtherOcP = O2||O3||P2||P3;
-  result.subtypes['PSP-PGF'] = evalSubtype([
-    {cert:'probable', condition: A1 && pgf_hasOtherOcP,
-     basis_keys: buildBasis(['A1','O2','O3','P2','P3'],[A1,O2,O3,P2,P3])},
-    {cert:'possible', condition: A1 && hasAnySupp,
-     basis_keys: buildBasis(['A1',...result.supportive_met],[A1,...result.supportive_met.map(()=>true)])},
-    {cert:'suggestive', condition: A1,
-     basis_keys: ['A1']},
-  ]);
-
-  // PSP-F (predominant frontal)
-  // Probable: C2 AND (O1 OR O2 OR P1 OR P2 OR A1 OR A2)
-  // Possible: C2 AND (O3 OR P3 OR A3)
-  // Suggestive: C2 with supportive features
-  const f_highMid = O1||O2||P1||P2||A1||A2;
-  const f_low = O3||P3||A3;
-  result.subtypes['PSP-F'] = evalSubtype([
-    {cert:'probable', condition: C2 && f_highMid,
-     basis_keys: buildBasis(['C2','O1','O2','P1','P2','A1','A2'],[C2,O1,O2,P1,P2,A1,A2])},
-    {cert:'possible', condition: C2 && f_low,
-     basis_keys: buildBasis(['C2','O3','P3','A3'],[C2,O3,P3,A3])},
-    {cert:'suggestive', condition: C2 && hasAnySupp,
-     basis_keys: ['C2',...result.supportive_met]},
-  ]);
-
-  // PSP-SL (predominant speech/language)
-  // Probable: C1 AND (O1 OR O2 OR P1 OR P2 OR A1 OR A2)
-  // Possible: C1 AND (O3 OR P3 OR A3)
-  // Suggestive: C1 with supportive features
-  result.subtypes['PSP-SL'] = evalSubtype([
-    {cert:'probable', condition: C1 && f_highMid,
-     basis_keys: buildBasis(['C1','O1','O2','P1','P2','A1','A2'],[C1,O1,O2,P1,P2,A1,A2])},
-    {cert:'possible', condition: C1 && f_low,
-     basis_keys: buildBasis(['C1','O3','P3','A3'],[C1,O3,P3,A3])},
-    {cert:'suggestive', condition: C1 && hasAnySupp,
-     basis_keys: ['C1',...result.supportive_met]},
-  ]);
-
-  // PSP-CBS (corticobasal syndrome)
-  // Probable: C3 AND (O1 OR O2 OR P1)
-  // Possible: C3 AND (O3 OR P2 OR P3 OR A2)
-  // Suggestive: C3 AND (A3 OR supportive features)
-  result.subtypes['PSP-CBS'] = evalSubtype([
-    {cert:'probable', condition: C3 && (O1||O2||P1),
-     basis_keys: buildBasis(['C3','O1','O2','P1'],[C3,O1,O2,P1])},
-    {cert:'possible', condition: C3 && (O3||P2||P3||A2),
-     basis_keys: buildBasis(['C3','O3','P2','P3','A2'],[C3,O3,P2,P3,A2])},
-    {cert:'suggestive', condition: C3 && (A3||hasAnySupp),
-     basis_keys: ['C3',...(A3?['A3']:[]),...result.supportive_met]},
+    {cert:'possible', condition: O2&&P3,
+     basis_keys: ['O2','P3']},
+    {cert:'suggestive', condition: O3&&(P2||P3),
+     basis_keys: buildBasis(['O3','P2','P3'],[O3,P2,P3])},
   ]);
 
   // PSP-OM (predominant ocular motor)
-  // Defined when O1 or O2 is present as the predominant feature without prominent P/A/C findings
-  // Probable: (O1 OR O2) without A1-A3, C1-C3, and at most P3
-  // Possible: O3 as the only prominent finding
-  const hasOtherPAC_high = P1||P2||A1||A2||C1||C2;
-  const hasAnyPAC = P1||P2||P3||A1||A2||A3||C1||C2||C3;
+  // Probable: なし（表に記載なし）
+  // Possible: O1
+  // Suggestive: O2 OR O3
   result.subtypes['PSP-OM'] = evalSubtype([
-    {cert:'probable', condition: (O1||O2) && !hasOtherPAC_high && !C3,
-     basis_keys: buildBasis(['O1','O2'],[O1,O2])},
-    {cert:'possible', condition: (O1||O2) && !A1&&!A2&&!C1&&!C2&&!C3,
-     basis_keys: buildBasis(['O1','O2','O3'],[O1,O2,O3])},
-    {cert:'suggestive', condition: O3 && !hasAnyPAC,
-     basis_keys: ['O3']},
+    {cert:'possible', condition: O1,
+     basis_keys: ['O1']},
+    {cert:'suggestive', condition: O2||O3,
+     basis_keys: buildBasis(['O2','O3'],[O2,O3])},
+  ]);
+
+  // PSP-PGF (progressive gait freezing)
+  // Probable: (O1 OR O2) AND A1
+  // Possible: A1（単独）
+  result.subtypes['PSP-PGF'] = evalSubtype([
+    {cert:'probable', condition: (O1||O2)&&A1,
+     basis_keys: buildBasis(['O1','O2','A1'],[O1,O2,A1])},
+    {cert:'possible', condition: A1,
+     basis_keys: ['A1']},
+  ]);
+
+  // PSP-P (predominant parkinsonism)
+  // Probable: (O1 OR O2) AND (A2 OR A3)
+  // Suggestive: (A2 OR A3) AND (O3 OR P1 OR P2 OR C1 OR C2 OR CC1-CC4)
+  result.subtypes['PSP-P'] = evalSubtype([
+    {cert:'probable', condition: (O1||O2)&&(A2||A3),
+     basis_keys: buildBasis(['O1','O2','A2','A3'],[O1,O2,A2,A3])},
+    {cert:'suggestive', condition: (A2||A3)&&(O3||P1||P2||C1||C2||hasCC),
+     basis_keys: buildBasis(['A2','A3','O3','P1','P2','C1','C2'],[A2,A3,O3,P1,P2,C1,C2])},
+  ]);
+
+  // PSP-F (predominant frontal)
+  // Probable: (O1 OR O2) AND C2
+  // Suggestive: C2 AND (O3 OR P3)
+  result.subtypes['PSP-F'] = evalSubtype([
+    {cert:'probable', condition: (O1||O2)&&C2,
+     basis_keys: buildBasis(['O1','O2','C2'],[O1,O2,C2])},
+    {cert:'suggestive', condition: C2&&(O3||P3),
+     basis_keys: buildBasis(['C2','O3','P3'],[C2,O3,P3])},
+  ]);
+
+  // PSP-SL (predominant speech/language)
+  // Possible: (O1 OR O2) AND C1
+  // Suggestive: C1（単独）
+  result.subtypes['PSP-SL'] = evalSubtype([
+    {cert:'possible', condition: (O1||O2)&&C1,
+     basis_keys: buildBasis(['O1','O2','C1'],[O1,O2,C1])},
+    {cert:'suggestive', condition: C1,
+     basis_keys: ['C1']},
+  ]);
+
+  // PSP-CBS (corticobasal syndrome)
+  // Possible: (O1 OR O2) AND C3
+  // Suggestive: C3（単独）
+  result.subtypes['PSP-CBS'] = evalSubtype([
+    {cert:'possible', condition: (O1||O2)&&C3,
+     basis_keys: buildBasis(['O1','O2','C3'],[O1,O2,C3])},
+    {cert:'suggestive', condition: C3,
+     basis_keys: ['C3']},
   ]);
 
   // PSP-PI (predominant postural instability)
-  // Probable: P1 AND A2 (without prominent O/C features)
-  // Possible: (P2 AND A2) OR (P1 AND A3) (without prominent O/C)
-  // Suggestive: P features with A, without O/C
-  const noOC = !O1&&!O2&&!O3&&!C1&&!C2&&!C3;
+  // Suggestive: P1 OR P2
   result.subtypes['PSP-PI'] = evalSubtype([
-    {cert:'probable', condition: P1&&A2&&noOC,
-     basis_keys: ['P1','A2']},
-    {cert:'possible', condition: ((P2&&A2)||(P1&&A3))&&noOC,
-     basis_keys: buildBasis(['P1','P2','A2','A3'],[P1,P2,A2,A3])},
-    {cert:'suggestive', condition: (P1||P2||P3)&&(A2||A3)&&noOC,
-     basis_keys: buildBasis(['P1','P2','P3','A2','A3'],[P1,P2,P3,A2,A3])},
+    {cert:'suggestive', condition: P1||P2,
+     basis_keys: buildBasis(['P1','P2'],[P1,P2])},
   ]);
 
   // ── 5. MAX rule ──
@@ -1272,7 +1279,8 @@ function renderResults() {
   const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
 
   // ── Primary subtype: sort by clinical importance, show top one prominently ──
-  const subtypeOrder = ['PSP-RS','PSP-P','PSP-PI','PSP-PGF','PSP-OM','PSP-CBS','PSP-F','PSP-SL'];
+  // MAXルール MAX3：臨床亜型の序列 RS > OM/PI > その他
+  const subtypeOrder = ['PSP-RS','PSP-OM','PSP-PI','PSP-PGF','PSP-P','PSP-F','PSP-SL','PSP-CBS'];
   const sortedPrimary = [...result.primarySubtypes].sort((a, b) => {
     const ai = subtypeOrder.indexOf(a); const bi = subtypeOrder.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
@@ -1340,19 +1348,19 @@ function renderResults() {
 
   <!-- SUPPORTIVE FEATURES -->
   <div class="result-section">
-    <div class="result-header">📌 支持的特徴 評価一覧（全6項目）</div>
+    <div class="result-header">📌 臨床的手がかり（CC1〜CC4）・画像所見（IF1〜IF2）評価一覧</div>
     <div class="result-body">${suppRows}</div>
   </div>
 
   <!-- ELIGIBILITY SUMMARY -->
   <div class="result-section">
-    <div class="result-header">✅ 基本適格基準 評価一覧</div>
+    <div class="result-header">✅ B1：必須の適格基準 評価一覧</div>
     <div class="result-body">${eligRows}</div>
   </div>
 
   <!-- EXCLUSION SUMMARY -->
   <div class="result-section">
-    <div class="result-header">⛔ 除外基準 評価一覧（絶対的9項目 + 状況依存的2項目）</div>
+    <div class="result-header">⛔ 除外基準 評価一覧（B2絶対的10項目 + B3状況依存的6項目）</div>
     <div class="result-body">${exclRows}</div>
   </div>
 
@@ -1503,7 +1511,8 @@ function copyResult() {
   }
 
   t += '【▼ 臨床型ごとの判定一覧（全8型）】\n';
-  const subtypeOrder = ['PSP-RS','PSP-P','PSP-PI','PSP-PGF','PSP-OM','PSP-CBS','PSP-F','PSP-SL'];
+  // MAXルール MAX3：臨床亜型の序列 RS > OM/PI > その他
+  const subtypeOrder = ['PSP-RS','PSP-OM','PSP-PI','PSP-PGF','PSP-P','PSP-F','PSP-SL','PSP-CBS'];
   subtypeOrder.forEach(st => {
     const info = result.subtypes[st];
     if (!info) return;
@@ -1537,7 +1546,7 @@ function copyResult() {
   });
   t += '\n';
 
-  t += '【▼ 支持的特徴（全6項目）】\n';
+  t += '【▼ 臨床的手がかり（CC1〜CC4）・画像所見（IF1〜IF2）】\n';
   Object.entries(SUPPORTIVE_FEATURES).forEach(([code, item]) => {
     const val = d[code];
     const icon = val==='yes'?'✅ あり':val==='no'?'❌ なし':'❓ 不明';
@@ -1545,7 +1554,7 @@ function copyResult() {
   });
   t += '\n';
 
-  t += '【▼ 除外基準（絶対的9項目 + 状況依存的2項目）】\n';
+  t += '【▼ 除外基準（B2絶対的10項目 + B3状況依存的6項目）】\n';
   [...ABS_EXCL_DEFS, ...CTX_EXCL_DEFS].forEach(def => {
     const val = d[def.key];
     const isAbs = ABS_EXCL_DEFS.some(d2 => d2.key === def.key);
