@@ -12,7 +12,7 @@
 
   本ツールの方針:
   - AI予測・確率推定・独自スコアリングは一切行いません
-  - 公表された診断基準の定義に従い、入力項目の該当性を機械的に整理します
+  - 公表された診断基準の定義に従い，入力項目の該当性を機械的に整理します
   - 結果は「満たす／満たさない／不明」のみで表示します
   - 判定根拠となった項目の組み合わせを必ず明示します
 
@@ -465,12 +465,190 @@ body{
 #print-only{display:none}
 @media print{
   #app{display:none!important}
-  #print-only{display:block!important;padding:16px}
-  #print-only .nav-buttons{display:none!important}
-  body{background:white;font-size:12px}
-  .card{box-shadow:none;break-inside:avoid}
-  .disclaimer{border:1px solid #ddd;background:#fff}
-  .alert{border:1px solid #ddd}
+  #print-only{display:block!important}
+  body{background:white;margin:0;padding:0}
+  @page{size:A4;margin:10mm 12mm}
+}
+
+/* ============================================================
+   ① 定義折りたたみ
+   ============================================================ */
+.def-toggle{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11.5px;color:var(--text-muted);
+  background:none;border:none;cursor:pointer;padding:2px 6px;
+  border-radius:4px;font-family:var(--font);margin:4px 0 0;
+  transition:color 0.15s,background 0.15s;
+}
+.def-toggle:hover{color:var(--gu-orange-dark);background:var(--gu-orange-tint)}
+.def-body{display:none;margin-top:8px}
+.def-body.open{display:block}
+
+/* ============================================================
+   ② 確実性レベル左ボーダー
+   ============================================================ */
+.form-group.cert-high{border-left:3px solid var(--success-light)}
+.form-group.cert-intermediate{border-left:3px solid #60A5FA}
+.form-group.cert-low{border-left:3px solid var(--warning-light)}
+
+/* ============================================================
+   ③ リアルタイム診断ミニパネル
+   ============================================================ */
+.mini-dx-bar{
+  background:white;
+  border:1px solid var(--border);border-top:none;
+  padding:7px 18px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  box-shadow:0 2px 4px rgba(0,0,0,0.05);
+  margin-bottom:0;
+}
+.mini-dx-label{
+  font-size:11px;color:var(--text-muted);flex-shrink:0;font-weight:500;
+}
+.mini-dx-value{
+  font-weight:700;font-size:13px;
+  padding:3px 12px;border-radius:12px;
+  transition:background 0.2s,color 0.2s;
+}
+.mini-dx-probable{background:var(--success-pale);color:var(--success)}
+.mini-dx-possible{background:#EFF6FF;color:#1D4ED8}
+.mini-dx-suggestive{background:var(--gu-orange-tint);color:var(--gu-orange-dark)}
+.mini-dx-excluded{background:var(--danger-pale);color:var(--danger)}
+.mini-dx-none{background:#F3F4F6;color:var(--text-muted)}
+.mini-dx-hint{font-size:11px;color:var(--text-muted)}
+
+/* ============================================================
+   ④ ステップ回答数カウント
+   ============================================================ */
+.step-count{
+  font-size:9.5px;display:block;margin-top:2px;
+  opacity:0.7;font-weight:500;
+}
+.progress-step.active .step-count{opacity:1}
+.progress-step.completed .step-count{color:var(--success);opacity:0.85}
+.progress-step.has-exclusion .step-count{color:var(--danger);opacity:0.85}
+
+/* ============================================================
+   根拠カード
+   ============================================================ */
+.evidence-card{
+  background:var(--accent-pale);
+  border:1px solid var(--gu-orange-mid);
+  border-left:4px solid var(--gu-orange);
+  border-radius:var(--radius-sm);
+  padding:12px 16px;margin:10px 0;
+}
+.evidence-title{
+  font-size:11px;font-weight:700;color:var(--gu-orange-dark);
+  text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;
+}
+.evidence-none{font-size:13px;color:var(--text-muted);font-style:italic}
+.basis-chip{
+  display:inline-block;padding:4px 11px;border-radius:12px;
+  font-size:12.5px;font-weight:600;margin:3px 4px 3px 0;
+}
+.basis-chip-probable{background:var(--success-pale);color:var(--success);border:1px solid #BBF7D0}
+.basis-chip-possible{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
+.basis-chip-suggestive{background:var(--gu-orange-tint);color:var(--gu-orange-dark);border:1px solid var(--gu-orange-mid)}
+
+/* ============================================================
+   折りたたみ可能な結果ヘッダー
+   ============================================================ */
+.collapsible-header{
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.collapsible-header:hover{opacity:0.85}
+.collapse-hint{font-size:10.5px;opacity:0.7;font-weight:400;white-space:nowrap;flex-shrink:0}
+
+/* サブタイプフィルターボタン */
+.subtype-filter-btn{
+  font-size:11px;padding:3px 10px;border-radius:10px;
+  background:rgba(255,255,255,0.18);color:white;
+  border:1px solid rgba(255,255,255,0.35);
+  cursor:pointer;font-family:var(--font);font-weight:500;
+  transition:background 0.15s;
+}
+.subtype-filter-btn:hover{background:rgba(255,255,255,0.3)}
+
+/* cert=none の行を初期非表示 */
+.subtype-table tr.cert-none-row{display:none}
+.subtype-table.show-all tr.cert-none-row{display:table-row}
+
+/* ============================================================
+   クイックリファレンスパネル
+   ============================================================ */
+.qref-btn{
+  margin-left:auto;padding:3px 11px;border-radius:10px;
+  background:rgba(255,255,255,0.15);color:white;
+  border:1px solid rgba(255,255,255,0.3);
+  cursor:pointer;font-family:var(--font);font-size:11px;font-weight:600;
+  transition:background 0.15s;white-space:nowrap;
+}
+.qref-btn:hover{background:rgba(255,255,255,0.28)}
+.qref-panel{
+  display:none;background:white;
+  border:1px solid var(--border);border-top:none;
+  padding:14px 18px;
+  box-shadow:0 3px 8px rgba(0,0,0,0.07);
+}
+.qref-panel.open{display:block}
+.qref-title{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--text)}
+.qref-table{width:100%;border-collapse:collapse;font-size:11.5px}
+.qref-table th{
+  background:var(--gu-black);color:white;
+  padding:5px 9px;text-align:left;font-weight:600;
+}
+.qref-table td{padding:5px 9px;border-bottom:1px solid var(--border-light);vertical-align:top}
+.qref-table tr:last-child td{border-bottom:none}
+.qref-table tr:nth-child(even) td{background:#FAFAF8}
+.qref-prob{color:var(--success);font-weight:600}
+.qref-poss{color:#1D4ED8;font-weight:600}
+.qref-sugg{color:var(--gu-orange-dark);font-weight:600}
+.qref-none{color:#9CA3AF}
+
+/* ============================================================
+   localStorage 復元バナー
+   ============================================================ */
+.restore-banner{
+  background:var(--gu-orange-tint);border:1px solid var(--gu-orange-mid);
+  border-top:none;border-left:none;border-right:none;
+  padding:8px 18px;font-size:12.5px;color:var(--gu-orange-dark);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.restore-banner strong{font-weight:700}
+.restore-btn{
+  padding:4px 14px;border-radius:12px;cursor:pointer;
+  font-size:12px;font-weight:600;font-family:var(--font);
+  border:none;transition:all 0.15s;
+}
+.restore-btn-yes{background:var(--gu-orange);color:white}
+.restore-btn-yes:hover{background:var(--gu-orange-dark)}
+.restore-btn-no{background:white;color:var(--text-muted);border:1px solid var(--border)}
+.restore-btn-no:hover{background:#F3F4F6}
+
+/* ============================================================
+   縦断評価フィールド
+   ============================================================ */
+.period-select{
+  padding:5px 10px;border:1.5px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13px;
+  font-family:var(--font);color:var(--text);
+  transition:border-color 0.15s;background:white;cursor:pointer;
+}
+.period-select:focus{
+  outline:none;border-color:var(--gu-orange);
+  box-shadow:0 0 0 3px rgba(232,150,14,0.15);
+}
+.date-input{
+  padding:5px 10px;border:1.5px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13px;
+  font-family:var(--font);color:var(--text);
+  transition:border-color 0.15s;
+}
+.date-input:focus{
+  outline:none;border-color:var(--gu-orange);
+  box-shadow:0 0 0 3px rgba(232,150,14,0.15);
 }
 
 /* ============================================================
@@ -506,7 +684,7 @@ body{
   <!-- DISCLAIMER -->
   <div class="disclaimer">
     <strong>⚠️ 重要：本ツールの位置づけ</strong>
-    本ツールは「診断支援AI」ではありません。入力された臨床情報を、公表されたMDS-PSP Criteria（2017年）の定義に従って機械的に項目分類し、「どの基準のどの項目を満たすか」を整理・表示する補助ツールです。疾患の推定確率・独自スコア・AI推論は一切行いません。確定診断は必ず神経内科専門医が総合的に判断してください。
+    本ツールは「診断支援AI」ではない．入力された臨床情報を，公表されたMDS-PSP Criteria（2017年）の定義に従って機械的に項目分類し，「どの基準のどの項目を満たすか」を整理・表示する補助ツールである．疾患の推定確率・独自スコア・AI推論は一切行わない．確定診断は必ず脳神経内科専門医が総合的に判断してください．
   </div>
 
   <!-- PROGRESS BAR -->
@@ -518,6 +696,36 @@ body{
     <div class="progress-step" id="tab-4" onclick="goToStep(4)">⑤<br>中核A・C</div>
     <div class="progress-step" id="tab-5" onclick="goToStep(5)">⑥<br>CC/IF</div>
     <div class="progress-step" id="tab-6" onclick="goToStep(6)">⑦<br>結果</div>
+  </div>
+
+  <!-- MINI DIAGNOSIS PANEL -->
+  <div class="mini-dx-bar" id="mini-dx-bar">
+    <span class="mini-dx-label">暫定分類：</span>
+    <span class="mini-dx-value mini-dx-none" id="mini-dx-value">入力中…</span>
+    <span class="mini-dx-hint" id="mini-dx-hint"></span>
+    <button class="qref-btn" onclick="toggleQRef()">📋 診断基準早見表</button>
+  </div>
+
+  <!-- QUICK REFERENCE PANEL -->
+  <div class="qref-panel" id="qref-panel">
+    <div class="qref-title">MDS-PSP Criteria 2017 — 臨床型・確実性の判定基準（Table 2）</div>
+    <table class="qref-table">
+      <thead><tr><th>臨床型</th><th class="qref-prob">Probable</th><th class="qref-poss">Possible</th><th class="qref-sugg">Suggestive</th></tr></thead>
+      <tbody>
+        <tr><td><strong>PSP-RS</strong></td><td class="qref-prob">(O1 or O2) + (P1 or P2)</td><td class="qref-poss">O2 + P3</td><td class="qref-sugg">O3 + (P2 or P3)</td></tr>
+        <tr><td><strong>PSP-OM</strong></td><td class="qref-none">—</td><td class="qref-poss">O1</td><td class="qref-sugg">O2 or O3</td></tr>
+        <tr><td><strong>PSP-PI</strong></td><td class="qref-none">—</td><td class="qref-none">—</td><td class="qref-sugg">P1 or P2</td></tr>
+        <tr><td><strong>PSP-PGF</strong></td><td class="qref-prob">(O1 or O2) + A1</td><td class="qref-poss">A1</td><td class="qref-none">—</td></tr>
+        <tr><td><strong>PSP-P</strong></td><td class="qref-prob">(O1 or O2) + (A2 or A3)</td><td class="qref-none">—</td><td class="qref-sugg">(A2 or A3) + (O3 / P1 / P2 / C1 / C2 / CC)</td></tr>
+        <tr><td><strong>PSP-F</strong></td><td class="qref-prob">(O1 or O2) + C2</td><td class="qref-none">—</td><td class="qref-sugg">C2 + (O3 or P3)</td></tr>
+        <tr><td><strong>PSP-SL</strong></td><td class="qref-none">—</td><td class="qref-poss">(O1 or O2) + C1</td><td class="qref-sugg">C1</td></tr>
+        <tr><td><strong>PSP-CBS</strong></td><td class="qref-none">—</td><td class="qref-poss">(O1 or O2) + C3</td><td class="qref-sugg">C3</td></tr>
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+      O：眼球運動　P：姿勢保持　A：無動　C：認知　CC：臨床的手がかり（CC1〜CC4）
+      ｜ MAXルール：MAX1（確実性） &gt; MAX2（時期） &gt; MAX3（RS &gt; OM/PI &gt; 他）
+    </div>
   </div>
 
   <!-- STEP CONTAINER -->
@@ -537,8 +745,10 @@ body{
 const state = {
   currentStep: 0,
   data: {
-    // 基本情報（発症年齢のみ：B1-2の自動判定・B3-検2の45歳未満判定に使用）
+    // 基本情報
     age_onset: '',
+    eval_period: '',   // 縦断評価：第1時期 / 第2時期 / 第3時期 / その他
+    eval_date: '',     // 縦断評価：評価日
 
     // ── B1: 必須の適格基準 ──
     elig_sporadic: 'unknown',     // B1-1: 孤発性
@@ -606,21 +816,21 @@ const CORE_CRITERIA = {
     code:'O1', domain:'O', level:'high',
     name:'垂直性核上性注視麻痺（vSGP）',
     name_en:'Vertical supranuclear gaze palsy',
-    definition:'自発的眼球運動の明らかな制限が、水平面より鉛直面において、上下両方向に、年齢で予測される以上に認められるが、これは前庭動眼反射の活性化により克服される。疾患後期では前庭動眼反射が消失するか、もしくは項部の筋強剛により前庭動眼反射の手技ができなくなる可能性がある。',
+    definition:'自発的眼球運動の明らかな制限が，水平面より鉛直面において，上下両方向に，年齢で予測される以上に認められるが，これは前庭動眼反射の活性化により克服される．疾患後期では前庭動眼反射が消失するか，もしくは項部の筋強剛により前庭動眼反射の手技ができなくなる可能性がある．',
     timeframe: null,
   },
   O2: {
     code:'O2', domain:'O', level:'intermediate',
     name:'垂直方向サッケードの緩徐化',
     name_en:'Slow vertical saccades',
-    definition:'衝動性眼球運動の速度（と振幅）が水平方向よりも垂直方向において、より大きく低下する。これは赤外線眼球運動記録装置のような衝動性運動の定量的測定、もしくはベッドサイドの検査によって評価できる。追従（pursuit）ではなく指示（command）による衝動性眼球運動で評価すべきである（「動いている指を見てください」ではなく「私の指の方向に目を動かしてください」）。20°を超える角度で評価し、衝動性運動の開始遅延は緩徐化とみなさない。垂直性視運動性眼振の高速相の緩徐化または消失によっても支持される。',
+    definition:'衝動性眼球運動の速度（と振幅）が水平方向よりも垂直方向において，より大きく低下する．これは赤外線眼球運動記録装置のような衝動性運動の定量的測定，もしくはベッドサイドの検査によって評価できる．追従（pursuit）ではなく指示（command）による衝動性眼球運動で評価すべきである（「動いている指を見てください」ではなく「私の指の方向に目を動かしてください」）．20°を超える角度で評価し，衝動性運動の開始遅延は緩徐化とみなさない．垂直性視運動性眼振の高速相の緩徐化または消失によっても支持される．',
     timeframe: null,
   },
   O3: {
     code:'O3', domain:'O', level:'low',
     name:'マクロ方形波急速眼球運動（SWJ）または開眼失行',
     name_en:'Macro square wave jerks or eyelid opening apraxia',
-    definition:'（1）頻回の macro square wave jerks（粗大矩形波形眼球運動）：固視中の急速な不随意の saccadic intrusion であり、眼球がもとの眼位から水平に動き、200〜300ミリ秒後に指標に眼球が戻るものをいう。健常者ではほとんどの square wave jerks は振幅1度未満で稀であるが、PSPでは最大3〜4度でより頻回（>10回/分）である。（2）「開眼失行」：不随意の強制的な閉眼（眼瞼痙攣）なしに眼瞼を一定時間閉じたあと、随意的に開眼することができない状態。なお「開眼失行」と括弧書きされているのは、開眼開始困難が眼瞼挙筋の活性化困難よりも眼輪筋瞼板前部の活性化（瞼板前部眼輪筋痙攣）に起因することが多いためである。',
+    definition:'（1）頻回の macro square wave jerks（粗大矩形波形眼球運動）：固視中の急速な不随意の saccadic intrusion であり，眼球がもとの眼位から水平に動き，200〜300ミリ秒後に指標に眼球が戻るものをいう．健常者ではほとんどの square wave jerks は振幅1度未満で稀であるが，PSPでは最大3〜4度でより頻回（>10回/分）である．（2）「開眼失行」：不随意の強制的な閉眼（眼瞼痙攣）なしに眼瞼を一定時間閉じたあと，随意的に開眼することができない状態．なお「開眼失行」と括弧書きされているのは，開眼開始困難が眼瞼挙筋の活性化困難よりも眼輪筋瞼板前部の活性化（瞼板前部眼輪筋痙攣）に起因することが多いためである．',
     timeframe: null,
   },
 
@@ -629,21 +839,21 @@ const CORE_CRITERIA = {
     code:'P1', domain:'P', level:'high',
     name:'反復性の自発転倒（≥2回）',
     name_en:'Repeated unprovoked falls',
-    definition:'PSPに関連した所見の発症後3年以内に、起立時のバランスの自発的消失、もしくは2回以上の誘発によらない転倒の発生。',
+    definition:'PSPに関連した所見の発症後3年以内に，起立時のバランスの自発的消失，もしくは2回以上の誘発によらない転倒の発生．',
     timeframe:'発症から3年以内',
   },
   P2: {
     code:'P2', domain:'P', level:'intermediate',
     name:'プルテストでの転倒傾向',
     name_en:'Tendency to fall on pull test',
-    definition:'PSPに関連した所見の発症後3年以内に、pull test（プル・テスト）において、検者に支えられなければ転倒する傾向がみられる。この試験では患者の背後に立った検者が患者の肩を素早く後ろに引いたときの反応を調べる。MDS-UPDRS 項目3.12に記載されているように、被検者は開眼して直立し、足は楽に平行に開く。',
+    definition:'PSPに関連した所見の発症後3年以内に，pull test（プル・テスト）において，検者に支えられなければ転倒する傾向がみられる．この試験では患者の背後に立った検者が患者の肩を素早く後ろに引いたときの反応を調べる．MDS-UPDRS 項目3.12に記載されているように，被検者は開眼して直立し，足は楽に平行に開く．',
     timeframe:'発症から3年以内',
   },
   P3: {
     code:'P3', domain:'P', level:'low',
     name:'プルテストで3歩以上の後退（転倒しない）',
     name_en:'>2 steps backward on pull test without falling',
-    definition:'PSPに関連した所見の発症後3年以内に、pull test（プル・テスト）において、後方に3歩以上動くが、手助けなくもとに戻ることができる。',
+    definition:'PSPに関連した所見の発症後3年以内に，pull test（プル・テスト）において，後方に3歩以上動くが，手助けなくもとに戻ることができる．',
     timeframe:'発症から3年以内',
   },
 
@@ -652,21 +862,21 @@ const CORE_CRITERIA = {
     code:'A1', domain:'A', level:'high',
     name:'進行性の歩行すくみ（gait freezing）',
     name_en:'Progressive gait freezing',
-    definition:'突然で一過性の運動停止もしくはすくみ現象（start hesitation）がPSP関連症状の発症後3年以内に顕著であり、進行性でレボドパに抵抗性である。疾患経過の初期において、進行性のすくみ足は存在しうるが、四肢の筋強剛、振戦、および協調性の維持が困難なことがある。',
+    definition:'突然で一過性の運動停止もしくはすくみ現象（start hesitation）がPSP関連症状の発症後3年以内に顕著であり，進行性でレボドパに抵抗性である．疾患経過の初期において，進行性のすくみ足は存在しうるが，四肢の筋強剛，振戦，および協調性の維持が困難なことがある．',
     timeframe:'発症から3年以内に顕在化',
   },
   A2: {
     code:'A2', domain:'A', level:'intermediate',
-    name:'Parkinson症状、無動・強剛、体軸優位およびレボドパ抵抗性',
+    name:'Parkinson症状，無動・強剛，体軸優位およびレボドパ抵抗性',
     name_en:'Predominantly axial akinetic-rigid parkinsonism, levodopa resistant',
-    definition:'運動緩慢（bradykinesia）および体軸に優位の筋強剛と、レボドパ抵抗性を示す（操作的定義の臨床手がかりのCC1を参照）。',
+    definition:'運動緩慢（bradykinesia）および体軸に優位の筋強剛と，レボドパ抵抗性を示す（操作的定義の臨床手がかりのCC1を参照）．',
     timeframe: null,
   },
   A3: {
     code:'A3', domain:'A', level:'low',
-    name:'Parkinson症状、振戦および/または非対称性および/またはレボドパ反応性',
+    name:'Parkinson症状，振戦および/または非対称性および/またはレボドパ反応性',
     name_en:'Parkinsonism with tremor and/or asymmetry and/or levodopa responsiveness',
-    definition:'筋強剛を伴う運動緩慢（bradykinesia）および/または振戦、および/または四肢の非対称的な優位性、および/またはレボドパ反応性（操作的定義の臨床手がかりのCC1を参照）。',
+    definition:'筋強剛を伴う運動緩慢（bradykinesia）および/または振戦，および/または四肢の非対称的な優位性，および/またはレボドパ反応性（操作的定義の臨床手がかりのCC1を参照）．',
     timeframe: null,
   },
 
@@ -675,21 +885,21 @@ const CORE_CRITERIA = {
     code:'C1', domain:'C', level:'high',
     name:'音声言語障害（発語失行 または nfvPPA）',
     name_en:'Speech/language disorder (AOS or nonfluent/agrammatic PPA)',
-    definition:'下記の所見が1つ以上、（一過性ではなく）持続的に認められることと定義する：（1）非流暢性/失文法性の原発性進行性失語症（nfaPPA）または失文法および/または電文体発語ないし書字。（2）発語失行（AOS）：努力性のたどたどしい発語で、一貫性のない音韻の誤りとゆがみ、もしくはゆっくりとした、音節ごとに分断されたプロソディー発語パターン。かつ単語の理解、対象の知識、および文の復唱中の単語の修正（word retrieval）は保持されている。',
+    definition:'下記の所見が1つ以上，（一過性ではなく）持続的に認められることと定義する：（1）非流暢性/失文法性の原発性進行性失語症（nfaPPA）または失文法および/または電文体発語ないし書字．（2）発語失行（AOS）：努力性のたどたどしい発語で，一貫性のない音韻の誤りとゆがみ，もしくはゆっくりとした，音節ごとに分断されたプロソディー発語パターン．かつ単語の理解，対象の知識，および文の復唱中の単語の修正（word retrieval）は保持されている．',
     timeframe: null,
   },
   C2: {
     code:'C2', domain:'C', level:'intermediate',
     name:'前頭葉認知機能/行動症候（≥2項目）',
     name_en:'Frontal cognitive/behavioral syndrome (≥2 features)',
-    definition:'下記の所見が3つ以上、（一過性ではなく）持続的に認められることと定義する：① アパシー：興味、自発性、および自発活動の減少が情報提供者もしくは患者にとって明白である。② 精神緩慢：思考の緩慢化が情報提供者もしくは患者にとって明白である。③ 遂行機能障害症候群：例、逆 digit span、Trails B ないし Stroop 試験、Luria 配列（年齢および教育で修正した健常者の平均を1.5SD以上、下回る）。④ 音素性語集流暢性の低下：例、「D、F、A、またはS」で始まる語を1分以内にいくつ言えるか（年齢および教育で修正した健常者の平均を1.5SD以上、下回る）。⑤ 衝動性、脱抑制、または保続：例、社会的に不適切な行動、摂食時に口に詰め込みすぎる、運動の無鉄砲さ、拍手徴候（applause sign）、同語反復、反響言語。',
+    definition:'下記の所見が3つ以上，（一過性ではなく）持続的に認められることと定義する：① アパシー：興味，自発性，および自発活動の減少が情報提供者もしくは患者にとって明白である．② 精神緩慢：思考の緩慢化が情報提供者もしくは患者にとって明白である．③ 遂行機能障害症候群：例，逆 digit span，Trails B ないし Stroop 試験，Luria 配列（年齢および教育で修正した健常者の平均を1.5SD以上，下回る）．④ 音素性語集流暢性の低下：例，「D，F，A，またはS」で始まる語を1分以内にいくつ言えるか（年齢および教育で修正した健常者の平均を1.5SD以上，下回る）．⑤ 衝動性，脱抑制，または保続：例，社会的に不適切な行動，摂食時に口に詰め込みすぎる，運動の無鉄砲さ，拍手徴候（applause sign），同語反復，反響言語．',
     timeframe: null,
   },
   C3: {
     code:'C3', domain:'C', level:'low',
     name:'皮質基底核症候群（CBS）',
     name_en:'Corticobasal syndrome',
-    definition:'下記の2つのグループからそれぞれ1つ以上の徴候を有するものと定義する（非対称、対称いずれでもよい）：【皮質徴候】a. 口頬ないし四肢失行、b. 皮質性感覚障害、c. 他人の手（limb）徴候〔単なる空中での挙上（levitation）にとどまらない〕。【運動障害徴候】a. 四肢の筋強剛、b. 四肢の無動、c. 四肢のミオクローヌス。',
+    definition:'下記の2つのグループからそれぞれ1つ以上の徴候を有するものと定義する（非対称，対称いずれでもよい）：【皮質徴候】a. 口頬ないし四肢失行，b. 皮質性感覚障害，c. 他人の手（limb）徴候〔単なる空中での挙上（levitation）にとどまらない〕．【運動障害徴候】a. 四肢の筋強剛，b. 四肢の無動，c. 四肢のミオクローヌス．',
     timeframe: null,
   },
 };
@@ -697,13 +907,173 @@ const CORE_CRITERIA = {
 // 臨床的手がかり（CC）：CC1〜CC4
 // 画像所見（IF）：IF1〜IF2
 const SUPPORTIVE_FEATURES = {
-  S1:{code:'S1', ccCode:'CC1', name:'CC1：レボドパ抵抗性', definition:'レボドパ抵抗性は、MDS-UPDRS 運動スケールの改善が30%以下と定義する。この基準を満たすためには、患者に1,000mg以上（もし耐えられれば）を1ヵ月以上投与して評価するか、もしくは患者がこの治療を受けた時点で、少なくとも200mgのchallenge doseのあとに正式に評価できる。'},
-  S2:{code:'S2', ccCode:'CC2', name:'CC2：運動減少性、痙性構音障害', definition:'緩徐で、音量とピッチの低い、耳障りな（harsh）声。'},
-  S3:{code:'S3', ccCode:'CC3', name:'CC3：嚥下障害', definition:'他の理由で説明できない、食事の調整を要するほど重度の嚥下困難。'},
-  S4:{code:'S4', ccCode:'CC4', name:'CC4：羞明', definition:'順応障害に起因する光知覚への不耐性。'},
-  S5:{code:'S5', ccCode:'IF1', name:'IF1：顕著な中脳萎縮ないし低代謝', definition:'例えばMRIもしくは[¹⁸F]DG-PETにより示される、橋と比較して中脳において顕著な萎縮または低代謝。'},
-  S6:{code:'S6', ccCode:'IF2', name:'IF2：シナプス後線条体ドパミン神経変性', definition:'例えば[¹²³I]IBZM-SPECTもしくは[¹⁸F]-DMFP-PETにより示されるシナプス後線条体ドパミン神経変性。'},
+  S1:{code:'S1', ccCode:'CC1', name:'CC1：レボドパ抵抗性', definition:'レボドパ抵抗性は，MDS-UPDRS 運動スケールの改善が30%以下と定義する．この基準を満たすためには，患者に1,000mg以上（もし耐えられれば）を1ヵ月以上投与して評価するか，もしくは患者がこの治療を受けた時点で，少なくとも200mgのchallenge doseのあとに正式に評価できる．'},
+  S2:{code:'S2', ccCode:'CC2', name:'CC2：運動減少性，痙性構音障害', definition:'緩徐で，音量とピッチの低い，耳障りな（harsh）声．'},
+  S3:{code:'S3', ccCode:'CC3', name:'CC3：嚥下障害', definition:'他の理由で説明できない，食事の調整を要するほど重度の嚥下困難．'},
+  S4:{code:'S4', ccCode:'CC4', name:'CC4：羞明', definition:'順応障害に起因する光知覚への不耐性．'},
+  S5:{code:'S5', ccCode:'IF1', name:'IF1：顕著な中脳萎縮ないし低代謝', definition:'例えばMRIもしくは[¹⁸F]DG-PETにより示される，橋と比較して中脳において顕著な萎縮または低代謝．'},
+  S6:{code:'S6', ccCode:'IF2', name:'IF2：シナプス後線条体ドパミン神経変性', definition:'例えば[¹²³I]IBZM-SPECTもしくは[¹⁸F]-DMFP-PETにより示されるシナプス後線条体ドパミン神経変性．'},
 };
+
+// ============================================================
+// ============================================================
+// ① localStorage 自動保存・復元
+// ============================================================
+const LS_KEY = 'psp_tool_v1';
+
+function saveToLocalStorage() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state.data)); } catch(e) {}
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    // データが存在する（age_onset か 中核症候のいずれかに値がある）場合のみバナーを表示
+    const hasData = saved.age_onset || saved.eval_period
+      || ['O1','O2','O3','P1','P2','P3','A1','A2','A3','C1','C2','C3'].some(k => saved[k] && saved[k] !== 'unknown');
+    if (!hasData) return;
+    showRestoreBanner(saved);
+  } catch(e) {}
+}
+
+function showRestoreBanner(saved) {
+  const banner = document.createElement('div');
+  banner.className = 'restore-banner';
+  banner.id = 'restore-banner';
+  const period = saved.eval_period ? '（' + saved.eval_period + '）' : '';
+  const date   = saved.eval_date   ? ' ' + saved.eval_date : '';
+  banner.innerHTML = '<strong>💾 前回の入力データが保存されています' + period + date + '</strong>'
+    + '<button class="restore-btn restore-btn-yes" onclick="restoreData()">読み込む</button>'
+    + '<button class="restore-btn restore-btn-no"  onclick="dismissRestore()">破棄する</button>';
+  // progress-barの直前に挿入
+  const pb = document.getElementById('progress-bar');
+  if (pb) pb.parentNode.insertBefore(banner, pb);
+  // savedデータを一時保持
+  banner._saved = saved;
+}
+
+function restoreData() {
+  const banner = document.getElementById('restore-banner');
+  if (banner && banner._saved) {
+    Object.assign(state.data, banner._saved);
+    banner.remove();
+    renderCurrentStep();
+  }
+}
+
+function dismissRestore() {
+  const banner = document.getElementById('restore-banner');
+  if (banner) banner.remove();
+  localStorage.removeItem(LS_KEY);
+}
+
+// ============================================================
+// ② A2 / A3 相互排他制御
+// ============================================================
+function syncMutualExclusion(key, val) {
+  if ((key !== 'A2' && key !== 'A3') || val !== 'yes') return;
+  const other = key === 'A2' ? 'A3' : 'A2';
+  state.data[other] = 'no';
+  // DOM上の相手ラジオボタン群を更新
+  document.querySelectorAll('.radio-btn').forEach(function(btn) {
+    const oc = btn.getAttribute('onclick') || '';
+    if (oc.includes("'" + other + "'")) {
+      btn.className = 'radio-btn';
+      if (oc.includes("'no'")) btn.classList.add('selected-no');
+    }
+  });
+  // 相手 form-group のボーダーをリセット（has-yes を外す）
+  const peers = Array.from(document.querySelectorAll('.radio-btn'))
+    .filter(function(b){ return (b.getAttribute('onclick')||'').includes("'" + other + "'"); });
+  if (peers.length > 0) {
+    const fg = peers[0].closest('.form-group');
+    if (fg) fg.classList.remove('has-yes');
+  }
+}
+
+// ============================================================
+// ③ クイックリファレンス パネルトグル
+// ============================================================
+function toggleQRef() {
+  const panel = document.getElementById('qref-panel');
+  if (panel) panel.classList.toggle('open');
+}
+
+// ============================================================
+// ① 定義折りたたみトグル
+// ============================================================
+function toggleDef(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('open');
+  btn.textContent = el.classList.contains('open') ? '▲ 定義を閉じる' : '▼ 定義を確認';
+}
+
+// ============================================================
+// ③ リアルタイム診断ミニパネル更新
+// ============================================================
+function updateMiniPanel() {
+  const valueEl = document.getElementById('mini-dx-value');
+  const hintEl  = document.getElementById('mini-dx-hint');
+  if (!valueEl) return;
+
+  const result = classifyPSP();
+  const cert   = result.primaryCertainty;
+  const sub    = result.primarySubtypes[0] || '';
+
+  const clsMap = {
+    probable:'mini-dx-probable', possible:'mini-dx-possible',
+    suggestive:'mini-dx-suggestive', excluded:'mini-dx-excluded',
+    ineligible:'mini-dx-none', none:'mini-dx-none',
+  };
+  const labelMap = {
+    probable:   `Probable${sub?' '+sub:''}`,
+    possible:   `Possible${sub?' '+sub:''}`,
+    suggestive: `Suggestive of PSP${sub?' ('+sub+')':''}`,
+    excluded:   '除外基準に該当',
+    ineligible: '適格基準未達',
+    none:       '—（基準未達）',
+  };
+  const hintMap = {
+    probable:   '臨床的確診相当',
+    possible:   '臨床的疑い相当',
+    suggestive: 'PSP関連示唆',
+    excluded:   'MDS-PSP Criteria 適用外',
+    ineligible: '評価対象外',
+    none:       '入力を続けてください',
+  };
+
+  valueEl.className = 'mini-dx-value ' + (clsMap[cert] || 'mini-dx-none');
+  valueEl.textContent = labelMap[cert] || '—';
+  if (hintEl) hintEl.textContent = hintMap[cert] || '';
+}
+
+// ============================================================
+// ② 確実性レベルボーダー付き中核症候アイテム（グローバル共有）
+// ============================================================
+function coreItem(code) {
+  const levelColor  = {high:'#166534', intermediate:'#1e40af', low:'#854d0e'};
+  const levelLabel  = {high:'確実性：高', intermediate:'確実性：中', low:'確実性：低'};
+  const certBorder  = {high:'cert-high', intermediate:'cert-intermediate', low:'cert-low'};
+  const item = CORE_CRITERIA[code];
+  const val  = state.data[code];
+  return `
+<div class="form-group ${certBorder[item.level]} ${val === 'yes' ? 'has-yes' : ''}">
+  <div class="form-label">
+    <span class="form-code" style="background:${levelColor[item.level]}">${item.code}</span>
+    ${item.name}
+    <span class="level-badge level-${item.level}">${levelLabel[item.level]}</span>
+  </div>
+  <button class="def-toggle" onclick="toggleDef('def-${code}',this)">▼ 定義を確認</button>
+  <div class="def-body form-desc" id="def-${code}">
+    ${item.definition}
+    ${item.timeframe ? `<br><span class="timeframe-note">⏱ ${item.timeframe}</span>` : ''}
+  </div>
+  <div class="form-options" style="margin-top:8px">${radioGroup(code)}</div>
+</div>`;
+}
 
 // ============================================================
 // RADIO BUTTON HELPER
@@ -737,6 +1107,10 @@ function setValue(key, val, el) {
     if (val === 'yes' && absExcl.includes(key2)) fg.classList.add('has-exclusion');
     else if (val === 'yes') fg.classList.add('has-yes');
   }
+  syncMutualExclusion(key, val);  // ② A2/A3相互排他
+  saveToLocalStorage();            // ① 自動保存
+  updateMiniPanel();
+  updateProgressCounts();
 }
 
 // ============================================================
@@ -746,27 +1120,38 @@ function renderStep0() {
   return `
 <div class="card" style="border-left:4px solid var(--primary)">
   <div class="card-title" style="cursor:pointer;user-select:none" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-    📖 診断基準使用のコツ
+    📋 MDS-PSP Criteria 2017 — 適用上の要点
     <span class="section-badge" style="background:var(--primary)">クリックで開閉</span>
   </div>
-  <div style="display:none">
-    <p style="font-size:13px;line-height:1.8;color:var(--text);margin:0 0 10px">
-      MDS-PSP criteria は複雑であり，診断基準を確認した上で，<strong>基本的特徴（B1）</strong>，<strong>中核となる臨床的特徴（O・P・A・C）</strong>，<strong>支持的特徴（CC・IF）</strong>の順に，項目の有無をチェックしながら確認する．
-    </p>
-    <p style="font-size:13px;line-height:1.8;color:var(--text);margin:0 0 10px">
-      <strong>必須の適格基準（B1）</strong>は，孤発性，成人発症で，緩徐に進行する神経変性疾患であることを意味する．<strong>必須の除外基準（B2）</strong>はPSPを除外するものであり，全患者が満たす必要がある．<strong>状況依存性除外基準（B3）</strong>もPSPを除外するものであるが，通常と異なる臨床的特徴を呈する患者にのみ適用する．
-    </p>
-    <p style="font-size:13px;line-height:1.8;color:var(--text);margin:0 0 10px">
-      中核となる臨床的特徴は，眼球運動機能異常（O），姿勢保持障害（P），無動（A），認知機能障害（C）という4つの機能ドメインのそれぞれに，確実性の高い順に3つの項目が設定されている．<strong>姿勢保持障害は，NINDS-SPSP基準と異なり，感度を上げるため，発症1年から3年以内に変更されているので注意を要する．</strong>
-    </p>
-    <p style="font-size:13px;line-height:1.8;color:var(--text);margin:0 0 10px">
-      臨床的特徴および臨床的手がかりの組み合わせにより，診断の確実性の程度と臨床亜型を決定する．前者は4段階に分かれ，病理診断による確実例（definite PSP）のほか，臨床診断により，ほぼ確実例（probable PSP），疑い例（possible PSP），示唆例（suggestive of PSP）に分類される．<strong>suggestive of PSP は，単独項目または組み合わせにより，早期のPSPを示唆する特徴をもつ，より早期の診断のためのカテゴリーである．</strong>
-    </p>
-    <p style="font-size:13px;line-height:1.8;color:var(--text);margin:0 0 10px">
-      一方，臨床亜型は典型例である<strong>PSP-RS</strong>と，後述する7つの異型症候群（PSP-OM・PSP-PI・PSP-PGF・PSP-P・PSP-F・PSP-SL・PSP-CBS）に分類される．病期が進行するにつれて複数の臨床亜型を満たすようになるため，臨床亜型を1つに絞り込む目的でMAX（multiple allocation extinction）ルールが導入された．
-    </p>
-    <div class="alert alert-warning" style="margin:8px 0 0">
-      ⚠️ <strong>PSPの診断は経時的に変化しうる．</strong>そのため，診断を記載する際は「時期」「診断の確実性の程度」「臨床亜型」の3つを記録する必要がある．
+  <div style="display:none;padding-top:8px">
+
+    <div style="display:grid;gap:8px">
+
+      <div class="alert alert-warning" style="margin:0">
+        <strong>① NINDS-SPSP基準との主な相違点</strong><br>
+        P域（姿勢保持障害）の時間基準が <strong>「発症1年以内」→「3年以内」</strong> に変更されている（感度向上のため）．旧基準に慣れた臨床経験との照合で最も注意が必要な点．
+      </div>
+
+      <div class="alert alert-info" style="margin:0">
+        <strong>② A2 と A3 は相互排他</strong><br>
+        レボドパ反応性の有無で選択する（A2：抵抗性，A3：反応性）．未投与・未評価の場合は両方「不明」とする．本ツールでは一方を「あり」にすると他方が自動的に「なし」に切り替わる．
+      </div>
+
+      <div class="alert alert-info" style="margin:0">
+        <strong>③ PSP-CBS 症例では B3-検1 が必須</strong><br>
+        PSP-CBS と評価した場合，原発性 Alzheimer 病理の除外（CSF：総タウ↑・リン酸化タウ↑・Aβ42↓，またはβアミロイド PET 陽性）を確認してから診断を確定する．
+      </div>
+
+      <div class="alert alert-info" style="margin:0">
+        <strong>④ MAXルール：MAX2 の扱い</strong><br>
+        MAX2（診断時期による序列：第1時期 &gt; 第2時期 &gt; 第3時期）は <strong>横断的評価では自動適用不可</strong>．複数時点のデータが揃った段階で臨床医が判断する．本ツールでは MAX1・MAX3 のみ自動適用している．
+      </div>
+
+      <div class="alert alert-warning" style="margin:0">
+        <strong>⑤ 診断の経時変化と記録</strong><br>
+        PSP の診断は病期の進行とともに変化する．理想的には第1〜3時期の縦断評価を行い，各時点で <strong>「時期」「確実性（probable / possible / suggestive）」「臨床亜型」</strong> の3点を記録する．
+      </div>
+
     </div>
   </div>
 </div>
@@ -774,26 +1159,49 @@ function renderStep0() {
 <div class="card">
   <div class="card-title">📋 発症年齢の入力 <span class="section-badge">B1-2 / B3-検2 の自動判定に使用</span></div>
   <div class="card-subtitle">
-    入力するとB1-2（PSP関連症状の初発年齢が40歳以上）が自動判定されます。<br>
-    また45歳未満の場合、B3-状況依存性除外基準（B3-検2）の適用が示唆されます。
+    入力するとB1-2（PSP関連症状の初発年齢が40歳以上）が自動判定される．<br>
+    また45歳未満の場合，B3-状況依存性除外基準（B3-検2）の適用が示唆される．
   </div>
 
   <div class="form-group">
     <div class="form-label">PSP関連症状の初発年齢</div>
-    <div class="form-desc">最初のPSP関連症状が出現した推定年齢を入力してください（任意）。入力しない場合はB1-2を手動で選択してください。</div>
+    <div class="form-desc">最初のPSP関連症状が出現した推定年齢を入力してください（任意）．入力しない場合はB1-2を手動で選択してください．</div>
     <input type="number" class="num-input"
       value="${state.data.age_onset}"
-      onchange="state.data.age_onset=parseInt(this.value)||'';updateAgeElig()"
+      onchange="state.data.age_onset=parseInt(this.value)||'';updateAgeElig();updateMiniPanel();updateProgressCounts()"
       min="1" max="120" placeholder="例：65"> 歳
     ${state.data.age_onset ? `
       <div style="margin-top:6px;font-size:12px;color:${parseInt(state.data.age_onset)>=40?'var(--success)':'var(--danger)'}">
         → ${parseInt(state.data.age_onset)>=40 ? '✅ 40歳以上（B1-2 該当）' : '⛔ 40歳未満（B1-2 非該当）'}
-        ${parseInt(state.data.age_onset)<45 ? '　⚠️ 45歳未満のためB3-検2（代謝疾患等の除外）を確認してください' : ''}
+        ${parseInt(state.data.age_onset)<45 ? '　⚠️ 45歳未満：B3-検2（代謝疾患等の除外）の適用を確認すること' : ''}
       </div>` : ''}
   </div>
 
   <div class="alert alert-info">
     💡 <strong>参照基準</strong>：Höglinger GU, et al. Clinical diagnosis of progressive supranuclear palsy: The movement disorder society criteria. <em>Movement Disorders</em>. 2017;32(6):853-864.
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">📅 縦断評価の記録 <span class="section-badge">任意</span></div>
+  <div class="card-subtitle">PSPの診断は経時的に変化する．評価時期と日付を記録しておくと，結果・印刷レポートに反映される．</div>
+  <div class="form-group" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div>
+      <div class="form-label" style="margin-bottom:6px">評価時期</div>
+      <select class="period-select" onchange="state.data.eval_period=this.value;saveToLocalStorage()">
+        <option value="" ${!state.data.eval_period?'selected':''}>未選択</option>
+        <option value="第1時期" ${'第1時期'===state.data.eval_period?'selected':''}>第1時期</option>
+        <option value="第2時期" ${'第2時期'===state.data.eval_period?'selected':''}>第2時期</option>
+        <option value="第3時期" ${'第3時期'===state.data.eval_period?'selected':''}>第3時期</option>
+        <option value="その他" ${'その他'===state.data.eval_period?'selected':''}>その他</option>
+      </select>
+    </div>
+    <div>
+      <div class="form-label" style="margin-bottom:6px">評価日</div>
+      <input type="date" class="date-input"
+        value="${state.data.eval_date}"
+        onchange="state.data.eval_date=this.value;saveToLocalStorage()">
+    </div>
   </div>
 </div>`;
 }
@@ -815,16 +1223,16 @@ function renderStep1() {
     <span class="section-badge">ALL必須</span>
   </div>
   <div class="card-subtitle">
-    以下の5項目はMDS-PSP criteriaの前提条件です。1項目でも「なし／非該当」の場合、基準の評価対象外となります。
-    「不明」の場合、結果に注記が付きます。
+    以下の5項目はMDS-PSP criteriaの前提条件である．1項目でも「なし／非該当」の場合，基準の評価対象外となる．
+    「不明」の場合，結果に注記を付す．
   </div>
 
   <div class="form-group ${state.data.elig_sporadic === 'yes' ? 'has-yes' : state.data.elig_sporadic === 'no' ? 'has-exclusion' : ''}">
     <div class="form-label"><span class="form-code">B1-1</span>孤発性</div>
     <div class="form-desc">
-      孤発性であること。常染色体優性・劣性・X連鎖遺伝パターンがないこと。
-      1〜2親等に偶発的に類似疾患例がある場合は孤発性として扱いうる。
-      既知の病的変異（MAPT, GRN, C9orf72等）が検出された場合は遺伝性と判断。
+      孤発性であること．常染色体優性・劣性・X連鎖遺伝パターンがないこと．
+      1〜2親等に偶発的に類似疾患例がある場合は孤発性として扱いうる．
+      既知の病的変異（MAPT, GRN, C9orf72等）が検出された場合は遺伝性と判断する．
     </div>
     <div class="form-options">${radioGroup('elig_sporadic')}</div>
   </div>
@@ -832,7 +1240,7 @@ function renderStep1() {
   <div class="form-group ${state.data.elig_age_over40 === 'yes' ? 'has-yes' : state.data.elig_age_over40 === 'no' ? 'has-exclusion' : ''}">
     <div class="form-label"><span class="form-code">B1-2</span>PSP関連症状の初発年齢が40歳以上</div>
     <div class="form-desc">
-      PSP関連症状の初発年齢が40歳以上であること。発症年齢を基本情報に入力すると自動反映されます。
+      PSP関連症状の初発年齢が40歳以上であること．発症年齢を基本情報に入力すると自動反映される．
     </div>
     <div class="form-options">${radioGroup('elig_age_over40')}</div>
     ${state.data.age_onset ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">※基本情報の発症年齢（${state.data.age_onset}歳）から自動判定</div>` : ''}
@@ -841,7 +1249,7 @@ function renderStep1() {
   <div class="form-group ${state.data.elig_gradual === 'yes' ? 'has-yes' : ''}">
     <div class="form-label"><span class="form-code">B1-3</span>PSP関連症状の緩徐な進行</div>
     <div class="form-desc">
-      PSP関連症状が緩徐に進行すること。急性発症（脳卒中様）または亜急性の急速進行（プリオン病様）ではないこと。
+      PSP関連症状が緩徐に進行すること．急性発症（脳卒中様）または亜急性の急速進行（プリオン病様）ではないこと．
     </div>
     <div class="form-options">${radioGroup('elig_gradual')}</div>
   </div>
@@ -857,44 +1265,44 @@ const ABS_EXCL_DEFS = [
   // ── 臨床所見 ──
   {
     key:'exc_alz_memory', code:'B2-C1', label:'Alzheimer病を示唆する顕著なエピソード記憶障害',
-    detail:'Alzheimer病を示唆する、顕著な、他の理由で説明の付かないエピソード記憶障害。'
+    detail:'Alzheimer病を示唆する，顕著な，他の理由で説明の付かないエピソード記憶障害．'
   },
   {
     key:'exc_autonomic', code:'B2-C2', label:'MSA/DLB示唆の顕著な自律神経障害',
-    detail:'多系統萎縮症あるいはLewy小体病を示唆する、顕著な、他の理由で説明の付かない、起立性低血圧（起立3分後の血圧低下が収縮期30mmHg以上、または拡張期15mmHg以上）などの自律神経障害。'
+    detail:'多系統萎縮症あるいはLewy小体病を示唆する，顕著な，他の理由で説明の付かない，起立性低血圧（起立3分後の血圧低下が収縮期30mmHg以上，または拡張期15mmHg以上）などの自律神経障害．'
   },
   {
     key:'exc_hallucination', code:'B2-C3', label:'DLB示唆の顕著な幻視・覚醒度変容',
-    detail:'Lewy小体型認知症を示唆する、顕著な、他の理由で説明の付かない、幻視、ないし覚醒度の変容。'
+    detail:'Lewy小体型認知症を示唆する，顕著な，他の理由で説明の付かない，幻視，ないし覚醒度の変容．'
   },
   {
     key:'exc_mnd', code:'B2-C4', label:'運動ニューロン病示唆の多分節性上下位MN徴候',
-    detail:'運動ニューロン病を示唆する、顕著な、他の理由で説明の付かない、複数の領域に渡る（multisegmental）上位および下位運動ニューロン徴候。なお、純粋な上位運動ニューロン徴候は除外基準ではない。'
+    detail:'運動ニューロン病を示唆する，顕著な，他の理由で説明の付かない，複数の領域に渡る（multisegmental）上位および下位運動ニューロン徴候．なお，純粋な上位運動ニューロン徴候は除外基準ではない．'
   },
   {
     key:'exc_acute_rapid', code:'B2-C5', label:'突然発症/急速進行＋血管・自己免疫・代謝・プリオン示唆の所見',
-    detail:'血管障害、自己免疫性脳炎、代謝性脳症、もしくはプリオン病を示唆する、突然の発症、または症状の階段状ないし急速な進行と、かつそれに合致する画像あるいは臨床検査所見を伴うもの。'
+    detail:'血管障害，自己免疫性脳炎，代謝性脳症，もしくはプリオン病を示唆する，突然の発症，または症状の階段状ないし急速な進行と，かつそれに合致する画像あるいは臨床検査所見を伴うもの．'
   },
   {
     key:'exc_encephalitis', code:'B2-C6', label:'脳炎の既往',
-    detail:'脳炎の既往。'
+    detail:'脳炎の既往．'
   },
   {
     key:'exc_ataxia', code:'B2-C7', label:'顕著な四肢の失調',
-    detail:'顕著な四肢の失調。'
+    detail:'顕著な四肢の失調．'
   },
   {
     key:'exc_known_posture', code:'B2-C8', label:'原因が判明している姿勢保持障害',
-    detail:'原因が判明している姿勢保持障害。例えば、原発性感覚障害、前庭機能障害、重度の痙性、または下位運動ニューロン症候群。'
+    detail:'原因が判明している姿勢保持障害．例えば，原発性感覚障害，前庭機能障害，重度の痙性，または下位運動ニューロン症候群．'
   },
   // ── 画像所見 ──
   {
     key:'exc_leukoencephalopathy', code:'B2-I1', label:'画像上の重度の白質脳症',
-    detail:'脳の画像検査により証明された重度の白質脳症。'
+    detail:'脳の画像検査により証明された重度の白質脳症．'
   },
   {
     key:'exc_structural_mri', code:'B2-I2', label:'関連する構造的異常（画像）',
-    detail:'関連する構造的異常。例えば、正常圧ないし閉塞性水頭症、基底核・間脳・中脳・橋・延髄の脳梗塞、脳出血、低酸素性虚血性病変、腫瘍、あるいは奇形。'
+    detail:'関連する構造的異常．例えば，正常圧ないし閉塞性水頭症，基底核・間脳・中脳・橋・延髄の脳梗塞，脳出血，低酸素性虚血性病変，腫瘍，あるいは奇形．'
   },
 ];
 
@@ -902,27 +1310,27 @@ const ABS_EXCL_DEFS = [
 const CTX_EXCL_DEFS = [
   {
     key:'ctx_imaging_sudden', code:'B3-画1', label:'突然発症/階段状進行例：DWI/FLAIR/T2*MRIで脳卒中・CADASIL・CAA除外',
-    detail:'突然発症もしくは階段状の進行を呈する症候群においては、拡散強調画像（DWI）、FLAIR画像、またはT2*MRI画像により証明された脳卒中、皮質下梗塞と白質脳症を伴う常染色体優性脳動脈症（CADASIL）または重症の脳アミロイド血管症を除外する。'
+    detail:'突然発症もしくは階段状の進行を呈する症候群においては，拡散強調画像（DWI），FLAIR画像，またはT2*MRI画像により証明された脳卒中，皮質下梗塞と白質脳症を伴う常染色体優性脳動脈症（CADASIL）または重症の脳アミロイド血管症を除外する．'
   },
   {
     key:'ctx_imaging_rapid', code:'B3-画2', label:'急速進行例：DWIで皮質・皮質下高信号のプリオン病除外',
-    detail:'非常に急速に進行する症例においては、拡散強調画像で皮質および皮質下の高信号域を呈するプリオン病を除外する。'
+    detail:'非常に急速に進行する症例においては，拡散強調画像で皮質および皮質下の高信号域を呈するプリオン病を除外する．'
   },
   {
     key:'ctx_alz_psp_cbs', code:'B3-検1', label:'PSP-CBS患者：CSF/βアミロイドPETでAlzheimer病理除外',
-    detail:'PSP-CBS患者においては、原発性のAlzheimer病理を除外する〔典型的な一連のCSF所見（すなわち、総タウ/リン酸化タウ・蛋白質上昇とβアミロイド42の減少の両方）またはβアミロイドPETでの異常所見〕。'
+    detail:'PSP-CBS患者においては，原発性のAlzheimer病理を除外する〔典型的な一連のCSF所見（すなわち，総タウ/リン酸化タウ・蛋白質上昇とβアミロイド42の減少の両方）またはβアミロイドPETでの異常所見〕．'
   },
   {
     key:'ctx_young45', code:'B3-検2', label:'45歳未満：Wilson病・Niemann-Pick C型・副甲状腺機能低下症・神経有棘赤血球症・神経梅毒を除外',
-    detail:'45歳未満の患者において、下記を除外する：a. Wilson病（血清セルロプラスミン低下、総血清銅低下、24時間尿中銅増加、Kayser-Fleischer角膜輪）、b. Niemann-Pick病C型（血漿コレスタン3β、5α、6β-トリオールレベル、皮膚線維芽細胞filipin染色検査）、c. 副甲状腺機能低下症、d. 神経有棘赤血球症（Bassen-Kornzweig症候群、Levine Critchley症候群、McLeod症候群）、e. 神経梅毒。'
+    detail:'45歳未満の患者において，下記を除外する：a. Wilson病（血清セルロプラスミン低下，総血清銅低下，24時間尿中銅増加，Kayser-Fleischer角膜輪），b. Niemann-Pick病C型（血漿コレスタン3β，5α，6β-トリオールレベル，皮膚線維芽細胞filipin染色検査），c. 副甲状腺機能低下症，d. 神経有棘赤血球症（Bassen-Kornzweig症候群，Levine Critchley症候群，McLeod症候群），e. 神経梅毒．'
   },
   {
     key:'ctx_prion_csf', code:'B3-検3', label:'急速進行例：CSF検査でプリオン病・傍腫瘍性脳炎を除外',
-    detail:'急速に進行する患者において、下記を除外する：a. プリオン病〔CSF中の14-3-3蛋白の高値、神経特異エノラーゼ（NSE）の高値、総タウ・蛋白質の著明高値（>1,200pg/mL）、またはRT-QUIC（real-time quaking-induced conversion）法陽性〕、b. 傍腫瘍性脳炎（例えば、抗Ma1、Ma2抗体）。'
+    detail:'急速に進行する患者において，下記を除外する：a. プリオン病〔CSF中の14-3-3蛋白の高値，神経特異エノラーゼ（NSE）の高値，総タウ・蛋白質の著明高値（>1,200pg/mL），またはRT-QUIC（real-time quaking-induced conversion）法陽性〕，b. 傍腫瘍性脳炎（例えば，抗Ma1，Ma2抗体）．'
   },
   {
     key:'ctx_whipple', code:'B3-検4', label:'示唆的所見（胃腸症状・関節痛・発熱・若年・ミオリズミアなど）：CSF PCRでWhipple病除外',
-    detail:'示唆的所見（すなわち、胃腸症状、関節痛、発熱、若年、およびミオリズミアなどの非典型的神経所見）を呈する患者において、Whipple病を除外する（例えば、CSF T. Whipplei DNA-PCR）。'
+    detail:'示唆的所見（すなわち，胃腸症状，関節痛，発熱，若年，およびミオリズミアなどの非典型的神経所見）を呈する患者において，Whipple病を除外する（例えば，CSF T. Whipplei DNA-PCR）．'
   },
 ];
 
@@ -933,11 +1341,11 @@ function renderStep2() {
   <div class="card-title">⛔ B2：必須の除外基準（Absolute Exclusion Criteria）
     <span class="section-badge danger">1項目でも該当→評価対象外</span>
   </div>
-  <div class="card-subtitle">いずれか1項目でも「あり／該当」の場合、MDS-PSP criteriaによる分類は適用されません。臨床所見（C1〜C8）および画像所見（I1〜I2）から構成されます。</div>
+  <div class="card-subtitle">いずれか1項目でも「あり／該当」の場合，MDS-PSP criteriaによる分類は適用されない．臨床所見（C1〜C8）および画像所見（I1〜I2）から構成される．</div>
 
   ${activeAbsExcl.length > 0 ? `
   <div class="alert alert-danger">
-    ⛔ <strong>現在、除外基準に該当する項目があります：</strong>
+    ⛔ <strong>現在，除外基準に該当する項目があります：</strong>
     ${activeAbsExcl.map(d => d.label).join('，')}
   </div>` : ''}
 
@@ -946,10 +1354,11 @@ function renderStep2() {
     <div class="form-label">
       <span class="form-code" style="background:var(--danger-light)">${def.code}</span>
       ${def.label}
-      ${state.data[def.key] === 'yes' ? '<span style="color:var(--danger);font-size:10px;">⚠️ 除外基準該当</span>' : ''}
+      ${state.data[def.key] === 'yes' ? '<span style="color:var(--danger);font-size:11px;">⚠️ 除外基準該当</span>' : ''}
     </div>
-    <div class="form-desc">${def.detail}</div>
-    <div class="form-options">${radioGroup(def.key)}</div>
+    <button class="def-toggle" onclick="toggleDef('def-${def.key}',this)">▼ 定義を確認</button>
+    <div class="def-body form-desc" id="def-${def.key}">${def.detail}</div>
+    <div class="form-options" style="margin-top:8px">${radioGroup(def.key)}</div>
   </div>`).join('')}
 </div>
 
@@ -957,7 +1366,7 @@ function renderStep2() {
   <div class="card-title">🔶 B3：状況依存性除外基準（Context-dependent Exclusion）
     <span class="section-badge warn">状況に応じて判断</span>
   </div>
-  <div class="card-subtitle">画像所見（B3-画1〜2）および臨床検査所見（B3-検1〜4）から構成されます。該当する状況で適切な検査を行い、除外されない場合は診断の確実性が低下します。</div>
+  <div class="card-subtitle">画像所見（B3-画1〜2）および臨床検査所見（B3-検1〜4）から構成される．該当する状況で適切な検査を行い，除外されない場合は診断の確実性が低下する．</div>
 
   ${CTX_EXCL_DEFS.map(def => `
   <div class="form-group ${state.data[def.key] === 'yes' ? 'has-exclusion' : ''}">
@@ -965,12 +1374,13 @@ function renderStep2() {
       <span class="form-code" style="background:#d97706">${def.code}</span>
       ${def.label}
     </div>
-    <div class="form-desc">${def.detail}</div>
-    <div class="form-options">${radioGroup(def.key)}</div>
+    <button class="def-toggle" onclick="toggleDef('def-${def.key}',this)">▼ 定義を確認</button>
+    <div class="def-body form-desc" id="def-${def.key}">${def.detail}</div>
+    <div class="form-options" style="margin-top:8px">${radioGroup(def.key)}</div>
   </div>`).join('')}
 
   <div class="alert alert-warning" style="margin-top:8px">
-    ⚠️ B3状況依存性除外基準は絶対的除外基準ではありませんが、該当する場合は診断の確実性が低下します。結果画面に注記されます。
+    ⚠️ B3状況依存性除外基準は絶対的除外基準ではないが，該当する場合は診断の確実性が低下する．結果画面に注記される．
   </div>
 </div>`;
 }
@@ -979,33 +1389,12 @@ function renderStep2() {
 // STEP 3: 中核症候 O・P 域
 // ============================================================
 function renderStep3() {
-  const levelColor = {high:'#166534', intermediate:'#1e40af', low:'#854d0e'};
-  const levelLabel = {high:'確実性：高', intermediate:'確実性：中', low:'確実性：低'};
-
-  function coreItem(code) {
-    const item = CORE_CRITERIA[code];
-    const val = state.data[code];
-    return `
-<div class="form-group ${val === 'yes' ? 'has-yes' : ''}">
-  <div class="form-label">
-    <span class="form-code" style="background:${levelColor[item.level]}">${item.code}</span>
-    ${item.name}
-    <span class="level-badge level-${item.level}">${levelLabel[item.level]}</span>
-  </div>
-  <div class="form-desc">
-    ${item.definition}
-    ${item.timeframe ? `<br><span class="timeframe-note">⏱ ${item.timeframe}</span>` : ''}
-  </div>
-  <div class="form-options">${radioGroup(code)}</div>
-</div>`;
-  }
-
   return `
 <div class="card">
   <div class="card-title">👁️ 中核症候：O域（眼球運動）・P域（姿勢不安定性）</div>
   <div class="card-subtitle">
-    各域は3段階の確実性レベルを持ちます。高＞中＞低の順で診断確実性の算出に用いられます。
-    「不明」の場合は「未評価」として扱われます。
+    各域は3段階の確実性レベルを持つ．高＞中＞低の順で診断確実性の算出に用いられる．
+    「不明」の場合は「未評価」として扱われる．
   </div>
 
   <div class="domain-banner">
@@ -1025,8 +1414,8 @@ function renderStep3() {
   ${['P1','P2','P3'].map(coreItem).join('')}
 
   <div class="alert alert-info" style="margin-top:10px">
-    💡 <strong>P2とP3の区別</strong>：P2＝プルテストで転倒（検者が支える必要あり）、P3＝転倒しないが3歩以上の後退。
-    P2の方が確実性が高い（P2>P3）。
+    💡 <strong>P2とP3の区別</strong>：P2＝プルテストで転倒（検者が支える必要あり），P3＝転倒しないが3歩以上の後退．
+    P2の方が確実性が高い（P2>P3）．
   </div>
 </div>`;
 }
@@ -1035,32 +1424,11 @@ function renderStep3() {
 // STEP 4: 中核症候 A・C 域
 // ============================================================
 function renderStep4() {
-  const levelColor = {high:'#166534', intermediate:'#1e40af', low:'#854d0e'};
-  const levelLabel = {high:'確実性：高', intermediate:'確実性：中', low:'確実性：低'};
-
-  function coreItem(code) {
-    const item = CORE_CRITERIA[code];
-    const val = state.data[code];
-    return `
-<div class="form-group ${val === 'yes' ? 'has-yes' : ''}">
-  <div class="form-label">
-    <span class="form-code" style="background:${levelColor[item.level]}">${item.code}</span>
-    ${item.name}
-    <span class="level-badge level-${item.level}">${levelLabel[item.level]}</span>
-  </div>
-  <div class="form-desc">
-    ${item.definition}
-    ${item.timeframe ? `<br><span class="timeframe-note">⏱ ${item.timeframe}</span>` : ''}
-  </div>
-  <div class="form-options">${radioGroup(code)}</div>
-</div>`;
-  }
-
   return `
 <div class="card">
   <div class="card-title">🦶 中核症候：A域（無動）・C域（認知機能）</div>
   <div class="card-subtitle">
-    A2とA3は相互排他的です（どちらか一方のみ選択）。C域は各症候が独立した臨床型に対応します。
+    A2とA3は相互排他的である（どちらか一方のみ選択）．C域は各症候が独立した臨床型に対応する．
   </div>
 
   <div class="domain-banner">
@@ -1070,7 +1438,7 @@ function renderStep4() {
   ${coreItem('A2')}
 
   <div class="alert alert-warning" style="margin:4px 0 4px">
-    ⚠️ <strong>A2とA3は相互排他的</strong>：Levodopa反応性があればA3、なければA2を選択。未試行の場合は両方「不明」に。
+    ⚠️ <strong>A2とA3は相互排他的</strong>：Levodopa反応性があればA3，なければA2を選択．未試行の場合は両方「不明」に．
   </div>
   ${coreItem('A3')}
 
@@ -1080,8 +1448,8 @@ function renderStep4() {
   ${['C1','C2','C3'].map(coreItem).join('')}
 
   <div class="alert alert-info">
-    💡 C1（AOS/nfvPPA）、C2（前頭葉症候）、C3（CBS）はそれぞれ独立した臨床型（PSP-SL、PSP-F、PSP-CBS）の主要基準に対応します。
-    複数が同時に存在する場合、MAXルールにより最も確実性の高い型が優先されます。
+    💡 C1（AOS/nfvPPA），C2（前頭葉症候），C3（CBS）はそれぞれ独立した臨床型（PSP-SL，PSP-F，PSP-CBS）の主要基準に対応する．
+    複数が同時に存在する場合，MAXルールにより最も確実性の高い型が優先される．
   </div>
 </div>`;
 }
@@ -1096,8 +1464,8 @@ function renderStep5() {
     <span class="section-badge" style="background:var(--neutral)">補助的基準</span>
   </div>
   <div class="card-subtitle">
-    臨床的手がかり（CC1〜CC4）および画像所見（IF1〜IF2）は単独でPSPの診断確実性を決定しませんが、
-    PSP-P（suggestive）の判定基準として CC1〜CC4 が使用されます。PSP特異的ではないことに注意してください。
+    臨床的手がかり（CC1〜CC4）および画像所見（IF1〜IF2）は単独でPSPの診断確実性を決定しないが，
+    PSP-P（suggestive）の判定基準として CC1〜CC4 が使用される．PSP特異的ではないことに留意する．
   </div>
 
   ${Object.values(SUPPORTIVE_FEATURES).map(s => `
@@ -1106,13 +1474,14 @@ function renderStep5() {
       <span class="form-code" style="background:var(--neutral)">${s.ccCode||s.code}</span>
       ${s.name}
     </div>
-    <div class="form-desc">${s.definition}</div>
-    <div class="form-options">${radioGroup(s.code)}</div>
+    <button class="def-toggle" onclick="toggleDef('def-${s.code}',this)">▼ 定義を確認</button>
+    <div class="def-body form-desc" id="def-${s.code}">${s.definition}</div>
+    <div class="form-options" style="margin-top:8px">${radioGroup(s.code)}</div>
   </div>`).join('')}
 
   <div class="alert alert-info" style="margin-top:10px">
-    💡 CC1〜CC4（臨床的手がかり）はPSP-P suggestiveの判定に使用されます。IF1〜IF2（画像所見）は補助的情報として記録されます。
-    結果画面では該当項目が一覧表示されます。
+    💡 CC1〜CC4（臨床的手がかり）はPSP-P suggestiveの判定に使用される．IF1〜IF2（画像所見）は補助的情報として記録される．
+    結果画面では該当項目が一覧表示される．
   </div>
 </div>`;
 }
@@ -1177,7 +1546,7 @@ function classifyPSP() {
   }
 
   if (result.active_context_exclusions.length > 0) {
-    result.warnings.push('状況依存性除外基準（' + result.active_context_exclusions.join('，') + '）に該当しています。診断の確実性が低下する可能性があります。');
+    result.warnings.push('状況依存性除外基準（' + result.active_context_exclusions.join('，') + '）に該当している．診断の確実性が低下する可能性がある．');
   }
 
   // ── 3. Core feature inventory ──
@@ -1304,7 +1673,7 @@ function classifyPSP() {
 
   // ── 5. MAX rule ──
   // MAX1: 診断精度 probable > possible > suggestive
-  // MAX2: 診断時期 1番目 > 2番目 > 3番目（※本ツールは横断的評価のため自動化不可。臨床医が判断）
+  // MAX2: 診断時期 1番目 > 2番目 > 3番目（※本ツールは横断的評価のため自動化不可．臨床医が判断）
   // MAX3: 病型 PSP-RS > PSP-OM/PI > その他
   // MAX4: 序列 MAX1 > MAX2 > MAX3
 
@@ -1318,7 +1687,7 @@ function classifyPSP() {
     }
   }
 
-  // MAX4: まず MAX1（確実性）で降順、同位なら MAX3（病型序列）で昇順
+  // MAX4: まず MAX1（確実性）で降順，同位なら MAX3（病型序列）で昇順
   result.allSubtypes.sort((a, b) => {
     const certDiff = certOrder[b.cert] - certOrder[a.cert];
     if (certDiff !== 0) return certDiff;                          // MAX1
@@ -1368,12 +1737,12 @@ function renderResults() {
   };
   const certJa = {probable:'Probable', possible:'Possible', suggestive:'Suggestive（示唆）', none:'非該当'};
   const certDesc = {
-    probable:'MDS-PSP criteria上，Probable（臨床的確診）に相当する組み合わせが認められます。',
-    possible:'MDS-PSP criteria上，Possible（臨床的疑い）に相当する組み合わせが認められます。',
-    suggestive:'MDS-PSP criteria上，Suggestive of PSP（PSP関連が示唆される）に相当する組み合わせが認められます。',
-    none:'現時点の入力情報では，MDS-PSP criteriaのいずれの臨床型の基準も満たしません。',
-    excluded:'絶対的除外基準に該当するため，MDS-PSP criteriaによる分類は適用されません。',
-    ineligible:'基本適格基準を満たさないため，MDS-PSP criteriaによる評価対象外です。',
+    probable:'MDS-PSP criteria上，Probable（臨床的確診）に相当する組み合わせが認められる．',
+    possible:'MDS-PSP criteria上，Possible（臨床的疑い）に相当する組み合わせが認められる．',
+    suggestive:'MDS-PSP criteria上，Suggestive of PSP（PSP関連が示唆される）に相当する組み合わせが認められる．',
+    none:'現時点の入力情報では，MDS-PSP criteriaのいずれの臨床型の基準も満たさない．',
+    excluded:'絶対的除外基準に該当するため，MDS-PSP criteriaによる分類は適用されない．',
+    ineligible:'基本適格基準を満たさないため，MDS-PSP criteriaによる評価対象外である．',
   };
 
   // Subtype table
@@ -1381,7 +1750,8 @@ function renderResults() {
   const certRowJa = {probable:'Probable（確診相当）', possible:'Possible（疑い相当）', suggestive:'Suggestive（示唆）', none:'非該当（－）'};
   const subtypeRows = Object.entries(result.subtypes).map(([st, info]) => {
     const cls = certRowClass[info.cert];
-    return `<tr>
+    const rowCls = info.cert === 'none' ? 'cert-none-row' : '';
+    return `<tr class="${rowCls}">
       <td><strong>${st}</strong></td>
       <td class="${cls}">${certRowJa[info.cert]}</td>
       <td class="basis-list">${(info.basis||[]).join('，') || '—'}</td>
@@ -1472,6 +1842,8 @@ function renderResults() {
   </div>
   <div class="card-subtitle">
     出力日：${dateStr}
+    ${d.eval_period ? '｜ <strong>評価時期：' + d.eval_period + '</strong>' : ''}
+    ${d.eval_date   ? '　' + d.eval_date : ''}
     ｜本結果はMDS-PSP Criteria (Höglinger et al. 2017)に基づく機械的整理です
   </div>
 
@@ -1490,32 +1862,56 @@ function renderResults() {
     ${otherSubtypes.length > 0 ? `
       <div style="margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.75);border-radius:6px;font-size:11px;color:#374151;text-align:left;border:1px solid rgba(0,0,0,0.08)">
         <strong>⚠️ MAX1同位・他の臨床型（MAX3による次順）：</strong>${otherSubtypes.join('，')}<br>
-        <span style="color:#6b7280">複数の臨床型が同等の確実性で成立しています（詳細は下表）。最終的な臨床型の選択はMAX2（診断時期）を考慮した専門医の総合判断によります。</span>
+        <span style="color:#6b7280">複数の臨床型が同等の確実性で成立している（詳細は下表）．最終的な臨床型の選択はMAX2（診断時期）を考慮した専門医の総合判断による．</span>
       </div>
     ` : ''}
     <div style="margin-top:8px;padding:6px 12px;background:rgba(255,255,255,0.6);border-radius:6px;font-size:10px;color:#6b7280;text-align:left">
-      🔢 MAXルール適用：MAX1（確実性 probable&gt;possible&gt;suggestive）→ MAX3（病型序列 RS&gt;OM/PI&gt;その他）の順で自動判定。
-      MAX2（診断時期：1番目&gt;2番目&gt;3番目）は横断的評価のため自動化不可・臨床医が判断してください。
+      🔢 MAXルール適用：MAX1（確実性 probable&gt;possible&gt;suggestive）→ MAX3（病型序列 RS&gt;OM/PI&gt;その他）の順で自動判定．
+      MAX2（診断時期：1番目&gt;2番目&gt;3番目）は横断的評価のため自動化不可・臨床医が判断する．
     </div>
   </div>
 
   <!-- WARNINGS -->
   ${result.warnings.map(w => `<div class="alert alert-warning">⚠️ ${w}</div>`).join('')}
-  ${result.eligibility_unknowns.length > 0 ?
-    `<div class="alert alert-warning">❓ 不明（未評価）の基本適格基準：${result.eligibility_unknowns.join('，')}</div>` : ''}
-  ${result.core_unknown.length > 0 ?
-    `<div class="alert alert-info">❓ 未評価の中核症候：${result.core_unknown.join('，')}（「不明」とした項目は除外して判定しています）</div>` : ''}
+
+  <!-- 根拠カード -->
+  ${(() => {
+    const top = result.allSubtypes[0];
+    const cert = result.primaryCertainty;
+    if (!top || cert === 'none' || cert === 'excluded' || cert === 'ineligible') {
+      return `<div class="evidence-card"><div class="evidence-title">診断根拠</div><div class="evidence-none">現時点の入力では診断基準を満たしません</div></div>`;
+    }
+    const chips = top.basis.map(code => {
+      const item = CORE_CRITERIA[code] || Object.values(SUPPORTIVE_FEATURES).find(s=>s.code===code);
+      return item ? `<span class="basis-chip basis-chip-${cert}">${code}：${item.name}</span>` : '';
+    }).filter(Boolean).join('');
+    const otherLabel = otherSubtypes.length > 0
+      ? `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px">同確実性の他の臨床型（MAX3次順）：${otherSubtypes.join('，')}</div>` : '';
+    return `<div class="evidence-card">
+      <div class="evidence-title">診断根拠（${topSubtype} — ${certJa[cert]||cert}）</div>
+      <div>${chips || '<span style="color:var(--text-muted);font-size:12px">根拠項目なし</span>'}</div>
+      ${otherLabel}
+    </div>`;
+  })()}
 
   <!-- SUBTYPE TABLE -->
-  <div class="result-section">
-    <div class="result-header">🏷️ 臨床型ごとの判定一覧（参考：全8型・各基準への該当状況）</div>
-    <div class="result-body">
-      <table class="subtype-table">
-        <thead><tr><th>臨床型</th><th>確実性</th><th>根拠となった項目（組み合わせ）</th></tr></thead>
-        <tbody>${subtypeRows}</tbody>
-      </table>
-    </div>
-  </div>
+  ${(() => {
+    const hasNone = result.allSubtypes.length < 8 ||
+      Object.values(result.subtypes).some(s => s.cert === 'none');
+    const btnHtml = hasNone
+      ? `<button class="subtype-filter-btn" onclick="toggleSubtypeFilter(this)">全8型を表示</button>` : '';
+    return `<div class="result-section">
+      <div class="result-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>🏷️ 臨床型ごとの判定一覧</span>${btnHtml}
+      </div>
+      <div class="result-body">
+        <table class="subtype-table" id="subtype-full-table">
+          <thead><tr><th>臨床型</th><th>確実性</th><th>根拠となった項目</th></tr></thead>
+          <tbody>${subtypeRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  })()}
 
   <!-- CORE FEATURES -->
   <div class="result-section">
@@ -1529,29 +1925,54 @@ function renderResults() {
     <div class="result-body">${suppRows}</div>
   </div>
 
-  <!-- ELIGIBILITY SUMMARY -->
-  <div class="result-section">
-    <div class="result-header">✅ B1：必須の適格基準 評価一覧</div>
-    <div class="result-body">${eligRows}</div>
-  </div>
+  <!-- ELIGIBILITY SUMMARY（デフォルト折りたたみ） -->
+  ${(() => {
+    const metCount = ['elig_sporadic','elig_age_over40','elig_gradual'].filter(k=>state.data[k]==='yes').length;
+    const badgeColor = result.eligibility_issues.length > 0 ? 'var(--danger)' : 'rgba(255,255,255,0.55)';
+    const badgeText  = result.eligibility_issues.length > 0
+      ? `⚠️ 非充足あり` : `${metCount}/3 充足`;
+    return `<div class="result-section">
+      <div class="result-header collapsible-header" onclick="toggleResultSection('b1-result-body',this)">
+        <span>✅ B1：必須の適格基準</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:${badgeColor}">${badgeText}</span>
+          <span class="collapse-hint">▶ クリックで展開</span>
+        </span>
+      </div>
+      <div id="b1-result-body" class="result-body" style="display:none">${eligRows}</div>
+    </div>`;
+  })()}
 
-  <!-- EXCLUSION SUMMARY -->
-  <div class="result-section">
-    <div class="result-header">⛔ 除外基準 評価一覧（B2絶対的10項目 + B3状況依存的6項目）</div>
-    <div class="result-body">${exclRows}</div>
-  </div>
+  <!-- EXCLUSION SUMMARY（デフォルト折りたたみ） -->
+  ${(() => {
+    const absHit = result.active_absolute_exclusions.length;
+    const ctxHit = result.active_context_exclusions.length;
+    const total  = absHit + ctxHit;
+    const badgeColor = total > 0 ? 'var(--danger)' : 'rgba(255,255,255,0.55)';
+    const badgeText  = total > 0 ? `⚠️ ${total}項目該当` : '除外基準なし';
+    return `<div class="result-section">
+      <div class="result-header collapsible-header" onclick="toggleResultSection('excl-result-body',this)">
+        <span>⛔ 除外基準（B2：10項目 ＋ B3：6項目）</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:${badgeColor}">${badgeText}</span>
+          <span class="collapse-hint">▶ クリックで展開</span>
+        </span>
+      </div>
+      <div id="excl-result-body" class="result-body" style="display:none">${exclRows}</div>
+    </div>`;
+  })()}
 
   <!-- 経時的変化の注記 -->
   <div class="alert alert-info" style="margin-top:14px">
     ℹ️ <strong>診断の経時的変化について</strong><br>
     PSPの診断は経時的に変化しうる．病期の進行とともに複数の臨床亜型を満たすようになる場合があるため，
-    診断を記録する際は「<strong>時期</strong>」「<strong>診断の確実性の程度</strong>（probable / possible / suggestive）」「<strong>臨床亜型</strong>（PSP-RS 等）」の3つを記載することが推奨される．
+    診断を記録する際は「<strong>時期</strong>」「<strong>診断の確実性の程度</strong>（probable / possible / suggestive）」「<strong>臨床亜型</strong>（PSP-RS 等）」の3点を記録することが推奨される．
   </div>
 
   <!-- DISCLAIMER -->
   <div class="alert alert-warning" style="margin-top:8px">
     <strong>⚠️ 免責事項</strong><br>
-    本ツールは「診断基準への機械的マッピング支援ツール」です。AI推論・確率推定・疾患予測は行っていません。本出力は診断確定のための根拠ではなく，入力情報と診断基準の対応を整理したものです。確定診断・鑑別診断・治療方針の決定は，必ず神経内科専門医が患者を直接診察した上で総合的に判断してください。本ツールの使用による診療上の判断の結果に対して，開発者は責任を負いません。
+    本ツールは「診断基準への機械的マッピング支援ツール」である．AI推論・確率推定・疾患予測は行わない．本出力は診断確定のための根拠ではなく，入力情報と診断基準の対応を整理したものである．確定診断・鑑別診断・治療方針の決定は，必ず脳神経内科専門医が患者を直接診察した上で総合的に判断してください．本ツールの使用による診療上の判断の結果に対して，開発者は責任を負わない．
   </div>
 
   <div class="nav-buttons">
@@ -1597,12 +2018,28 @@ function renderCurrentStep() {
     </div>`;
   }
 
-  // Update progress tabs
+  // Update progress tabs with completion counts (④)
+  const stepKeys = [
+    [],
+    ['elig_sporadic','elig_age_over40','elig_gradual'],
+    [...ABS_EXCL_DEFS.map(d=>d.key),...CTX_EXCL_DEFS.map(d=>d.key)],
+    ['O1','O2','O3','P1','P2','P3'],
+    ['A1','A2','A3','C1','C2','C3'],
+    ['S1','S2','S3','S4','S5','S6'],
+    [],
+  ];
+  const stepLabels = ['①<br>基本情報','②<br>基本適格','③<br>除外基準','④<br>中核O・P','⑤<br>中核A・C','⑥<br>CC/IF','⑦<br>結果'];
+
   document.querySelectorAll('.progress-step').forEach((tab, i) => {
+    const keys = stepKeys[i] || [];
+    const answered = keys.filter(k => state.data[k] !== 'unknown').length;
+    const countStr = keys.length > 0
+      ? `<span class="step-count">${answered}/${keys.length}</span>` : '';
+    tab.innerHTML = stepLabels[i] + countStr;
+
     tab.className = 'progress-step';
     if (i === step) tab.classList.add('active');
     else if (i < step) {
-      // Check if step 2 (exclusions) has any active exclusions
       if (i === 2) {
         const hasExcl = ABS_EXCL_DEFS.some(d => state.data[d.key] === 'yes');
         tab.classList.add(hasExcl ? 'has-exclusion' : 'completed');
@@ -1612,7 +2049,48 @@ function renderCurrentStep() {
     }
   });
 
+  // ③ ミニパネル更新
+  updateMiniPanel();
+
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// 結果セクション折りたたみトグル
+function toggleResultSection(id, header) {
+  const body = document.getElementById(id);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  const hint = header.querySelector('.collapse-hint');
+  if (hint) hint.textContent = isOpen ? '▶ クリックで展開' : '▼ クリックで折りたたむ';
+}
+
+// サブタイプテーブルフィルタートグル
+function toggleSubtypeFilter(btn) {
+  const table = document.getElementById('subtype-full-table');
+  if (!table) return;
+  table.classList.toggle('show-all');
+  btn.textContent = table.classList.contains('show-all') ? '該当型のみ表示' : '全8型を表示';
+}
+
+// ④ ステップカウントのみをリフレッシュ（ページ再描画なし）
+function updateProgressCounts() {
+  const stepKeys = [
+    [],
+    ['elig_sporadic','elig_age_over40','elig_gradual'],
+    [...ABS_EXCL_DEFS.map(d=>d.key),...CTX_EXCL_DEFS.map(d=>d.key)],
+    ['O1','O2','O3','P1','P2','P3'],
+    ['A1','A2','A3','C1','C2','C3'],
+    ['S1','S2','S3','S4','S5','S6'],
+    [],
+  ];
+  document.querySelectorAll('.progress-step').forEach((tab, i) => {
+    const keys = stepKeys[i] || [];
+    if (keys.length === 0) return;
+    const answered = keys.filter(k => state.data[k] !== 'unknown').length;
+    let sc = tab.querySelector('.step-count');
+    if (sc) sc.textContent = `${answered}/${keys.length}`;
+  });
 }
 
 function nextStep() {
@@ -1626,32 +2104,215 @@ function goToStep(n) {
   renderCurrentStep();
 }
 function resetAll() {
-  if (confirm('すべての入力データをリセットしますか？\nこの操作は元に戻せません。')) {
+  if (confirm('すべての入力データをリセットしますか？\nこの操作は元に戻せません．')) {
     location.reload();
   }
 }
 
 // ============================================================
-// PRINT
+// PRINT — A4 クリーンレポート生成
 // ============================================================
 function printResults() {
-  // ポップアップを使わず、同一ページ内の #print-only に結果をコピーして印刷
+  const result = classifyPSP();
+  const d = state.data;
+  const now = new Date();
+  const dateStr = now.getFullYear() + '年' + (now.getMonth()+1) + '月' + now.getDate() + '日';
+
+  // 確実性ごとの配色
+  const CC = {
+    probable:   {bg:'#DCFCE7', border:'#16A34A', text:'#14532D'},
+    possible:   {bg:'#DBEAFE', border:'#2563EB', text:'#1E3A8A'},
+    suggestive: {bg:'#FEF3C7', border:'#D97706', text:'#78350F'},
+    excluded:   {bg:'#FEE2E2', border:'#DC2626', text:'#7F1D1D'},
+    ineligible: {bg:'#F3F4F6', border:'#9CA3AF', text:'#374151'},
+    none:       {bg:'#F3F4F6', border:'#9CA3AF', text:'#374151'},
+  };
+  const c = CC[result.primaryCertainty] || CC.none;
+
+  const topSubtype    = result.primarySubtypes[0] || '';
+  const otherSubtypes = result.primarySubtypes.slice(1);
+  const certPrefix    = {probable:'Probable', possible:'Possible', suggestive:'Suggestive of', none:''};
+  const certLabelJa   = {probable:'臨床的確診相当', possible:'臨床的疑い相当', suggestive:'PSP関連示唆',
+                         none:'基準未達', excluded:'除外基準該当', ineligible:'適格基準未達'};
+  const mainDxStr = topSubtype
+    ? (certPrefix[result.primaryCertainty]||'') + ' ' + topSubtype
+    : result.primaryDx;
+
+  // 根拠テキスト
+  const topBasis = (result.allSubtypes[0] || {}).basis || [];
+  const evidenceStr = topBasis.map(code => {
+    const item = CORE_CRITERIA[code] || Object.values(SUPPORTIVE_FEATURES).find(s => s.code === code);
+    return item ? code + '（' + item.name + '）' : code;
+  }).join(' ＋ ') || (result.primaryCertainty === 'none' ? '該当なし' : '—');
+
+  // 中核症候（12項目）
+  const coreHtml = Object.entries(CORE_CRITERIA).map(function([code, item]) {
+    const val = d[code];
+    const ic  = val==='yes' ? '✅' : val==='no' ? '❌' : '—';
+    const col = val==='yes' ? '#16A34A' : val==='no' ? '#DC2626' : '#9CA3AF';
+    const fw  = val==='yes' ? '600' : '400';
+    return '<tr><td class="c1">' + code + '</td><td class="c2" style="color:' + col + ';font-weight:' + fw + '">'
+      + ic + '</td><td class="c3" style="font-weight:' + fw + '">' + item.name + '</td></tr>';
+  }).join('');
+
+  // 支持的特徴（CC/IF）
+  const suppHtml = Object.values(SUPPORTIVE_FEATURES).map(function(s) {
+    const val = d[s.code];
+    const ic  = val==='yes' ? '✅' : val==='no' ? '❌' : '—';
+    const col = val==='yes' ? '#16A34A' : val==='no' ? '#DC2626' : '#9CA3AF';
+    const fw  = val==='yes' ? '600' : '400';
+    return '<tr><td class="c1">' + s.ccCode + '</td><td class="c2" style="color:' + col + ';font-weight:' + fw + '">'
+      + ic + '</td><td class="c3" style="font-weight:' + fw + '">' + s.name.replace(/^[A-Z]+\d：/, '') + '</td></tr>';
+  }).join('');
+
+  // 臨床型判定（8型）
+  const subtypeOrder = ['PSP-RS','PSP-OM','PSP-PI','PSP-PGF','PSP-P','PSP-F','PSP-SL','PSP-CBS'];
+  const certShort    = {probable:'Probable', possible:'Possible', suggestive:'Suggestive', none:'—'};
+  const certColShort = {probable:'#16A34A', possible:'#1D4ED8', suggestive:'#D97706', none:'#9CA3AF'};
+  const subtypeHtml = subtypeOrder.map(function(st) {
+    const info = result.subtypes[st] || {cert:'none', basis:[]};
+    const isPrim = result.primarySubtypes.includes(st);
+    const bg     = isPrim ? '#F0FDF4' : (info.cert==='none' ? '#FAFAF8' : '');
+    const fw     = isPrim ? '700' : info.cert!=='none' ? '600' : '400';
+    const col    = certColShort[info.cert] || '#9CA3AF';
+    return '<tr style="background:' + bg + '"><td style="font-weight:' + fw + '">' + st + '</td>'
+      + '<td style="color:' + col + ';font-weight:' + (info.cert!=='none'?'700':'400') + '">'
+      + (certShort[info.cert]||'—') + '</td>'
+      + '<td style="font-family:monospace;font-size:7.5pt;color:#374151">'
+      + ((info.basis||[]).join(' ') || '—') + '</td></tr>';
+  }).join('');
+
+  // B1 適格基準
+  const eligItems = [
+    {key:'elig_sporadic',   label:'孤発性（B1-1）'},
+    {key:'elig_age_over40', label:'PSP関連症状 40歳以上（B1-2）'},
+    {key:'elig_gradual',    label:'緩徐な進行（B1-3）'},
+  ];
+  const eligHtml = eligItems.map(function(e) {
+    const val = d[e.key];
+    const ic  = val==='yes' ? '✅' : val==='no' ? '❌' : '—';
+    const col = val==='yes' ? '#16A34A' : val==='no' ? '#DC2626' : '#9CA3AF';
+    return '<tr><td class="c2" style="color:' + col + '">' + ic + '</td><td>' + e.label + '</td></tr>';
+  }).join('');
+
+  // B2/B3 除外基準サマリー
+  const hitExcl = [].concat(ABS_EXCL_DEFS, CTX_EXCL_DEFS).filter(function(e){ return d[e.key]==='yes'; });
+  const b2neg   = ABS_EXCL_DEFS.filter(function(e){ return d[e.key]==='no'; }).length;
+  const b3neg   = CTX_EXCL_DEFS.filter(function(e){ return d[e.key]==='no'; }).length;
+  const b2ans   = ABS_EXCL_DEFS.filter(function(e){ return d[e.key]!=='unknown'; }).length;
+  const b3ans   = CTX_EXCL_DEFS.filter(function(e){ return d[e.key]!=='unknown'; }).length;
+
+  let exclHtml;
+  if (hitExcl.length > 0) {
+    exclHtml = hitExcl.map(function(e) {
+      return '<tr><td class="c2" style="color:#DC2626">⚠️</td><td>' + e.code + '：' + e.label + '</td></tr>';
+    }).join('');
+  } else if (b2ans === 0 && b3ans === 0) {
+    exclHtml = '<tr><td colspan="2" style="color:#9CA3AF">未評価</td></tr>';
+  } else {
+    exclHtml = '<tr><td class="c2" style="color:#16A34A">✅</td>'
+      + '<td>B2（絶対的）：' + b2neg + '/' + ABS_EXCL_DEFS.length + '項目 非該当</td></tr>'
+      + '<tr><td class="c2" style="color:#16A34A">✅</td>'
+      + '<td>B3（状況依存）：' + b3neg + '/' + CTX_EXCL_DEFS.length + '項目 非該当</td></tr>';
+  }
+
+  // ── レポートHTML ──
+  const html = '<style>'
+    + '.pr{font-family:-apple-system,"Helvetica Neue","Hiragino Kaku Gothic ProN","Yu Gothic UI",Arial,sans-serif;'
+    + 'font-size:9pt;color:#1A1A1A;line-height:1.5;print-color-adjust:exact;-webkit-print-color-adjust:exact}'
+    + '.pr-hd{background:#2D2926;color:white;padding:7pt 10pt;display:flex;align-items:center;justify-content:space-between;border-radius:3pt 3pt 0 0}'
+    + '.pr-hd-ttl{font-size:11pt;font-weight:700;display:flex;align-items:center;gap:6pt}'
+    + '.pr-hd-badge{background:#E8960E;color:white;font-size:7.5pt;font-weight:800;padding:2pt 7pt;border-radius:3pt}'
+    + '.pr-hd-meta{font-size:7.5pt;color:rgba(255,255,255,0.6);text-align:right;line-height:1.8}'
+    + '.pr-dx{padding:8pt 11pt 7pt;border:1pt solid ' + c.border + ';border-top:3pt solid ' + c.border + ';'
+    + 'background:' + c.bg + ';margin-bottom:7pt}'
+    + '.pr-dx-lbl{font-size:7pt;font-weight:700;color:' + c.text + ';opacity:.7;text-transform:uppercase;'
+    + 'letter-spacing:.08em;margin-bottom:3pt}'
+    + '.pr-dx-val{font-size:16pt;font-weight:800;color:' + c.text + ';line-height:1.1;margin-bottom:4pt}'
+    + '.pr-dx-bas{font-size:8pt;color:' + c.text + ';opacity:.85}'
+    + '.pr-body{display:flex;gap:9pt}'
+    + '.pr-l{flex:1.05;min-width:0}.pr-r{flex:0.95;min-width:0}'
+    + '.pr-sec{margin-bottom:7pt;break-inside:avoid}'
+    + '.pr-sec-ttl{background:#2D2926;color:white;font-size:8pt;font-weight:700;'
+    + 'padding:3pt 7pt;border-radius:2pt 2pt 0 0;letter-spacing:.02em}'
+    + 'table.t{width:100%;border-collapse:collapse;font-size:8.5pt}'
+    + 'table.t tr{border-bottom:.5pt solid #E5E7EB}'
+    + 'table.t tr:last-child{border-bottom:none}'
+    + 'table.t td{padding:2.5pt 5pt;vertical-align:middle}'
+    + 'table.t thead th{background:#F3F2EF;font-weight:700;padding:3pt 5pt;'
+    + 'border-bottom:1pt solid #D1CCC4;font-size:8pt}'
+    + 'table.t tr:nth-child(even){background:#FAFAF8}'
+    + 'table.t .c1{font-family:monospace;font-weight:700;font-size:8pt;white-space:nowrap;color:#374151;width:30pt}'
+    + 'table.t .c2{width:18pt;text-align:center}'
+    + '.pr-note{margin-top:5pt;padding:4pt 7pt;background:#F9F9F8;border:.5pt solid #D1CCC4;'
+    + 'font-size:7.5pt;color:#4B5563;line-height:1.6;border-radius:2pt}'
+    + '.pr-ft{margin-top:6pt;padding:4pt 8pt;background:#FFF8EC;border:.5pt solid #F0C870;'
+    + 'border-left:3pt solid #E8960E;font-size:7pt;color:#6B4A00;line-height:1.5;border-radius:0 2pt 2pt 0}'
+    + '</style>'
+
+    + '<div class="pr">'
+
+    // ヘッダー
+    + '<div class="pr-hd">'
+    + '<div class="pr-hd-ttl"><span class="pr-hd-badge">PSP</span> 診断基準整理支援ツール</div>'
+    + '<div class="pr-hd-meta">' + dateStr
+    + (d.eval_period ? '<br><strong>' + d.eval_period + '</strong>' + (d.eval_date ? '　' + d.eval_date : '') : '')
+    + '</div>'
+    + '</div>'
+
+    // 主診断ボックス
+    + '<div class="pr-dx">'
+    + '<div class="pr-dx-lbl">MDS-PSP Criteria 2017 による主診断（' + (certLabelJa[result.primaryCertainty]||'') + '）</div>'
+    + '<div class="pr-dx-val">' + mainDxStr + '</div>'
+    + '<div class="pr-dx-bas"><strong>根拠：</strong>' + evidenceStr
+    + (otherSubtypes.length > 0 ? '　｜　<strong>同確実性の他の臨床型（MAX3次順）：</strong>' + otherSubtypes.join('，') : '')
+    + '</div></div>'
+
+    // 2カラム本体
+    + '<div class="pr-body">'
+
+    // 左カラム
+    + '<div class="pr-l">'
+    + '<div class="pr-sec"><div class="pr-sec-ttl">中核症候（12項目）</div>'
+    + '<table class="t"><thead><tr><th>コード</th><th>評価</th><th>項目名</th></tr></thead><tbody>'
+    + coreHtml + '</tbody></table></div>'
+    + '<div class="pr-sec"><div class="pr-sec-ttl">臨床的手がかり・画像所見（CC1〜CC4 / IF1〜IF2）</div>'
+    + '<table class="t"><thead><tr><th>コード</th><th>評価</th><th>項目名</th></tr></thead><tbody>'
+    + suppHtml + '</tbody></table></div>'
+    + '</div>'
+
+    // 右カラム
+    + '<div class="pr-r">'
+    + '<div class="pr-sec"><div class="pr-sec-ttl">臨床型判定（全8型 — MAXルール適用）</div>'
+    + '<table class="t"><thead><tr><th>臨床型</th><th>確実性</th><th>根拠</th></tr></thead><tbody>'
+    + subtypeHtml + '</tbody></table></div>'
+    + '<div class="pr-sec"><div class="pr-sec-ttl">B1：必須の適格基準</div>'
+    + '<table class="t"><tbody>' + eligHtml + '</tbody></table></div>'
+    + '<div class="pr-sec"><div class="pr-sec-ttl">除外基準（B2 絶対的 ＋ B3 状況依存的）</div>'
+    + '<table class="t"><tbody>' + exclHtml + '</tbody></table></div>'
+    + '<div class="pr-note"><strong>MAXルール：</strong>'
+    + 'MAX1（probable &gt; possible &gt; suggestive） → MAX3（RS &gt; OM/PI &gt; 他）の順で自動適用．'
+    + 'MAX2（診断時期）は臨床医が判断する．'
+    + '</div></div>'
+
+    + '</div>' // pr-body
+
+    // フッター
+    + '<div class="pr-ft"><strong>⚠ 免責：</strong>'
+    + '本出力はMDS-PSP Criteria (Höglinger GU et al., Movement Disorders 2017;32:853-864) への機械的マッピング結果である．'
+    + 'AI推論・確率推定は行わない．確定診断・治療方針の決定は脳神経内科専門医が総合的に判断してください．</div>'
+
+    + '</div>'; // pr-root
+
   let printDiv = document.getElementById('print-only');
   if (!printDiv) {
     printDiv = document.createElement('div');
     printDiv.id = 'print-only';
     document.body.appendChild(printDiv);
   }
-
-  // 結果HTMLをコピー（ナビボタンは除去）
-  const resultHTML = document.getElementById('result-container').innerHTML;
-  printDiv.innerHTML = resultHTML;
-  printDiv.querySelectorAll('.nav-buttons').forEach(el => el.remove());
-
+  printDiv.innerHTML = html;
   window.print();
-
-  // 印刷ダイアログを閉じた後にクリーンアップ
-  setTimeout(() => { printDiv.innerHTML = ''; }, 1500);
+  setTimeout(function(){ printDiv.innerHTML = ''; }, 2000);
 }
 
 // ============================================================
@@ -1748,8 +2409,8 @@ function copyResult() {
   t += '\n';
 
   t += '──────────────────────────────────────────────────\n';
-  t += '⚠️ 免責事項：本出力は診断基準への機械的マッピング結果です。\n';
-  t += 'AI推論・確率推定は行っていません。確定診断は必ず神経内科専門医が判断してください。\n';
+  t += '⚠️ 免責事項：本出力は診断基準への機械的マッピング結果である．\n';
+  t += 'AI推論・確率推定は行わない．確定診断は必ず脳神経内科専門医が判断してください．\n';
 
   navigator.clipboard.writeText(t).then(() => {
     const btn = document.getElementById('copy-btn');
@@ -1778,6 +2439,7 @@ function copyResult() {
 // INIT
 // ============================================================
 renderCurrentStep();
+loadFromLocalStorage(); // 前回データがあれば復元バナーを表示
 </script>
 </body>
 </html>
