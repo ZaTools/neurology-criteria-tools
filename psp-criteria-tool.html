@@ -2300,6 +2300,8 @@ function printResults() {
     // フッター
     + '<div class="pr-ft"><strong>⚠ 免責：</strong>'
     + '本ツールはMDS-PSP Criteria 2017への機械的マッピング支援ツールです．本出力は診断を確定するための根拠ではなく，入力情報と診断基準の対応を整理したものです．確定診断・治療方針の決定は，必ず脳神経内科専門医が患者を直接診察した上で総合的に判断してください．本ツールの使用に起因する診療上の結果について，開発者は一切の責任を負いません．</div>'
+    + '<div style="text-align:right;font-size:7pt;color:#9CA3AF;margin-top:4pt;letter-spacing:0.02em">'
+    + '作成：岐阜大学大学院医学系研究科 脳神経内科学分野　下郷雅也／下畑享良</div>'
 
     + '</div>'; // pr-root
 
@@ -2442,5 +2444,18 @@ function copyResult() {
 renderCurrentStep();
 loadFromLocalStorage(); // 前回データがあれば復元バナーを表示
 </script>
+
+<div style="
+  text-align:right;
+  font-size:11px;
+  color:#9CA3AF;
+  padding:10px 20px 18px;
+  max-width:900px;
+  margin:0 auto;
+  letter-spacing:0.02em;
+">
+  作成：岐阜大学大学院医学系研究科 脳神経内科学分野　下郷雅也／下畑享良
+</div>
+
 </body>
 </html>
