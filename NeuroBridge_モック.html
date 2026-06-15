@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NeuroBridge Gifu — 症状メモ（モック）</title>
+<title>NeuroBridge — 症状メモ（モック）</title>
 <style>
   :root{
     --bg:#eef3f9; --card:#fff; --ink:#16222e; --sub:#5d6e7e;
@@ -96,6 +96,13 @@
   .next:disabled{background:#a9c8e6;box-shadow:none;cursor:not-allowed}
   .back{flex:0 0 110px;background:#fff;color:var(--sub);border:2px solid var(--line);box-shadow:none}
 
+  #midout{text-align:center;margin:-4px 0 8px}
+  #midout button{background:none;border:none;color:var(--brand-d);text-decoration:underline;
+    font-size:calc(13.5px*var(--fs));cursor:pointer;padding:8px;font-weight:700}
+  .copybtn{display:inline-flex;align-items:center;gap:7px;border:2px solid var(--brand);
+    color:var(--brand);background:#fff;border-radius:30px;padding:11px 18px;
+    font-size:calc(15px*var(--fs));font-weight:800;cursor:pointer;margin-top:12px}
+  .copybtn.done{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
   .mini{font-size:calc(13px * var(--fs));color:var(--sub)}
   .note{background:#fff7ee;border:1px solid #f0d9bd;color:#7a4a1f;border-radius:12px;
     padding:12px 14px;font-size:calc(14px * var(--fs));margin:12px 0;line-height:1.6}
@@ -135,6 +142,14 @@
   .sheet .assoc .g{color:var(--sub);font-weight:700;margin-right:4px}
   .sheet .assoc .y{color:var(--pos);font-weight:800} .sheet .assoc .n{color:#6b7b8b} .sheet .assoc .u{color:var(--unk);font-weight:800}
   .sheet .quote{background:#f5f9fd;border-radius:8px;padding:9px 11px;font-size:calc(12.5px * var(--fs))}
+  .tl{display:flex;align-items:flex-start;margin:8px 0 4px}
+  .tlp{display:flex;flex-direction:column;align-items:center;text-align:center;flex:0 0 auto;max-width:34%}
+  .tlp .dot{width:14px;height:14px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 2px var(--brand)}
+  .tlp.worse .dot{background:#c0392b;box-shadow:0 0 0 2px #c0392b}
+  .tlp.now .dot{background:var(--warn);box-shadow:0 0 0 2px var(--warn)}
+  .tlp .tll{font-size:calc(11.5px*var(--fs));margin-top:5px;line-height:1.35;color:var(--sub)}
+  .tlp .tll b{color:var(--brand-d);display:block;font-size:calc(12px*var(--fs))}
+  .tlbar{flex:1 1 auto;height:3px;background:linear-gradient(90deg,var(--brand),var(--warn));margin-top:7px;min-width:22px;border-radius:2px;opacity:.55}
   .sheet .foot{border-top:2px solid var(--line);margin-top:11px;padding-top:8px;font-size:calc(11px * var(--fs));color:var(--sub)}
 
   @media (min-width:900px){
@@ -168,12 +183,18 @@
   .sresure div{display:flex;align-items:center;gap:9px} .sresure span{font-size:1.25em}
 
   @media print{
-    header,.btnrow,.no-print,.tabs,.outtabs,.side{display:none!important}
-    body{background:#fff}
+    @page{size:A4 portrait;margin:12mm}
+    header,.btnrow,.no-print,.tabs,.outtabs,.side,#midout{display:none!important}
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+    body{background:#fff;font-size:13px}
     .layout{display:block;padding:0} .main{max-width:none;padding:0}
     .card{border:none;box-shadow:none;margin:0 0 12px;padding:0}
-    .panels{grid-template-columns:1fr!important} .panel{display:block!important}
+    /* 印刷は医療者向けシートのみ（A4・1枚を目安） */
+    .panels{display:block!important}
+    .panel{display:none!important} .panel:last-child{display:block!important}
     .sheet{border:none}
+    .sheet .sec{page-break-inside:avoid;break-inside:avoid}
+    .tl{page-break-inside:avoid;break-inside:avoid}
   }
 </style>
 </head>
@@ -183,7 +204,7 @@
     <div class="hbar">
       <div class="logo">
         <div class="dot">N</div>
-        <div><div class="t">NeuroBridge Gifu</div>
+        <div><div class="t">NeuroBridge</div>
         <div class="s">神経内科につながる症状メモ（診断ではありません）</div></div>
       </div>
       <div class="fsbtns" title="文字の大きさ">
@@ -212,6 +233,7 @@
   </aside>
   <main class="main">
     <div id="app"></div>
+    <div id="midout" class="no-print"></div>
     <div class="btnrow no-print">
       <div class="inner">
         <button class="nav back" id="backBtn" onclick="prev()">← 戻る</button>
@@ -223,9 +245,11 @@
 
 <script>
 /* ===== 状態（画面内メモリのみ・保存しない） ===== */
-const D = { who:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{},3:{}},
+const D = { who:null, ageBand:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{},3:{}},
             assoc:{}, func:[], bg:{risk:[],med:null,medText:"",family:null,immune:[]},
-            free:"", familyChange:"" };
+            visited:[], tests:"", free:"", familyChange:"" };
+const AGES = ["〜39","40代","50代","60代","70代","80代","90歳〜","答えない"];
+const VISITED = ["かかりつけ医","脳神経外科","眼科","整形外科","耳鼻科","リハビリ","救急","未受診"];
 const MODS = {1:"歩行障害・転倒", 2:"脱力・しびれ", 3:"複視・眼瞼下垂・易疲労性"};
 
 const WHO = [["self","本人","🙂"],["family","家族","👪"],["care","介護者","🤝"],
@@ -300,7 +324,21 @@ function unconfirmedItems(){
     if(!D.m[2].prox||!D.common.side||miss("飲み込みにくさ・むせ")||miss("ろれつが回りにくい")||miss("息苦しさ"))
       out.push("力の入る場所・左右差・飲み込み/ろれつ/息苦しさを確認するとよいかもしれません");
   }
+  if(D.mods.includes(3)){
+    if(!D.m[3].diurnal||D.m[3].diurnal==="わからない")
+      out.push("症状の朝夕の変動・疲れによる悪化の有無を確認するとよいかもしれません");
+  }
+  if(D.common.tempo&&D.common.tempo.includes("くり返す")){
+    if(!D.common.course)
+      out.push("症状が出る頻度・持続時間・きっかけを確認するとよいかもしれません");
+  }
+  if(A["物忘れ・性格や行動の変化"]==="y")
+    out.push("物忘れ・行動の変化について、いつ頃からか・日常生活への影響を確認するとよいかもしれません");
+  if((A["尿のトラブル"]==="y"||A["立ちくらみ"]==="y")&&!D.common.tempo)
+    out.push("自律神経症状（尿・立ちくらみ）の経過を確認するとよいかもしれません");
   if(!D.common.tempo) out.push("発症が突然か・徐々にか・くり返すかを確認するとよいかもしれません");
+  if(!D.common.onset&&!D.common.onsetMonth&&!D.common.onsetDate)
+    out.push("いつから始まったか（おおよその時期）を確認するとよいかもしれません");
   return out;
 }
 
@@ -310,12 +348,18 @@ const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["common","�
   ["module","くわしく"],["assoc","一緒の症状"],["func","生活への影響"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
 const app=document.getElementById("app");
 
+let _lastPhase=null,_lastMod=null;
 function render(){
   let h="";
   const fn={intro:scrIntro,who:scrWho,symptoms:scrSymptoms,common:scrCommon,module:scrModule,
     assoc:scrAssoc,func:scrFunc,bg:scrBg,free:scrFree,confirm:scrConfirm,output:scrOutput}[phase];
   h=fn();
-  app.innerHTML=h; drawStepper(); updateNav(); window.scrollTo(0,0);
+  // 画面（フェーズ／モジュール）が変わったときだけ先頭へ。同じ画面内の操作はスクロール位置を保持
+  const screenChanged=(phase!==_lastPhase)||(phase==="module"&&modCursor!==_lastMod);
+  const sy=window.scrollY;
+  app.innerHTML=h; drawStepper(); updateNav();
+  window.scrollTo(0,screenChanged?0:sy);
+  _lastPhase=phase; _lastMod=modCursor;
 }
 
 function drawStepper(){
@@ -335,17 +379,15 @@ function drawStepper(){
 
 /* ===== 画面 ===== */
 function scrIntro(){return `<div class="card">
-  <h2>症状を整理する「メモ」を作ります</h2>
-  <p class="lead">あなたやご家族の症状を、お医者さんに伝わりやすい1枚のメモにまとめます。所要は5〜10分です。</p>
+  <h2>診察を待つ間に、症状の「メモ」を作りましょう</h2>
+  <p class="lead">あなたやご家族の症状を、お医者さんに伝わりやすい1枚のメモにまとめます。待ち時間にできて、診察がスムーズになります。所要は5〜10分です。</p>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0">
     ${infoRow("🕒","いつから・どう変化したか")}
     ${infoRow("📍","どこが・何ができないか")}
     ${infoRow("➕","一緒に出ている症状")}
     ${infoRow("🔒","入力内容は保存されません")}
   </div>
-  <div class="note">このツールは診断や治療を行うものではありません。病名は判断しません。気になる症状は必ず受診してください。</div>
-  <div class="emerg"><b>つぎの場合は、このメモを使わずすぐ救急（119）や受診を：</b><br>
-  急な片まひ／急なろれつ困難／急な意識障害／急な視野障害／突然の激しい頭痛／急な歩行不能／息苦しさ／急に進む脱力／強い飲み込みにくさ</div>
+  <div class="note">このツールは診断や治療を行うものではありません。病名は判断しません。診察を待つ間の準備としてお使いください。体調の変化など気がかりなことがあれば、受付・スタッフにお知らせください。</div>
 </div>`;}
 function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10px;font-size:calc(15px*var(--fs));
   background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:11px 13px">
@@ -354,22 +396,57 @@ function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10
 function scrWho(){return card(`
   <div class="qhead"><span class="qnum">?</span><span class="qtext">入力するのはどなたですか？</span></div>
   <div class="hint">ご家族・介護者の代理入力もできます</div>
-  <div class="opts grid">${WHO.map(([v,l,e])=>opt(v===D.who,`<span class="emo">${e}</span>${l}`,`D.who='${v}';render()`)).join("")}</div>`);}
+  <div class="opts grid">${WHO.map(([v,l,e])=>opt(v===D.who,`<span class="emo">${e}</span>${l}`,`setWho('${v}')`)).join("")}</div>
+  ${qhead("年","ご本人の年代を教えてください","任意。年齢の幅だけで大丈夫です")}
+  <div class="opts grid">${AGES.map(a=>opt(D.ageBand===a,a,`setAge('${a}')`)).join("")}</div>`);}
+function setWho(v){D.who=v;render();}
+function setAge(a){D.ageBand=(D.ageBand===a?null:a);render();}
+/* 家族・介護者など代理入力かどうか */
+function isProxy(){return D.who&&D.who!=="self";}
 
+function proxyBanner(){return isProxy()?`<div class="note" style="background:var(--brand-l);border-color:#bcd9f4;color:var(--brand-d)">👪 ${whoLabel()}として、ご本人の様子を代理で入力しています。本人が気づきにくい変化も拾えます。</div>`:"";}
 function scrSymptoms(){
   const items=SYMPTOMS.map(([nm,,e])=>opt(D.symptoms.includes(nm),`<span class="emo">${e}</span>${nm}`,
     `toggleSym('${nm.replace(/'/g,"")}')`,true)).join("");
   return card(`
-   <div class="qhead"><span class="qnum">?</span><span class="qtext">気になる症状を選んでください</span></div>
+   ${proxyBanner()}
+   <div class="qhead"><span class="qnum">?</span><span class="qtext">${isProxy()?"ご本人の気になる症状を選んでください":"気になる症状を選んでください"}</span></div>
    <div class="hint">病名がわからなくて大丈夫。いくつでも選べます。</div>
    <div class="opts grid">${items}</div>
    ${D.mods.length?`<div class="note">📋 選んだ内容に合わせて質問します：<b>${D.mods.map(i=>MODS[i]).join("、")}</b></div>`:''}`);}
 
 function scrCommon(){
   let h=`<p class="lead">🕒 <b>いつから・どんなふうに</b> を教えてください</p>`;
-  COMMON.forEach((it,i)=>{h+=qhead(i+1,it.q,it.sub)+
-    `<div class="opts grid">`+it.o.map(o=>opt(D.common[it.k]===o,o,`setCommon('${it.k}','${o.replace(/'/g,"")}')`)).join("")+`</div>`;});
+  COMMON.forEach((it,i)=>{
+    h+=qhead(i+1,it.q,it.sub)+
+      `<div class="opts grid">`+it.o.map(o=>opt(D.common[it.k]===o,o,`setCommon('${it.k}','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+    if(it.k==="onset") h+=dateBlock("onset","始まった時期が具体的にわかる場合（任意）");
+  });
+  h+=qhead("＋","その後さらに悪くなった時期はありますか？","急に悪化した・段階的に進んだ時期がわかれば（任意）");
+  h+=dateBlock("worsen","悪くなった時期");
   return card(h);}
+
+/* 日付ブロック：だいたいの年月 と 正確な日付 のどちらでも入力可 */
+function dateBlock(key,label){
+  const md=D.common[key+"Month"]||"";const dd=D.common[key+"Date"]||"";
+  const istyle="font-size:calc(15px*var(--fs));padding:7px 9px;border:1px solid var(--line);border-radius:9px;color:var(--ink)";
+  const lstyle="display:flex;flex-direction:column;gap:3px;font-size:calc(13px*var(--fs));color:var(--sub)";
+  return `<div style="background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 16px">
+    <div class="hint" style="margin:0 0 7px">📅 ${label}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+      <label style="${lstyle}">だいたいの時期（年・月）
+        <input type="month" value="${md}" onchange="setDate('${key}Month',this.value)" style="${istyle}"></label>
+      <label style="${lstyle}">正確な日付がわかれば
+        <input type="date" value="${dd}" onchange="setDate('${key}Date',this.value)" style="${istyle}"></label>
+      ${(md||dd)?`<button onclick="clearDate('${key}')" style="font-size:calc(13px*var(--fs));padding:8px 13px;border:1px solid var(--line);background:#fff;border-radius:9px;cursor:pointer;color:var(--sub)">クリア</button>`:""}
+    </div></div>`;}
+function setDate(k,v){if(v)D.common[k]=v;else delete D.common[k];render();}
+function clearDate(key){delete D.common[key+"Month"];delete D.common[key+"Date"];render();}
+/* 入力された日付を読みやすい日本語にする（正確な日付＞年月の順で優先） */
+function fmtWhen(key){const dd=D.common[key+"Date"],md=D.common[key+"Month"];
+  if(dd){const[y,m,d]=dd.split("-");return `${y}年${+m}月${+d}日`;}
+  if(md){const[y,m]=md.split("-");return `${y}年${+m}月ごろ`;}
+  return null;}
 
 function scrModule(){
   const id=D.mods[modCursor];
@@ -400,8 +477,6 @@ function scrAssoc(){
         <button class="${v==='u'?'on-u':''}" onclick="setTri('${nm}','u')">？</button></span></div>`;});
     h+=`</div>`;
   });
-  if(D.assoc["息苦しさ"]==="y"||D.assoc["飲み込みにくさ・むせ"]==="y")
-    h+=`<div class="note">⚠️ 息苦しさ・強い飲み込みにくさが急に出た場合は、早めの受診をご検討ください。</div>`;
   return card(h);}
 
 function scrFunc(){
@@ -422,11 +497,15 @@ function scrBg(){
     `<div class="opts grid">${["いる","いない","わからない"].map(o=>opt(D.bg.family===o,o,`setBg('family','${o}')`)).join("")}</div>`;
   h+=`<div class="grouplab">最近あったこと</div>
     <div class="opts grid">${BG_IMMUNE.map(o=>opt(D.bg.immune.includes(o),o,`toggleBg('immune','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+  h+=qhead("科","これまでに受診した科はありますか？","あてはまるものすべて（任意）")+
+    `<div class="opts grid">${VISITED.map(o=>opt(D.visited.includes(o),o,`toggleVisited('${o}')`,true)).join("")}</div>`;
+  h+=qhead("査","受けた検査があれば（任意）","例：頭のMRI、血液検査、筋電図 など")+
+    `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${D.tests}</textarea>`;
   return card(h);}
 
 function scrFree(){
   return card(`
-   <div class="qhead"><span class="qnum">1</span><span class="qtext">自由にお話しください<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
+   <div class="qhead"><span class="qnum">1</span><span class="qtext">${isProxy()?"ご本人の様子を自由にお話しください":"自由にお話しください"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
    <div class="hint">話し言葉のままでOK。マイクでも入力できます。</div>
    <textarea id="free" placeholder="例：去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる" oninput="D.free=this.value">${D.free}</textarea>
    <div><span class="voice" id="vbtn" onclick="toggleVoice()">🎤 声で入力する</span></div>
@@ -456,7 +535,10 @@ function scrOutput(){
        <button class="${OUT==='p'?'act':''}" onclick="OUT='p';render()">ご本人・家族向け</button>
        <button class="${OUT==='d'?'act':''}" onclick="OUT='d';render()">医療者向けシート</button>
      </div>
-     <button class="voice" style="border-color:var(--ok);color:var(--ok)" onclick="window.print()">🖨 印刷 / PDFで保存</button>
+     <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
+       <button class="voice" style="border-color:var(--ok);color:var(--ok);margin-top:0" onclick="window.print()">🖨 印刷 / PDFで保存</button>
+       <button class="copybtn" id="copyBtn" style="margin-top:0" onclick="copySheet()">📋 医療者シートをコピー</button>
+     </div>
    </div>
    <div class="panels">
      <div class="panel ${OUT==='p'?'active':''}"><div class="card">${patientView()}</div></div>
@@ -483,6 +565,7 @@ function toggleSym(nm){
 function toggleMulti(id,k,o){D.m[id][k]=D.m[id][k]||[];const a=D.m[id][k];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);render();}
 function toggleFunc(o){const i=D.func.indexOf(o);if(i>=0)D.func.splice(i,1);else D.func.push(o);render();}
 function toggleBg(f,o){const a=D.bg[f];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);render();}
+function toggleVisited(o){const i=D.visited.indexOf(o);if(i>=0)D.visited.splice(i,1);else D.visited.push(o);render();}
 function setTri(nm,v){D.assoc[nm]=(D.assoc[nm]===v?undefined:v);render();}
 function setFs(c){document.body.className=c;
   document.querySelectorAll(".fsbtns button").forEach((b,i)=>b.classList.toggle("on",
@@ -497,11 +580,18 @@ function updateNav(){
   else if(phase==="confirm"){nb.textContent="メモを作る →";nb.disabled=false;}
   else{nb.textContent="次へ →";nb.disabled=!canNext();}
   nb.style.display="";bb.textContent="← 戻る";
+  drawMidout();
+}
+/* 診察に呼ばれたら：ここまでの内容でメモを作る（F11 途中出力） */
+function drawMidout(){
+  const el=document.getElementById("midout");if(!el)return;
+  const show=!["intro","confirm","output"].includes(phase)&&D.symptoms.length>0;
+  el.innerHTML=show?`<button onclick="phase='confirm';render()">診察に呼ばれたら：ここまでの内容でメモを作る →</button>`:"";
 }
 function canNext(){
   if(phase==="who")return !!D.who;
   if(phase==="symptoms")return D.symptoms.length>0;
-  if(phase==="common")return !!D.common.onset&&!!D.common.tempo;
+  if(phase==="common")return (!!D.common.onset||!!D.common.onsetMonth||!!D.common.onsetDate)&&!!D.common.tempo;
   return true;
 }
 function next(){
@@ -555,10 +645,12 @@ function buildSummary(){
   if(D.editedSummary!==undefined)return D.editedSummary;
   const c=D.common;const parts=[];
   /* 時間軸 */
-  const onset=c.onset&&c.onset!=="わからない"?`${c.onset}から`:"発症時期は不明だが";
+  const onsetExact=fmtWhen("onset");
+  const onset=onsetExact?`${onsetExact}から`:(c.onset&&c.onset!=="わからない"?`${c.onset}から`:"発症時期は不明だが");
   const tempo=c.tempo&&c.tempo!=="わからない"?c.tempo.replace(/（.*?）/,""):null;
   const course=c.course&&c.course!=="わからない"?c.course:null;
-  let lead=onset;if(tempo)lead+=`「${tempo}」の経過`;if(course)lead+=`、現在は${course}`;
+  const worsen=fmtWhen("worsen");
+  let lead=onset;if(tempo)lead+=`「${tempo}」の経過`;if(worsen)lead+=`、${worsen}にさらに悪化`;if(course)lead+=`、現在は${course}`;
   parts.push(lead+"。");
   /* 局在の手がかり（モジュール） */
   D.mods.forEach(id=>{const m=D.m[id];let f="";
@@ -584,28 +676,44 @@ function buildSummary(){
   if(D.bg.family==="いる")bgp.push("似た症状の家族あり");
   if(D.bg.immune.length)bgp.push(D.bg.immune.join("・"));
   if(bgp.length)parts.push("背景："+bgp.join("、")+"。");
+  if(D.visited.length)parts.push("既受診："+D.visited.join("・")+"。");
+  if(D.tests)parts.push("受けた検査："+D.tests.trim());
   if(D.familyChange)parts.push("家族から見た変化："+D.familyChange.trim());
   return parts.join("\n");
 }
 function nowStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+/* 発症→悪化→現在 の横向きタイムライン。時期情報がなければ非表示 */
+function timelineHtml(){
+  const c=D.common;
+  const onset=fmtWhen("onset")||(c.onset&&c.onset!=="わからない"?c.onset:null);
+  const worsen=fmtWhen("worsen");
+  if(!onset&&!worsen)return "";
+  const pts=[{lab:"発症",sub:onset||"時期不明",cls:"start"}];
+  if(worsen)pts.push({lab:"さらに悪化",sub:worsen,cls:"worse"});
+  pts.push({lab:"現在（受診）",sub:(c.course&&c.course!=="わからない"?c.course:nowStr()),cls:"now"});
+  return `<div class="tl">`+pts.map((p,i)=>
+    `<div class="tlp ${p.cls}"><span class="dot"></span><div class="tll"><b>${p.lab}</b>${p.sub}</div></div>`+
+    (i<pts.length-1?`<div class="tlbar"></div>`:``)
+  ).join("")+`</div>`;
+}
 function whoLabel(){const f=WHO.find(w=>w[0]===D.who);return f?f[1]:"—";}
 
 function patientView(){
   const sum=(D.editedSummary!==undefined?D.editedSummary:buildSummary());const u=unconfirmedItems();
   const pos=ASSOC.filter(k=>D.assoc[k]==="y");
   return `<div class="pv">
-   <div class="showbanner">📱 受診のとき、この画面をお医者さんに見せてください</div>
+   <div class="showbanner">📱 診察のとき、この画面をお医者さんに見せてください</div>
    <h3 style="color:var(--brand-d);margin:0 0 4px">あなたの症状のまとめ</h3>
+   ${timelineHtml()?`<div class="blk"><h4>🕒 症状の経過</h4>${timelineHtml()}</div>`:""}
    <div class="blk"><h4>📝 入力内容のまとめ</h4><div>${sum.replace(/\n/g,"<br>")}</div></div>
    <div class="blk"><h4>💬 医師に伝えるとよいポイント</h4>
      <ul>
-       <li>いつから・どう変化したか（${D.common.onset||"—"} / ${D.common.tempo||"—"}）</li>
+       <li>いつから・どう変化したか（${fmtWhen("onset")||D.common.onset||"—"} / ${D.common.tempo||"—"}${fmtWhen("worsen")?`／${fmtWhen("worsen")}に悪化`:""}）</li>
        ${D.func.length?`<li>できなくなったこと：${D.func.join("・")}</li>`:""}
        ${pos.length?`<li>一緒に出ている症状：${pos.map(x=>x.replace(/（.*?）/,"")).join("・")}</li>`:""}
        ${u.map(x=>`<li>${x}</li>`).join("")}
      </ul></div>
-   <div class="emerg">急な片まひ・ろれつ困難・強い頭痛・意識がもうろう・息苦しさ・急な歩行不能などは、すぐ救急（119）や受診をご検討ください。</div>
-   <p class="mini">このまとめは入力内容を整理したものです。診断ではありません。</p></div>`;
+   <p class="mini">このまとめは入力内容を整理したものです。診断ではありません。気がかりなことがあれば受付・スタッフにお知らせください。</p></div>`;
 }
 
 function assocGrouped(){
@@ -629,13 +737,16 @@ function doctorSheet(){
   const id4="NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000);
   return `<div class="sheet">
    <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
-   <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}</div>
+   <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}</div>
 
    <div class="sec"><div class="lab">主訴</div>${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}</div>
 
-   <div class="sec"><div class="lab">① 時間軸（発症・経過）</div><div class="kv">
-     <div><b>発症時期</b><br>${c.onset||"—"}</div>
+   <div class="sec"><div class="lab">① 時間軸（発症・経過）</div>
+     ${timelineHtml()}
+     <div class="kv">
+     <div><b>発症時期</b><br>${fmtWhen("onset")?fmtWhen("onset")+(c.onset?`（${c.onset}）`:""):(c.onset||"—")}</div>
      <div><b>出方・進み方</b><br>${c.tempo||"—"}</div>
+     ${fmtWhen("worsen")?`<div><b>増悪時期</b><br>${fmtWhen("worsen")}</div>`:""}
      <div><b>その後の経過</b><br>${c.course||"—"}</div>
      <div><b>日内変動・易疲労性</b><br>${c.diurnal||"—"}</div></div></div>
 
@@ -656,15 +767,85 @@ function doctorSheet(){
        <div><b>家族歴（似た症状）</b><br>${D.bg.family||"—"}</div>
        <div><b>免疫/感染/腫瘍の手がかり</b><br>${D.bg.immune.length?D.bg.immune.join("・"):"—"}</div></div></div>
 
-   <div class="sec"><div class="lab">⑥ 未確認だが追加で聞くとよい項目（診断には言及しない）</div>
+   <div class="sec"><div class="lab">⑥ 既受診科・受けた検査</div>
+     <div class="kv">
+       <div><b>既受診科</b><br>${D.visited.length?D.visited.join("・"):"—"}</div>
+       <div><b>受けた検査</b><br>${D.tests?D.tests:"—"}</div></div></div>
+
+   <div class="sec"><div class="lab">⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）</div>
      ${u.length?("・"+u.join("<br>・")):'<span class="mini">特になし</span>'}</div>
 
-   <div class="sec"><div class="lab">⑦ 家族から見た変化 / 自由記載</div>
+   <div class="sec"><div class="lab">⑧ 家族から見た変化 / 自由記載</div>
      ${D.familyChange?`<div style="margin-bottom:5px">家族の観察：${D.familyChange}</div>`:""}
      <div class="quote">${D.free||'<span class="mini">音声・自由記載なし</span>'}</div></div>
 
    <div class="foot">本シートは患者・家族の自己申告を整理したものです。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。</div>
   </div>`;
+}
+
+/* ===== プレーンテキスト出力（カルテ転記・連携添付用） ===== */
+function plainSheet(){
+  const c=D.common;const L=[];const sep="─".repeat(40);
+  L.push(sep);
+  L.push("NeuroBridge 病歴メモ（患者・家族入力／診断ではありません）");
+  L.push(`作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}`);
+  L.push(`選択症候: ${D.symptoms.join("、")||"—"}`);
+  L.push(sep);
+  L.push(`【主訴】 ${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}`);
+  L.push("");
+  L.push("① 時間軸（発症・経過）");
+  L.push(`  発症時期: ${fmtWhen("onset")?fmtWhen("onset")+(c.onset?`（${c.onset}）`:""):(c.onset||"—")}`);
+  L.push(`  出方・進み方: ${c.tempo||"—"}`);
+  if(fmtWhen("worsen"))L.push(`  増悪時期: ${fmtWhen("worsen")}`);
+  L.push(`  その後の経過: ${c.course||"—"}　日内変動・易疲労性: ${c.diurnal||"—"}`);
+  L.push("");
+  L.push("② 局在の手がかり（部位・分布・左右差）");
+  L.push(`  左右差: ${c.side||"—"}`);
+  D.mods.forEach(id=>{const m=D.m[id];const r=[];
+    QM[id].forEach(it=>{let v=m[it.k];if(Array.isArray(v))v=v.join("・");
+      if(v)r.push(`${it.q.replace(/（.*?）/,"").replace(/？$/,"")}: ${v}`);});
+    if(r.length)L.push(`  ${MODS[id]} ─ ${r.join(" / ")}`);});
+  L.push("");
+  L.push("③ 一緒に出ている症状（＋陽性 / −陰性 / ?未確認）");
+  ASSOC_GROUPS.forEach(g=>{
+    const inner=g.items.map(nm=>{const v=D.assoc[nm];const s=nm.replace(/（.*?）/,"");
+      return s+(v==="y"?"＋":v==="n"?"−":"?");}).join(" ");
+    L.push(`  ${g.g}: ${inner}`);});
+  L.push("");
+  L.push(`④ 機能への影響: ${D.func.length?D.func.join("・"):"記載なし"}`);
+  L.push("");
+  L.push("⑤ 背景");
+  L.push(`  血管リスク・持病: ${D.bg.risk.length?D.bg.risk.join("・"):"—"}`);
+  L.push(`  薬剤: ${D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"—"}`);
+  L.push(`  家族歴（似た症状）: ${D.bg.family||"—"}　免疫/感染/腫瘍: ${D.bg.immune.length?D.bg.immune.join("・"):"—"}`);
+  L.push("");
+  L.push(`⑥ 既受診科: ${D.visited.length?D.visited.join("・"):"—"}`);
+  L.push(`  受けた検査: ${D.tests||"—"}`);
+  L.push("");
+  const u=unconfirmedItems();
+  L.push("⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）");
+  L.push(u.length?u.map(x=>"  ・"+x).join("\n"):"  特になし");
+  L.push("");
+  L.push("⑧ 家族から見た変化 / 自由記載");
+  if(D.familyChange)L.push(`  家族の観察: ${D.familyChange}`);
+  L.push(`  原文: ${D.free||"（なし）"}`);
+  L.push(sep);
+  L.push("本シートは自己申告の整理です。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。");
+  return L.join("\n");
+}
+function copySheet(){
+  const txt=plainSheet();const btn=document.getElementById("copyBtn");
+  const ok=()=>{if(!btn)return;btn.classList.add("done");btn.textContent="✓ コピーしました";
+    setTimeout(()=>{btn.classList.remove("done");btn.textContent="📋 医療者シートをコピー";},2000);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(ok).catch(()=>fallbackCopy(txt,ok));
+  }else fallbackCopy(txt,ok);
+}
+function fallbackCopy(txt,ok){
+  const ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand("copy");ok();}catch(e){alert("コピーできませんでした。手動で選択してください。");}
+  document.body.removeChild(ta);
 }
 
 render();
