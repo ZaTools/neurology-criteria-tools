@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroBridge Gifu — 症状メモ（モック）</title>
+<style>
+  :root{
+    --bg:#eef3f9; --card:#fff; --ink:#16222e; --sub:#5d6e7e;
+    --line:#dbe3ee; --brand:#1b73c4; --brand-d:#11538f; --brand-l:#eaf3fc;
+    --ok:#1f8a55; --okbg:#e7f5ee; --warn:#c4601f;
+    --pos:#1f8a55; --neg:#8a99a8; --unk:#c4601f;
+    --fs:1; --maxmain:680px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    font-size:calc(18px * var(--fs));line-height:1.75}
+  body.fs-l{--fs:1.16} body.fs-xl{--fs:1.34}
+
+  header{position:sticky;top:0;z-index:30;background:var(--brand);color:#fff;box-shadow:0 2px 10px rgba(17,83,143,.18)}
+  .hin{max-width:1120px;margin:0 auto;padding:11px 22px}
+  .hbar{display:flex;align-items:center;gap:12px}
+  .logo{display:flex;align-items:center;gap:10px;flex:1}
+  .logo .dot{width:30px;height:30px;border-radius:9px;background:#fff;color:var(--brand);
+    font-weight:800;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .logo .t{font-weight:700;font-size:17px;line-height:1.2}
+  .logo .s{font-size:11.5px;opacity:.85}
+  .fsbtns{display:flex;gap:5px;align-items:center}
+  .fsbtns .cap{font-size:11px;opacity:.85;margin-right:2px}
+  .fsbtns button{border:1px solid rgba(255,255,255,.6);background:rgba(255,255,255,.12);
+    color:#fff;border-radius:8px;cursor:pointer;padding:5px 9px;line-height:1}
+  .fsbtns button.on{background:#fff;color:var(--brand)}
+  .fsbtns .a1{font-size:12px} .fsbtns .a2{font-size:15px} .fsbtns .a3{font-size:18px}
+  #mstep{margin-top:10px}
+  #mstep .seg{display:flex;gap:4px}
+  #mstep .seg i{flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,.3)}
+  #mstep .seg i.done{background:#fff} #mstep .seg i.cur{background:#fff;opacity:.85}
+  #mstep .lab{font-size:12px;opacity:.95;margin-top:5px}
+
+  .layout{max-width:1120px;margin:0 auto;padding:0 22px;display:block}
+  .side{display:none}
+  .main{max-width:var(--maxmain);margin:0 auto;padding-bottom:140px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:22px;margin:18px 0;box-shadow:0 2px 12px rgba(20,50,80,.05)}
+  h2{font-size:calc(23px * var(--fs));margin:.1em 0 .35em;letter-spacing:.01em}
+  .lead{color:var(--sub);font-size:calc(15px * var(--fs));margin:0 0 6px}
+  .qhead{display:flex;align-items:flex-start;gap:10px;margin:24px 0 12px}
+  .qhead:first-child{margin-top:2px}
+  .qnum{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--brand-l);
+    color:var(--brand-d);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .qtext{font-weight:700;font-size:calc(18px * var(--fs));line-height:1.5}
+  .hint{color:var(--sub);font-size:calc(14px * var(--fs));margin:-6px 0 12px 38px}
+  .grouplab{font-weight:800;color:var(--brand-d);font-size:calc(14px*var(--fs));
+    margin:18px 0 8px;padding-left:10px;border-left:4px solid var(--brand)}
+
+  .opts{display:grid;grid-template-columns:1fr;gap:10px}
+  .opts.grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .opt{position:relative;border:2px solid var(--line);background:#fcfdff;border-radius:14px;
+    padding:15px 16px 15px 50px;cursor:pointer;font-size:calc(17px * var(--fs));
+    user-select:none;transition:.12s;min-height:56px;display:flex;align-items:center;gap:8px}
+  .opt:hover{border-color:#9fc3e8;background:#f7fbff}
+  .opt:active{transform:scale(.99)}
+  .opt::before{content:"";position:absolute;left:16px;top:50%;transform:translateY(-50%);
+    width:22px;height:22px;border-radius:50%;border:2px solid #c4d2e2;background:#fff}
+  .opt.sel{border-color:var(--brand);background:var(--brand-l);font-weight:700;color:var(--brand-d)}
+  .opt.sel::before{border-color:var(--brand);background:var(--brand);box-shadow:inset 0 0 0 4px #fff}
+  .opt.multi::before{border-radius:7px}
+  .opt.multi.sel::before{background:var(--brand);box-shadow:none;content:"✓";color:#fff;
+    font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center}
+  .opt .emo{font-size:1.25em;margin-left:-2px}
+
+  textarea{width:100%;min-height:84px;border:2px solid var(--line);border-radius:14px;
+    padding:14px;font-size:calc(17px * var(--fs));font-family:inherit;resize:vertical;background:#fcfdff}
+  textarea:focus{outline:none;border-color:var(--brand)}
+
+  .triwrap{display:grid;grid-template-columns:1fr;gap:10px}
+  .tri{display:flex;align-items:center;gap:8px;border:1.5px solid var(--line);
+    border-radius:14px;padding:10px 10px 10px 14px;background:#fcfdff}
+  .tri .nm{flex:1;font-size:calc(16px * var(--fs));font-weight:600}
+  .tri .grp{display:flex;gap:6px}
+  .tri button{border:1.5px solid var(--line);background:#fff;border-radius:11px;
+    padding:9px 13px;font-size:calc(14px * var(--fs));cursor:pointer;color:var(--sub);font-weight:700;min-width:54px}
+  .tri button.on-y{background:var(--pos);color:#fff;border-color:var(--pos)}
+  .tri button.on-n{background:#6b7b8b;color:#fff;border-color:#6b7b8b}
+  .tri button.on-u{background:var(--unk);color:#fff;border-color:var(--unk)}
+
+  .btnrow{position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:linear-gradient(180deg,rgba(238,243,249,0),rgba(238,243,249,.97) 28%);padding:16px}
+  .btnrow .inner{max-width:var(--maxmain);margin:0 auto;display:flex;gap:12px}
+  button.nav{border:none;border-radius:14px;padding:17px;font-size:calc(18px * var(--fs));
+    font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(27,115,196,.25)}
+  .next{flex:1;background:var(--brand);color:#fff}
+  .next:disabled{background:#a9c8e6;box-shadow:none;cursor:not-allowed}
+  .back{flex:0 0 110px;background:#fff;color:var(--sub);border:2px solid var(--line);box-shadow:none}
+
+  .mini{font-size:calc(13px * var(--fs));color:var(--sub)}
+  .note{background:#fff7ee;border:1px solid #f0d9bd;color:#7a4a1f;border-radius:12px;
+    padding:12px 14px;font-size:calc(14px * var(--fs));margin:12px 0;line-height:1.6}
+  .emerg{background:#fdecec;border:1px solid #f1b9b9;color:#9a2a2a;border-radius:12px;
+    padding:12px 14px;font-size:calc(13.5px * var(--fs));margin:14px 0;line-height:1.65}
+  .emerg b{color:#8a1f1f}
+
+  .voice{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--brand);
+    color:var(--brand);background:#fff;border-radius:30px;padding:11px 18px;
+    font-size:calc(15px * var(--fs));font-weight:800;cursor:pointer;margin-top:12px}
+  .voice.rec{background:var(--brand);color:#fff;animation:p 1s infinite}
+  @keyframes p{50%{opacity:.6}}
+  .ai-tag{display:inline-block;background:var(--brand-l);color:var(--brand-d);
+    font-size:calc(11px * var(--fs));padding:2px 9px;border-radius:20px;margin-left:6px;font-weight:700}
+
+  .tabs{display:flex;gap:8px;margin:6px 0 4px;background:#e2eaf4;padding:5px;border-radius:14px}
+  .tabs button{flex:1;border:none;background:transparent;border-radius:10px;
+    padding:12px;font-size:calc(15px * var(--fs));font-weight:800;cursor:pointer;color:var(--sub)}
+  .tabs button.act{background:#fff;color:var(--brand-d);box-shadow:0 2px 8px rgba(20,50,80,.1)}
+  .panels{display:grid;grid-template-columns:1fr;gap:0}
+  .panel{display:none}.panel.active{display:block}
+  .showbanner{background:var(--okbg);border:1px solid #b7e0c8;color:#155c38;border-radius:12px;
+    padding:12px 14px;font-size:calc(14px * var(--fs));display:flex;align-items:center;gap:8px;margin-bottom:12px}
+
+  .pv .blk{margin:14px 0}
+  .pv .blk h4{margin:0 0 6px;font-size:calc(16px * var(--fs));color:var(--brand-d);display:flex;align-items:center;gap:7px}
+  .pv ul{margin:6px 0;padding-left:22px} .pv li{margin:3px 0}
+
+  .sheet{background:#fff;border:1px solid #c8d3e0;border-radius:10px;padding:18px;font-size:calc(13.5px * var(--fs));line-height:1.55}
+  .sheet h3{margin:0 0 2px;font-size:calc(15px * var(--fs));color:var(--brand-d)}
+  .sheet .meta{color:var(--sub);font-size:calc(11.5px * var(--fs));border-bottom:2px solid var(--line);padding-bottom:8px;margin-bottom:9px}
+  .sheet .sec{margin:10px 0}
+  .sheet .lab{font-weight:800;color:var(--brand-d);font-size:calc(12.5px * var(--fs));border-left:4px solid var(--brand);padding-left:8px;margin-bottom:4px}
+  .sheet .kv{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:calc(12.5px * var(--fs))}
+  .sheet .kv b{color:var(--sub);font-weight:600}
+  .sheet .assoc{font-size:calc(12.5px * var(--fs))}
+  .sheet .assoc .g{color:var(--sub);font-weight:700;margin-right:4px}
+  .sheet .assoc .y{color:var(--pos);font-weight:800} .sheet .assoc .n{color:#6b7b8b} .sheet .assoc .u{color:var(--unk);font-weight:800}
+  .sheet .quote{background:#f5f9fd;border-radius:8px;padding:9px 11px;font-size:calc(12.5px * var(--fs))}
+  .sheet .foot{border-top:2px solid var(--line);margin-top:11px;padding-top:8px;font-size:calc(11px * var(--fs));color:var(--sub)}
+
+  @media (min-width:900px){
+    body{--maxmain:720px}
+    #mstep{display:none}
+    .layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:34px;align-items:start;padding:30px 30px 0}
+    .side{display:block;position:sticky;top:96px}
+    .main{margin:0;max-width:760px;padding-bottom:40px}
+    .card{padding:28px}
+    h2{font-size:calc(26px * var(--fs))}
+    .btnrow{position:static;background:none;padding:8px 0 40px}
+    .btnrow .inner{max-width:760px;justify-content:flex-end}
+    .next{flex:0 0 auto;min-width:220px}
+    .outtabs{display:none}
+    .panels{grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+    .panel{display:block!important}.panel .card{margin-top:0}
+  }
+  @media (min-width:1180px){ .layout{max-width:1240px} .main{max-width:820px} }
+
+  .scard{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 2px 12px rgba(20,50,80,.05)}
+  .scard h3{margin:0 0 4px;font-size:15px;color:var(--brand-d)}
+  .scard .sub{font-size:12px;color:var(--sub);margin-bottom:12px}
+  .vstep{display:flex;flex-direction:column;gap:2px}
+  .vstep .it{display:flex;align-items:center;gap:12px;padding:8px 8px;border-radius:11px;color:var(--sub);font-weight:600;font-size:14px}
+  .vstep .it .c{width:28px;height:28px;border-radius:50%;border:2px solid #c8d6e6;background:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:0 0 auto}
+  .vstep .it.cur{background:var(--brand-l);color:var(--brand-d)}
+  .vstep .it.cur .c{border-color:var(--brand);background:var(--brand);color:#fff}
+  .vstep .it.done{color:var(--ink)} .vstep .it.done .c{border-color:var(--ok);background:var(--ok);color:#fff}
+  .sresure{margin-top:14px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--sub)}
+  .sresure div{display:flex;align-items:center;gap:9px} .sresure span{font-size:1.25em}
+
+  @media print{
+    header,.btnrow,.no-print,.tabs,.outtabs,.side{display:none!important}
+    body{background:#fff}
+    .layout{display:block;padding:0} .main{max-width:none;padding:0}
+    .card{border:none;box-shadow:none;margin:0 0 12px;padding:0}
+    .panels{grid-template-columns:1fr!important} .panel{display:block!important}
+    .sheet{border:none}
+  }
+</style>
+</head>
+<body class="fs-l">
+<header>
+  <div class="hin">
+    <div class="hbar">
+      <div class="logo">
+        <div class="dot">N</div>
+        <div><div class="t">NeuroBridge Gifu</div>
+        <div class="s">神経内科につながる症状メモ（診断ではありません）</div></div>
+      </div>
+      <div class="fsbtns" title="文字の大きさ">
+        <span class="cap">文字</span>
+        <button class="a1" onclick="setFs('')">あ</button>
+        <button class="a2 on" onclick="setFs('fs-l')">あ</button>
+        <button class="a3" onclick="setFs('fs-xl')">あ</button>
+      </div>
+    </div>
+    <div id="mstep"></div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <div class="scard">
+      <h3>入力の流れ</h3>
+      <div class="sub">5〜10分でおわります</div>
+      <div class="vstep" id="dstep"></div>
+      <div class="sresure">
+        <div><span>🎤</span>声でも入力できます</div>
+        <div><span>👪</span>家族の代理入力もOK</div>
+        <div><span>🔒</span>入力内容は保存されません</div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <div id="app"></div>
+    <div class="btnrow no-print">
+      <div class="inner">
+        <button class="nav back" id="backBtn" onclick="prev()">← 戻る</button>
+        <button class="nav next" id="nextBtn" onclick="next()">次へ →</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ===== 状態（画面内メモリのみ・保存しない） ===== */
+const D = { who:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{},3:{}},
+            assoc:{}, func:[], bg:{risk:[],med:null,medText:"",family:null,immune:[]},
+            free:"", familyChange:"" };
+const MODS = {1:"歩行障害・転倒", 2:"脱力・しびれ", 3:"複視・眼瞼下垂・易疲労性"};
+
+const WHO = [["self","本人","🙂"],["family","家族","👪"],["care","介護者","🤝"],
+             ["med","医療者","🩺"],["rehab","リハビリ職","💪"],["other","その他","✏️"]];
+
+const SYMPTOMS = [
+  ["歩きにくい",1,"🚶"],["転びやすい",1,"⚠️"],["力が入らない",2,"💪"],["しびれる",2,"✋"],
+  ["飲み込みにくい",0,"🍵"],["ろれつが回らない",0,"💬"],["ものが二重に見える",3,"👀"],
+  ["まぶたが下がる",3,"😴"],["めまい・ふらつき",0,"🌀"],["疲れると悪くなる",3,"🔋"],
+  ["家族から見て動き・表情が変わった",0,"🔎"],["その他",0,"➕"],
+];
+
+/* === 時間軸（いつから・突然か進行性か発作性か・経過） === */
+const COMMON = [
+  {k:"onset",q:"いつから始まりましたか？",sub:"だいたいで大丈夫です",o:["今日","数日前","1〜2週間前","1か月前","数か月前","1年以上前","わからない"]},
+  {k:"tempo",q:"どんなふうに始まりましたか？",sub:"いちばん近いもの（突然・徐々に・くり返す）",o:["突然（秒〜分で）","急に（時間〜数日で）","だんだん（週〜月で進む）","ゆっくり（年単位で進む）","出たり治ったりをくり返す","一度出て今は落ち着いた","わからない"]},
+  {k:"course",q:"その後の変化は？",o:["悪くなってきている","変わらない","良くなったり悪くなったり","段階的に悪化","良くなってきた","わからない"]},
+  {k:"side",q:"左右の差はありますか？",sub:"どちら側が強いか",o:["右が強い","左が強い","両側","左右差なし","わからない"]},
+  {k:"diurnal",q:"時間帯や疲れで変わりますか？",sub:"日内変動・易疲労性",o:["朝は良く夕方に悪化","使うと悪化・休むと改善","一日中同じ","わからない"]},
+];
+
+/* === 一緒に出ている症状（局在の手がかり：部位ごとにグループ化） === */
+const ASSOC_GROUPS = [
+  {g:"目・顔のうごき", items:["ものが二重に見える","まぶたが下がる","顔がゆがむ・動きにくい"]},
+  {g:"話す・飲み込む・息", items:["ろれつが回りにくい","飲み込みにくさ・むせ","息苦しさ"]},
+  {g:"感覚・自律神経", items:["しびれ・感覚の鈍さ","尿のトラブル","便秘","立ちくらみ"]},
+  {g:"頭のはたらき・その他", items:["物忘れ・性格や行動の変化","手のふるえ"]},
+];
+const ASSOC = ASSOC_GROUPS.flatMap(g=>g.items);
+
+/* === 機能への影響（歩行・嚥下・排尿・認知・ADL） === */
+const FUNC = ["一人で歩く","外出・買い物","階段の上り下り","食事・飲み込み",
+  "トイレ（排尿・排便）","入浴・着替え","字を書く・ボタン・はし","会話","仕事・家事","物事の段取り・記憶"];
+
+/* === 症候別モジュール（どこが・何ができないか） === */
+const QM = {
+ 1:[
+  {k:"what",q:"歩くときに起きていることは？",sub:"あてはまるものすべて",multi:true,o:["ふらつく","足が出ない・すくむ","片足を引きずる","体が傾く","つまずきやすい","階段がこわい","立ち上がりにくい"]},
+  {k:"fall",q:"転んだことはありますか？",o:["なし","1〜2回","3回以上","数えきれない"]},
+  {k:"falldir",q:"転び方の傾向は？",o:["前のめり","後ろ向き","横向き","つまずいて","一定しない","わからない"]},
+  {k:"ortho",q:"整形外科の治療で良くなりましたか？",o:["受けて良くなった","受けたが変わらない","受けていない","わからない"]},
+ ],
+ 2:[
+  {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた"]},
+  {k:"prox",q:"力が入りにくい・症状が強いのは？",sub:"からだのどのあたりか",o:["肩・股に近い側","手足の先","両方","わからない"]},
+  {k:"area",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:["顔","片腕","両腕","片脚","両脚","体幹","手足の先（手袋・くつ下のように）"]},
+  {k:"adl",q:"やりにくくなった動作は？",sub:"あてはまるものすべて",multi:true,o:["階段","立ち上がり","箸","ボタン","ペットボトル","字を書く"]},
+ ],
+ 3:[
+  {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい"]},
+  {k:"double",q:"二重の見え方は？",o:["横並び","上下","ななめ","片目を閉じると消える","二重ではない"]},
+  {k:"diurnal",q:"朝と夕方で変わりますか？",sub:"とても大切な質問です",o:["朝は軽く夕方に悪化","使うと悪化・休むと改善","一日中同じ","わからない"]},
+  {k:"lid",q:"まぶたの様子は？",o:["片側が下がる","両側が下がる","変動する","下がらない"]},
+ ],
+};
+
+/* === 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍） === */
+const BG_RISK=["高血圧","糖尿病","コレステロール高め","不整脈・心房細動","脳卒中・心筋梗塞をしたことがある","たばこを吸う"];
+const BG_IMMUNE=["最近の発熱・感染","体重が減った","がんの治療歴・指摘あり","予防接種・手術のあとから"];
+
+function unconfirmedItems(){
+  const out=[];const A=D.assoc;const miss=n=>!A[n]||A[n]==="u";
+  if(D.mods.includes(3)||D.symptoms.includes("ものが二重に見える")||D.symptoms.includes("まぶたが下がる")){
+    if(miss("飲み込みにくさ・むせ")||miss("ろれつが回りにくい")||miss("息苦しさ"))
+      out.push("飲み込みにくさ・ろれつ・息苦しさの有無を確認するとよいかもしれません");
+  }
+  if(D.mods.includes(1)){
+    if(!D.m[1].falldir||!D.common.tempo||miss("尿のトラブル"))
+      out.push("転び方・進み方・尿のトラブルの有無を確認するとよいかもしれません");
+  }
+  if(D.mods.includes(2)){
+    if(!D.m[2].prox||!D.common.side||miss("飲み込みにくさ・むせ")||miss("ろれつが回りにくい")||miss("息苦しさ"))
+      out.push("力の入る場所・左右差・飲み込み/ろれつ/息苦しさを確認するとよいかもしれません");
+  }
+  if(!D.common.tempo) out.push("発症が突然か・徐々にか・くり返すかを確認するとよいかもしれません");
+  return out;
+}
+
+/* ===== フロー ===== */
+let phase="intro",modCursor=0,OUT='p';
+const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["common","時間の経過"],
+  ["module","くわしく"],["assoc","一緒の症状"],["func","生活への影響"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
+const app=document.getElementById("app");
+
+function render(){
+  let h="";
+  const fn={intro:scrIntro,who:scrWho,symptoms:scrSymptoms,common:scrCommon,module:scrModule,
+    assoc:scrAssoc,func:scrFunc,bg:scrBg,free:scrFree,confirm:scrConfirm,output:scrOutput}[phase];
+  h=fn();
+  app.innerHTML=h; drawStepper(); updateNav(); window.scrollTo(0,0);
+}
+
+function drawStepper(){
+  const idx=STEPS.findIndex(s=>s[0]===phase);const finished=phase==="output";
+  const ms=document.getElementById("mstep");
+  if(phase==="intro"){ms.innerHTML="";}
+  else if(finished){ms.innerHTML=`<div class="seg">${STEPS.map(()=>'<i class="done"></i>').join("")}</div><div class="lab">✓ 完成しました</div>`;}
+  else {ms.innerHTML=`<div class="seg">${STEPS.map((s,i)=>`<i class="${i<idx?'done':i===idx?'cur':''}"></i>`).join("")}</div>
+    <div class="lab">ステップ ${idx+1} / ${STEPS.length}　・　${STEPS[idx][1]}</div>`;}
+  const ds=document.getElementById("dstep");
+  ds.innerHTML=STEPS.map((s,i)=>{
+    let cls=finished?"done":(i<idx?"done":i===idx?"cur":"");
+    const mark=(cls==="done")?"✓":(i+1);
+    return `<div class="it ${cls}"><span class="c">${mark}</span>${s[1]}</div>`;
+  }).join("");
+}
+
+/* ===== 画面 ===== */
+function scrIntro(){return `<div class="card">
+  <h2>症状を整理する「メモ」を作ります</h2>
+  <p class="lead">あなたやご家族の症状を、お医者さんに伝わりやすい1枚のメモにまとめます。所要は5〜10分です。</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0">
+    ${infoRow("🕒","いつから・どう変化したか")}
+    ${infoRow("📍","どこが・何ができないか")}
+    ${infoRow("➕","一緒に出ている症状")}
+    ${infoRow("🔒","入力内容は保存されません")}
+  </div>
+  <div class="note">このツールは診断や治療を行うものではありません。病名は判断しません。気になる症状は必ず受診してください。</div>
+  <div class="emerg"><b>つぎの場合は、このメモを使わずすぐ救急（119）や受診を：</b><br>
+  急な片まひ／急なろれつ困難／急な意識障害／急な視野障害／突然の激しい頭痛／急な歩行不能／息苦しさ／急に進む脱力／強い飲み込みにくさ</div>
+</div>`;}
+function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10px;font-size:calc(15px*var(--fs));
+  background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:11px 13px">
+  <span style="font-size:1.4em">${e}</span><span>${t}</span></div>`;}
+
+function scrWho(){return card(`
+  <div class="qhead"><span class="qnum">?</span><span class="qtext">入力するのはどなたですか？</span></div>
+  <div class="hint">ご家族・介護者の代理入力もできます</div>
+  <div class="opts grid">${WHO.map(([v,l,e])=>opt(v===D.who,`<span class="emo">${e}</span>${l}`,`D.who='${v}';render()`)).join("")}</div>`);}
+
+function scrSymptoms(){
+  const items=SYMPTOMS.map(([nm,,e])=>opt(D.symptoms.includes(nm),`<span class="emo">${e}</span>${nm}`,
+    `toggleSym('${nm.replace(/'/g,"")}')`,true)).join("");
+  return card(`
+   <div class="qhead"><span class="qnum">?</span><span class="qtext">気になる症状を選んでください</span></div>
+   <div class="hint">病名がわからなくて大丈夫。いくつでも選べます。</div>
+   <div class="opts grid">${items}</div>
+   ${D.mods.length?`<div class="note">📋 選んだ内容に合わせて質問します：<b>${D.mods.map(i=>MODS[i]).join("、")}</b></div>`:''}`);}
+
+function scrCommon(){
+  let h=`<p class="lead">🕒 <b>いつから・どんなふうに</b> を教えてください</p>`;
+  COMMON.forEach((it,i)=>{h+=qhead(i+1,it.q,it.sub)+
+    `<div class="opts grid">`+it.o.map(o=>opt(D.common[it.k]===o,o,`setCommon('${it.k}','${o.replace(/'/g,"")}')`)).join("")+`</div>`;});
+  return card(h);}
+
+function scrModule(){
+  const id=D.mods[modCursor];
+  let h=`<div style="display:inline-block;background:var(--brand-l);color:var(--brand-d);font-weight:800;
+    border-radius:20px;padding:5px 14px;font-size:calc(14px*var(--fs))">📍 ${id}．${MODS[id]}　(${modCursor+1}/${D.mods.length})</div>
+    <p class="lead" style="margin-top:8px">どこが・何ができなくなったかを教えてください</p>`;
+  QM[id].forEach((it,i)=>{
+    h+=qhead(i+1,it.q,it.sub);
+    if(it.multi){
+      h+=`<div class="opts grid">`+it.o.map(o=>{const arr=D.m[id][it.k]||[];
+        return opt(arr.includes(o),o,`toggleMulti(${id},'${it.k}','${o.replace(/'/g,"")}')`,true);}).join("")+`</div>`;
+    }else{
+      h+=`<div class="opts grid">`+it.o.map(o=>opt(D.m[id][it.k]===o,o,
+        `setM(${id},'${it.k}','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+    }
+  });
+  return card(h);}
+
+function scrAssoc(){
+  let h=`<div class="qhead"><span class="qnum">➕</span><span class="qtext">一緒に出ている症状はありますか？</span></div>
+    <div class="hint">わかる範囲で。「？」を選んでもOK（医師が確認します）</div>`;
+  ASSOC_GROUPS.forEach(grp=>{
+    h+=`<div class="grouplab">${grp.g}</div><div class="triwrap">`;
+    grp.items.forEach(nm=>{const v=D.assoc[nm];
+      h+=`<div class="tri"><span class="nm">${nm}</span><span class="grp">
+        <button class="${v==='y'?'on-y':''}" onclick="setTri('${nm}','y')">はい</button>
+        <button class="${v==='n'?'on-n':''}" onclick="setTri('${nm}','n')">いいえ</button>
+        <button class="${v==='u'?'on-u':''}" onclick="setTri('${nm}','u')">？</button></span></div>`;});
+    h+=`</div>`;
+  });
+  if(D.assoc["息苦しさ"]==="y"||D.assoc["飲み込みにくさ・むせ"]==="y")
+    h+=`<div class="note">⚠️ 息苦しさ・強い飲み込みにくさが急に出た場合は、早めの受診をご検討ください。</div>`;
+  return card(h);}
+
+function scrFunc(){
+  return card(`
+   <div class="qhead"><span class="qnum">📍</span><span class="qtext">できなくなった・やりにくくなったことは？</span></div>
+   <div class="hint">日常生活で困っていることを選んでください（複数可・なければ次へ）</div>
+   <div class="opts grid">${FUNC.map(o=>opt(D.func.includes(o),o,`toggleFunc('${o.replace(/'/g,"")}')`,true)).join("")}</div>`);}
+
+function scrBg(){
+  let h=`<p class="lead">🩺 持病やお薬など、<b>背景</b>を教えてください（任意）</p>`;
+  h+=`<div class="grouplab">持病・体質</div>
+    <div class="opts grid">${BG_RISK.map(o=>opt(D.bg.risk.includes(o),o,`toggleBg('risk','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+  h+=qhead("薬","飲んでいるお薬はありますか？")+
+    `<div class="opts grid">${["飲んでいる薬がある","最近始めた・変えた薬がある","飲んでいない","わからない"]
+      .map(o=>opt(D.bg.med===o,o,`setBg('med','${o.replace(/'/g,"")}')`)).join("")}</div>
+    <textarea id="medt" placeholder="お薬の名前がわかれば（任意）" oninput="D.bg.medText=this.value">${D.bg.medText}</textarea>`;
+  h+=qhead("家","似た症状の家族はいますか？")+
+    `<div class="opts grid">${["いる","いない","わからない"].map(o=>opt(D.bg.family===o,o,`setBg('family','${o}')`)).join("")}</div>`;
+  h+=`<div class="grouplab">最近あったこと</div>
+    <div class="opts grid">${BG_IMMUNE.map(o=>opt(D.bg.immune.includes(o),o,`toggleBg('immune','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+  return card(h);}
+
+function scrFree(){
+  return card(`
+   <div class="qhead"><span class="qnum">1</span><span class="qtext">自由にお話しください<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
+   <div class="hint">話し言葉のままでOK。マイクでも入力できます。</div>
+   <textarea id="free" placeholder="例：去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる" oninput="D.free=this.value">${D.free}</textarea>
+   <div><span class="voice" id="vbtn" onclick="toggleVoice()">🎤 声で入力する</span></div>
+   <div class="mini" id="vstat" style="margin-top:6px"></div>
+   <div class="qhead"><span class="qnum">2</span><span class="qtext">ご家族から見た変化<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
+   <div class="hint">本人が気づきにくい変化を、見ている方の言葉で</div>
+   <textarea id="fc" placeholder="例：表情が乏しくなった、声が小さくなった、動きが遅くなった" oninput="D.familyChange=this.value">${D.familyChange}</textarea>
+   <div class="qhead"><span class="qnum">3</span><span class="qtext">医師に伝えたいこと・困っていること<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
+   <textarea id="trouble" placeholder="例：転びそうで外出がこわい" oninput="D.common.trouble=this.value">${D.common.trouble||""}</textarea>`);}
+
+function scrConfirm(){
+  const s=buildSummary();const u=unconfirmedItems();
+  let unc=u.length?`<div class="note"><b>💡 医師に追加で確認するとよい項目（参考）</b><br>
+    ${u.map(x=>"・"+x).join("<br>")}<br><span class="mini">※診断ではありません。聞き漏れを減らすための参考です。</span></div>`:"";
+  return card(`
+   <div class="qhead"><span class="qnum">✓</span><span class="qtext">この内容でよろしいですか？</span></div>
+   <div class="hint">AIが整理した文です <span class="ai-tag">AI整理・診断ではありません</span>。直したい所は書き直せます。</div>
+   <textarea id="sumedit" style="min-height:160px" oninput="D.editedSummary=this.value">${s}</textarea>
+   ${unc}
+   <div class="mini" style="margin-top:10px">「メモを作る」で、ご本人向けの説明と、医師向けシートを作成します。</div>`);}
+
+function scrOutput(){
+  return `<div class="card no-print" style="text-align:center">
+     <h2 style="margin:.1em 0">✅ メモができました</h2>
+     <p class="lead" style="margin:0 0 12px">下のボタンで切り替え・印刷ができます（パソコンでは左右に並びます）</p>
+     <div class="tabs outtabs">
+       <button class="${OUT==='p'?'act':''}" onclick="OUT='p';render()">ご本人・家族向け</button>
+       <button class="${OUT==='d'?'act':''}" onclick="OUT='d';render()">医療者向けシート</button>
+     </div>
+     <button class="voice" style="border-color:var(--ok);color:var(--ok)" onclick="window.print()">🖨 印刷 / PDFで保存</button>
+   </div>
+   <div class="panels">
+     <div class="panel ${OUT==='p'?'active':''}"><div class="card">${patientView()}</div></div>
+     <div class="panel ${OUT==='d'?'active':''}"><div class="card">${doctorSheet()}</div></div>
+   </div>
+   <div class="card no-print" style="text-align:center">
+     <p class="mini">入力内容は保存されていません。この画面を閉じると消えます。</p>
+     <button class="voice" onclick="location.reload()">↺ 最初からやり直す</button></div>`;}
+
+/* ===== 部品 ===== */
+function card(inner){return `<div class="card">${inner}</div>`;}
+function qhead(n,q,sub){return `<div class="qhead"><span class="qnum">${n}</span>
+  <span class="qtext">${q}${sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${sub}</span>`:""}</span></div>`;}
+function opt(sel,label,onclick,multi){return `<div class="opt ${multi?'multi':''} ${sel?'sel':''}" onclick="${onclick}">${label}</div>`;}
+
+function setCommon(k,v){D.common[k]=v;render();}
+function setM(id,k,v){D.m[id][k]=v;render();}
+function setBg(f,v){D.bg[f]=v;render();}
+function toggleSym(nm){
+  const i=D.symptoms.indexOf(nm);if(i>=0)D.symptoms.splice(i,1);else D.symptoms.push(nm);
+  const set=new Set();D.symptoms.forEach(s=>{const f=SYMPTOMS.find(x=>x[0]===s);if(f&&f[1])set.add(f[1]);});
+  D.mods=[...set].sort();render();
+}
+function toggleMulti(id,k,o){D.m[id][k]=D.m[id][k]||[];const a=D.m[id][k];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);render();}
+function toggleFunc(o){const i=D.func.indexOf(o);if(i>=0)D.func.splice(i,1);else D.func.push(o);render();}
+function toggleBg(f,o){const a=D.bg[f];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);render();}
+function setTri(nm,v){D.assoc[nm]=(D.assoc[nm]===v?undefined:v);render();}
+function setFs(c){document.body.className=c;
+  document.querySelectorAll(".fsbtns button").forEach((b,i)=>b.classList.toggle("on",
+    (c===""&&i===0)||(c==="fs-l"&&i===1)||(c==="fs-xl"&&i===2)));}
+
+/* ===== ナビ ===== */
+function updateNav(){
+  const nb=document.getElementById("nextBtn"),bb=document.getElementById("backBtn");
+  bb.style.visibility=phase==="intro"?"hidden":"visible";
+  if(phase==="intro"){nb.textContent="同意して始める →";nb.disabled=false;}
+  else if(phase==="output"){nb.style.display="none";bb.textContent="← 確認にもどる";return;}
+  else if(phase==="confirm"){nb.textContent="メモを作る →";nb.disabled=false;}
+  else{nb.textContent="次へ →";nb.disabled=!canNext();}
+  nb.style.display="";bb.textContent="← 戻る";
+}
+function canNext(){
+  if(phase==="who")return !!D.who;
+  if(phase==="symptoms")return D.symptoms.length>0;
+  if(phase==="common")return !!D.common.onset&&!!D.common.tempo;
+  return true;
+}
+function next(){
+  if(phase==="intro")phase="who";
+  else if(phase==="who")phase="symptoms";
+  else if(phase==="symptoms")phase="common";
+  else if(phase==="common"){if(D.mods.length){phase="module";modCursor=0;}else phase="assoc";}
+  else if(phase==="module"){if(modCursor<D.mods.length-1)modCursor++;else phase="assoc";}
+  else if(phase==="assoc")phase="func";
+  else if(phase==="func")phase="bg";
+  else if(phase==="bg")phase="free";
+  else if(phase==="free")phase="confirm";
+  else if(phase==="confirm")phase="output";
+  render();
+}
+function prev(){
+  if(phase==="who")phase="intro";
+  else if(phase==="symptoms")phase="who";
+  else if(phase==="common")phase="symptoms";
+  else if(phase==="module"){if(modCursor>0)modCursor--;else phase="common";}
+  else if(phase==="assoc"){phase=D.mods.length?"module":"common";modCursor=Math.max(0,D.mods.length-1);}
+  else if(phase==="func")phase="assoc";
+  else if(phase==="bg")phase="func";
+  else if(phase==="free")phase="bg";
+  else if(phase==="confirm")phase="free";
+  else if(phase==="output")phase="confirm";
+  render();
+}
+
+/* ===== 音声入力 ===== */
+let rec=null,recOn=false;
+function toggleVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const stat=document.getElementById("vstat");
+  if(!SR){stat.textContent="※このブラウザは音声入力に未対応です。文字で入力してください。";return;}
+  if(recOn){rec.stop();return;}
+  rec=new SR();rec.lang="ja-JP";rec.interimResults=true;rec.continuous=true;
+  let base=D.free?D.free+" ":"";
+  rec.onstart=()=>{recOn=true;const b=document.getElementById("vbtn");
+    b.classList.add("rec");b.textContent="● 録音中（タップで停止）";stat.textContent="お話しください…";};
+  rec.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    D.free=base+t;const f=document.getElementById("free");if(f)f.value=D.free;};
+  rec.onerror=e=>{stat.textContent="音声認識エラー: "+e.error;};
+  rec.onend=()=>{recOn=false;const b=document.getElementById("vbtn");
+    if(b){b.classList.remove("rec");b.textContent="🎤 声で入力する";}stat.textContent="（停止しました。文字での修正もできます）";};
+  rec.start();
+}
+
+/* ===== AI整理（モック：中立テンプレート。4軸で要約） ===== */
+function buildSummary(){
+  if(D.editedSummary!==undefined)return D.editedSummary;
+  const c=D.common;const parts=[];
+  /* 時間軸 */
+  const onset=c.onset&&c.onset!=="わからない"?`${c.onset}から`:"発症時期は不明だが";
+  const tempo=c.tempo&&c.tempo!=="わからない"?c.tempo.replace(/（.*?）/,""):null;
+  const course=c.course&&c.course!=="わからない"?c.course:null;
+  let lead=onset;if(tempo)lead+=`「${tempo}」の経過`;if(course)lead+=`、現在は${course}`;
+  parts.push(lead+"。");
+  /* 局在の手がかり（モジュール） */
+  D.mods.forEach(id=>{const m=D.m[id];let f="";
+    if(id===1){const w=(m.what||[]).join("・");if(w)f+=`歩行に関して${w}。`;
+      if(m.fall&&m.fall!=="なし")f+=`転倒は${m.fall}（${m.falldir||"方向不明"}）。`;
+      if(m.ortho&&m.ortho.includes("変わらない"))f+="整形外科的治療で改善乏しい。";}
+    else if(id===2){const w=(m.main||[]).join("・");const ar=(m.area||[]).join("・");
+      if(w)f+=`${w}を${ar?ar+"に":""}自覚。`;if(m.prox)f+=`分布は${m.prox}。`;}
+    else if(id===3){const w=(m.main||[]).join("・");if(w)f+=`${w}を自覚。`;
+      if(m.diurnal&&m.diurnal!=="わからない")f+=`日内変動「${m.diurnal}」。`;
+      if(m.lid&&m.lid!=="下がらない")f+=`まぶたは${m.lid}。`;}
+    if(f)parts.push(f);});
+  if(c.side&&!["左右差なし","わからない"].includes(c.side))parts.push(`左右差は${c.side}。`);
+  /* 一緒に出ている症状 */
+  const pos=ASSOC.filter(k=>D.assoc[k]==="y");
+  if(pos.length)parts.push("随伴症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("・")+"あり。");
+  /* 機能 */
+  if(D.func.length)parts.push("生活面では"+D.func.join("・")+"に支障。");
+  /* 背景 */
+  const bgp=[];
+  if(D.bg.risk.length)bgp.push(D.bg.risk.join("・"));
+  if(D.bg.med&&D.bg.med!=="飲んでいない"&&D.bg.med!=="わからない")bgp.push(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:""));
+  if(D.bg.family==="いる")bgp.push("似た症状の家族あり");
+  if(D.bg.immune.length)bgp.push(D.bg.immune.join("・"));
+  if(bgp.length)parts.push("背景："+bgp.join("、")+"。");
+  if(D.familyChange)parts.push("家族から見た変化："+D.familyChange.trim());
+  return parts.join("\n");
+}
+function nowStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function whoLabel(){const f=WHO.find(w=>w[0]===D.who);return f?f[1]:"—";}
+
+function patientView(){
+  const sum=(D.editedSummary!==undefined?D.editedSummary:buildSummary());const u=unconfirmedItems();
+  const pos=ASSOC.filter(k=>D.assoc[k]==="y");
+  return `<div class="pv">
+   <div class="showbanner">📱 受診のとき、この画面をお医者さんに見せてください</div>
+   <h3 style="color:var(--brand-d);margin:0 0 4px">あなたの症状のまとめ</h3>
+   <div class="blk"><h4>📝 入力内容のまとめ</h4><div>${sum.replace(/\n/g,"<br>")}</div></div>
+   <div class="blk"><h4>💬 医師に伝えるとよいポイント</h4>
+     <ul>
+       <li>いつから・どう変化したか（${D.common.onset||"—"} / ${D.common.tempo||"—"}）</li>
+       ${D.func.length?`<li>できなくなったこと：${D.func.join("・")}</li>`:""}
+       ${pos.length?`<li>一緒に出ている症状：${pos.map(x=>x.replace(/（.*?）/,"")).join("・")}</li>`:""}
+       ${u.map(x=>`<li>${x}</li>`).join("")}
+     </ul></div>
+   <div class="emerg">急な片まひ・ろれつ困難・強い頭痛・意識がもうろう・息苦しさ・急な歩行不能などは、すぐ救急（119）や受診をご検討ください。</div>
+   <p class="mini">このまとめは入力内容を整理したものです。診断ではありません。</p></div>`;
+}
+
+function assocGrouped(){
+  return ASSOC_GROUPS.map(grp=>{
+    const inner=grp.items.map(nm=>{const v=D.assoc[nm];const s=nm.replace(/（.*?）/,"");
+      if(v==="y")return `<span class="y">${s}＋</span>`;if(v==="n")return `<span class="n">${s}−</span>`;
+      return `<span class="u">${s}?</span>`;}).join("　");
+    return `<div><span class="g">${grp.g}:</span> ${inner}</div>`;
+  }).join("");
+}
+function doctorSheet(){
+  const c=D.common;
+  const sum=(D.editedSummary!==undefined?D.editedSummary:buildSummary()).split("\n").filter(x=>!x.startsWith("家族から見た")).join(" ");
+  const modBlocks=D.mods.map(id=>{const m=D.m[id];let rows="";
+    QM[id].forEach(it=>{let v=m[it.k];if(Array.isArray(v))v=v.join("・");
+      if(v)rows+=`<div><b>${it.q.replace(/（.*?）/,"").replace(/？$/,"")}</b><br>${v}</div>`;});
+    return rows?`<div style="margin:3px 0"><span class="g" style="color:var(--sub);font-weight:700">${MODS[id]}</span><div class="kv">${rows}</div></div>`:"";}).join("");
+  const u=unconfirmedItems();
+  const risks=[...D.bg.risk];
+  let medline=D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"";
+  const id4="NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000);
+  return `<div class="sheet">
+   <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
+   <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}</div>
+
+   <div class="sec"><div class="lab">主訴</div>${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}</div>
+
+   <div class="sec"><div class="lab">① 時間軸（発症・経過）</div><div class="kv">
+     <div><b>発症時期</b><br>${c.onset||"—"}</div>
+     <div><b>出方・進み方</b><br>${c.tempo||"—"}</div>
+     <div><b>その後の経過</b><br>${c.course||"—"}</div>
+     <div><b>日内変動・易疲労性</b><br>${c.diurnal||"—"}</div></div></div>
+
+   <div class="sec"><div class="lab">② 局在の手がかり（部位・分布・左右差）</div>
+     <div class="kv"><div><b>左右差</b><br>${c.side||"—"}</div></div>
+     ${modBlocks||'<span class="mini">—</span>'}</div>
+
+   <div class="sec"><div class="lab">③ 一緒に出ている症状（＋陽性 / −陰性 / ?未確認）</div>
+     <div class="assoc">${assocGrouped()}</div></div>
+
+   <div class="sec"><div class="lab">④ 機能への影響（歩行・嚥下・排尿・認知・ADL）</div>
+     ${D.func.length?D.func.join("・"):'<span class="mini">記載なし</span>'}</div>
+
+   <div class="sec"><div class="lab">⑤ 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍）</div>
+     <div class="kv">
+       <div><b>血管リスク・持病</b><br>${risks.length?risks.join("・"):"—"}</div>
+       <div><b>薬剤</b><br>${medline||"—"}</div>
+       <div><b>家族歴（似た症状）</b><br>${D.bg.family||"—"}</div>
+       <div><b>免疫/感染/腫瘍の手がかり</b><br>${D.bg.immune.length?D.bg.immune.join("・"):"—"}</div></div></div>
+
+   <div class="sec"><div class="lab">⑥ 未確認だが追加で聞くとよい項目（診断には言及しない）</div>
+     ${u.length?("・"+u.join("<br>・")):'<span class="mini">特になし</span>'}</div>
+
+   <div class="sec"><div class="lab">⑦ 家族から見た変化 / 自由記載</div>
+     ${D.familyChange?`<div style="margin-bottom:5px">家族の観察：${D.familyChange}</div>`:""}
+     <div class="quote">${D.free||'<span class="mini">音声・自由記載なし</span>'}</div></div>
+
+   <div class="foot">本シートは患者・家族の自己申告を整理したものです。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。</div>
+  </div>`;
+}
+
+render();
+</script>
+</body>
+</html>
