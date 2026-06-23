@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>認知機能低下 事前問診票</title>
+<style>
+  :root{
+    --bg:#eef2f5;
+    --card:#ffffff;
+    --ink:#1f2a33;
+    --sub:#52606d;
+    --line:#d4dde4;
+    --accent:#1f7a8c;
+    --accent-d:#155e6c;
+    --accent-soft:#e3f1f4;
+    --sel:#1f7a8c;
+    --sel-bg:#e3f1f4;
+    --warn:#8a5a00;
+    --warn-bg:#fcf3df;
+    --warn-line:#e6c97a;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;
+    font-size:20px;
+    line-height:1.8;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:680px;margin:0 auto;padding:18px 18px 140px;}
+  h1{font-size:1.7rem;line-height:1.45;margin:.2em 0 .5em;}
+  h2{font-size:1.42rem;margin:.2em 0 .15em;}
+  h3{font-size:1.22rem;margin:1.25em 0 .5em;color:var(--accent-d);}
+  p{margin:.5em 0;color:var(--sub);}
+  .lead{color:var(--ink);}
+
+  /* Header / progress */
+  header.bar{
+    position:sticky;top:0;z-index:20;
+    background:rgba(238,242,245,.96);
+    backdrop-filter:saturate(180%) blur(6px);
+    padding:10px 16px 12px;
+    border-bottom:1px solid var(--line);
+  }
+  .bar-inner{max-width:680px;margin:0 auto;}
+  .step-label{font-size:1.05rem;color:var(--accent-d);font-weight:700;margin:0 0 8px;}
+  .progress{height:14px;background:#dbe4ea;border-radius:99px;overflow:hidden;}
+  .progress > i{display:block;height:100%;width:0;background:var(--accent);border-radius:99px;transition:width .3s ease;}
+
+  .panel{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:24px 20px;
+    margin:18px 0;
+    box-shadow:0 1px 2px rgba(20,40,60,.04);
+  }
+  .note{
+    background:var(--warn-bg);
+    border:1px solid var(--warn-line);
+    color:var(--warn);
+    border-radius:var(--radius);
+    padding:18px 18px;
+    font-size:1.08rem;
+  }
+  .note strong{color:var(--warn);}
+  .info-box{
+    background:var(--accent-soft);
+    border:1px solid #bfe0e6;
+    border-radius:var(--radius);
+    padding:18px 18px;
+    color:var(--accent-d);
+    font-size:1.08rem;
+  }
+  .hint{font-size:1rem;color:var(--sub);margin-top:-.2em;}
+
+  /* cards */
+  .cards{display:grid;gap:13px;margin:12px 0 4px;}
+  .card{
+    display:flex;align-items:center;gap:14px;
+    width:100%;text-align:left;
+    background:#fff;
+    border:2px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px 18px;
+    min-height:64px;
+    font-size:1.18rem;line-height:1.5;
+    color:var(--ink);
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .card:active{transform:scale(.995);}
+  .card .tick{
+    flex:0 0 32px;height:32px;border-radius:9px;
+    border:2px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    background:#fff;
+  }
+  .card .tick svg{width:20px;height:20px;display:none;}
+  .card.sel{border-color:var(--sel);background:var(--sel-bg);}
+  .card.sel .tick{background:var(--sel);border-color:var(--sel);}
+  .card.sel .tick svg{display:block;}
+  .card.radio .tick{border-radius:50%;}
+  .card.neutral.sel{border-color:#7b8a96;background:#eef2f5;}
+  .card.neutral.sel .tick{background:#7b8a96;border-color:#7b8a96;}
+  .group-sep{margin:14px 0 4px;font-size:.95rem;color:var(--sub);border-top:1px dashed var(--line);padding-top:10px;}
+
+  /* free text */
+  textarea{
+    width:100%;font-size:1.05rem;font-family:inherit;
+    border:2px solid var(--line);border-radius:var(--radius);
+    padding:12px;margin-top:8px;min-height:90px;color:var(--ink);
+  }
+  textarea:focus{outline:none;border-color:var(--accent);}
+  .limit-msg{font-size:.92rem;color:var(--warn);min-height:1.3em;}
+
+  /* nav */
+  .nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:rgba(255,255,255,.97);
+    border-top:1px solid var(--line);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .nav-inner{max-width:680px;margin:0 auto;display:flex;gap:12px;}
+  button.btn{
+    font-family:inherit;font-size:1.22rem;font-weight:700;
+    border-radius:var(--radius);padding:19px 18px;border:2px solid transparent;
+    min-height:60px;cursor:pointer;flex:1;
+  }
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:active{background:var(--accent-d);}
+  .btn-ghost{background:#fff;color:var(--accent-d);border-color:var(--line);flex:0 0 38%;}
+  .btn-primary:disabled{background:#a9c4cb;cursor:default;}
+  .btn-wide{width:100%;}
+
+  /* result */
+  .result-row{padding:10px 0;border-bottom:1px solid var(--line);}
+  .result-row:last-child{border-bottom:none;}
+  .result-row .k{font-size:1rem;color:var(--sub);}
+  .result-row .v{font-size:1.18rem;color:var(--ink);font-weight:600;}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:8px;}
+  .chip{background:var(--accent-soft);color:var(--accent-d);border-radius:99px;padding:8px 14px;font-size:1.05rem;}
+  .sym-group{margin:8px 0 14px;}
+  .sym-group .gh{font-size:1.02rem;color:var(--accent-d);font-weight:700;margin-bottom:6px;}
+
+  details.pro{margin-top:14px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;}
+  details.pro > summary{
+    list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;color:var(--accent-d);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  details.pro > summary::-webkit-details-marker{display:none;}
+  details.pro > summary .caret{transition:transform .2s;}
+  details.pro[open] > summary .caret{transform:rotate(180deg);}
+  .pro-body{padding:0 16px 16px;}
+  .score-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
+  .score-row:last-child{border-bottom:none;}
+  .score-row .lab{color:var(--ink);font-weight:600;}
+  .score-row .meter{flex:1;height:10px;background:#e3e9ee;border-radius:99px;margin:0 12px;overflow:hidden;}
+  .score-row .meter i{display:block;height:100%;background:var(--accent);}
+  .score-row .num{font-variant-numeric:tabular-nums;color:var(--sub);min-width:54px;text-align:right;}
+  .pro-note{font-size:.88rem;color:var(--sub);margin-top:10px;}
+  .dir{font-size:.95rem;color:var(--accent-d);margin-top:6px;}
+
+  .res-actions{display:grid;gap:10px;margin-top:16px;}
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);
+    background:#1f2a33;color:#fff;padding:10px 18px;border-radius:99px;font-size:1rem;
+    opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;}
+  .toast.show{opacity:1;}
+
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
+  .term{border-bottom:1px dotted var(--sub);cursor:help;}
+  .sel-count{font-size:1rem;color:var(--accent-d);font-weight:700;margin:2px 0 6px;}
+  .stamp{font-size:1rem;color:var(--sub);margin-top:6px;}
+
+  /* 開始画面 */
+  .badge{display:inline-block;background:var(--accent);color:#fff;font-size:.95rem;font-weight:700;padding:6px 15px;border-radius:99px;letter-spacing:.04em;}
+  .meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 2px;}
+  .meta span{background:var(--accent-soft);color:var(--accent-d);font-weight:700;font-size:1rem;padding:6px 13px;border-radius:99px;}
+  .safety-min{font-size:1rem;color:var(--warn);background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:12px;padding:13px 15px;margin-top:16px;line-height:1.6;}
+  .privacy-min{font-size:.95rem;color:var(--sub);margin-top:14px;text-align:center;line-height:1.6;}
+
+  /* キーボード操作時のフォーカス可視化 */
+  .card:focus-visible{outline:3px solid var(--accent-d);outline-offset:2px;}
+  button.btn:focus-visible{outline:3px solid #0b3d46;outline-offset:3px;}
+  details.pro > summary:focus-visible{outline:3px solid var(--accent-d);outline-offset:-3px;}
+  [tabindex="-1"]:focus{outline:none;}
+
+  /* 動きを減らす設定への配慮 */
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important; animation:none !important;}
+    .card:active{transform:none;}
+  }
+
+  @media (max-width:380px){
+    body{font-size:19px;}
+    h1{font-size:1.5rem;}
+    .card{padding:18px 16px;}
+  }
+
+  /* print : 医療者が一覧で見やすいよう簡潔・コンパクトに（1〜2ページ） */
+  @media print{
+    @page{ margin:12mm; }
+    :root{--bg:#fff;}
+    body{background:#fff;font-size:10.5pt;line-height:1.45;color:#000;}
+    header.bar,.nav,.toast,.res-actions,.term,.hint{display:none !important;}
+    .wrap{padding:0;max-width:100%;}
+    .panel{border:1px solid #999;box-shadow:none;padding:10px 12px;margin:8px 0;page-break-inside:avoid;}
+    h1{font-size:14pt;margin:0 0 4px;}
+    h2{font-size:12pt;margin:2px 0;}
+    .lead{font-size:9.5pt;}
+    .result-row{padding:4px 0;}
+    .result-row .v{font-size:10.5pt;}
+    .sym-group{margin:3px 0 6px;}
+    .chip{background:#fff;border:1px solid #555;color:#000;padding:2px 7px;font-size:9.5pt;}
+    .sym-group .chip::before{content:"\2713 ";font-weight:700;}
+    .sel-count,.stamp{display:block;font-size:9.5pt;color:#000;}
+    details.pro{border:1px solid #999;page-break-inside:avoid;}
+    details.pro > summary{padding:6px 10px;}
+    details.pro > summary .caret{display:none;}
+    .pro-body{display:block !important;padding:0 10px 8px;}
+    .score-row{padding:4px 0;}
+    .score-row .meter{display:none;}
+    .pro-note{font-size:8.5pt;}
+    .info-box{background:#fff;border:1px solid #999;color:#000;padding:8px 10px;}
+    .note{background:#fff;border:1px solid #999;color:#000;padding:8px 10px;}
+    a{color:#000;text-decoration:none;}
+  }
+</style>
+</head>
+<body>
+
+<noscript>
+  <div style="max-width:680px;margin:24px auto;padding:18px;border:1px solid #e6c97a;background:#fcf3df;color:#8a5a00;border-radius:14px;font-size:18px;line-height:1.7;">
+    この問診票のご利用には JavaScript が必要です。お手数ですが，ブラウザの設定で JavaScript を有効にしてから，もう一度開いてください。ご不明な場合は受付・スタッフへお声がけください。
+  </div>
+</noscript>
+
+<header class="bar" id="topbar" hidden>
+  <div class="bar-inner">
+    <p class="step-label" id="stepLabel" aria-live="polite">　</p>
+    <div class="progress" role="progressbar" aria-label="回答の進み具合" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress">
+      <i id="progressFill"></i>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="app"></main>
+
+<nav class="nav" id="nav" hidden>
+  <div class="nav-inner">
+    <button class="btn btn-ghost" id="btnBack" type="button">戻る</button>
+    <button class="btn btn-primary" id="btnNext" type="button">次へ</button>
+  </div>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- データ定義 ---------- */
+  // 基本情報（単一選択）
+  var basic = [
+    { id:"writer", title:"記入する方", single:true, opts:["本人","家族・同伴者","本人と家族","その他"] },
+    { id:"onset",  title:"いつ頃から気になりますか", single:true,
+      opts:["数日以内","1か月以内","3か月以内","半年以内","1年以内","1年以上前から","はっきりしない"] },
+    { id:"course", title:"悪くなり方", single:true,
+      opts:["ゆっくり悪くなっている","急に悪くなった","良い時と悪い時がある","階段状に悪くなった","脳卒中の後から悪くなった","ほとんど変わらない","わからない"] },
+    { id:"first",  title:"最初に目立った変化", single:true,
+      opts:["物忘れ","段取りの悪さ","ぼんやりする","幻が見える","歩きにくさ","転びやすさ","性格や行動の変化","言葉の出にくさ","意欲低下","わからない"] }
+  ];
+
+  // 症状群（複数選択）。warn:true は結果で「早めに伝えて」に表示。warnText で表示文を上書き可。
+  var groups = [
+    { key:"A", title:"記憶や生活の変化", items:[
+      "同じ話を何度も聞く","約束や予定を忘れる","薬を飲み忘れる","食事をしたことを忘れる",
+      "物を置いた場所を忘れる","最近のことほど忘れやすい","慣れた道で迷う","お金の管理が難しい",
+      "料理や家事の手順を間違える","物の名前が出にくい"
+    ]},
+    { key:"B", title:"見え方・睡眠・動きの変化", items:[
+      "日によって別人のように違う",
+      {t:"急にぼんやりする時間がある", warn:true, warnText:"意識がぼんやりする時間がある"},
+      "話が通じる時と通じにくい時がある","実際にはいない人が見える","実際にはいない動物や虫が見える",
+      "幻が具体的で繰り返し出る","寝言が大きい","夢に合わせて手足が動く","寝ている時に暴れる",
+      "動作が遅くなった","小刻みに歩く","転びやすくなった","手が震える","便秘や立ちくらみが目立つ"
+    ]},
+    { key:"C", title:"歩行・脳卒中・尿の変化", items:[
+      "脳梗塞や脳出血をしたことがある","脳卒中の後から悪くなった",
+      {t:"急にできないことが増えた", warn:true},
+      "悪化と安定を繰り返す","考えるのが遅くなった","集中が続かない","段取りが悪くなった",
+      "歩くのが遅くなった","転びやすくなった","尿もれが増えた","感情が急に出るようになった",
+      {t:"麻痺やしびれがある", warn:true},
+      {t:"ろれつが回りにくい", warn:true},
+      "飲み込みにくい"
+    ]},
+    { key:"D", title:"性格や行動の変化", items:[
+      "性格が変わった","怒りっぽくなった","場に合わない発言が増えた","失礼な言動が増えた",
+      "我慢がきかなくなった","お金の使い方が変わった","家族への関心が薄くなった","思いやりが乏しくなった",
+      "身だしなみに無関心になった","同じ行動を繰り返す","同じ言葉を繰り返す","同じ食べ物にこだわる",
+      "甘いものを異常に好む","食べすぎる","本人はあまり困っていない","家族の方が強く困っている"
+    ]},
+    { key:"E", title:"体調・薬・気分の変化", items:[
+      {t:"数日で急に悪くなった", warn:true},
+      {t:"夕方から夜に悪くなる", warn:true},
+      {t:"発熱があった", warn:true},
+      {t:"脱水があった", warn:true},
+      {t:"入院後から悪くなった", warn:true},
+      "環境が変わってから悪くなった",
+      {t:"最近，薬が増えた", warn:true},
+      "睡眠薬を飲んでいる","精神科の薬を飲んでいる","抗アレルギー薬を飲んでいる","頻尿の薬を飲んでいる",
+      "気分が落ち込んでいる","不安が強い","眠れていない","食欲が落ちている"
+    ]}
+  ];
+
+  var groupHeads = {
+    A:"A群：記憶や生活の変化",
+    B:"B群：見え方・睡眠・動きの変化",
+    C:"C群：歩行・脳卒中・尿の変化",
+    D:"D群：性格や行動の変化",
+    E:"E群：体調・薬・気分の変化"
+  };
+  var groupDir = {
+    A:"記憶・生活の変化が中心。緩徐な経過とあわせて追加確認。",
+    B:"見え方・睡眠・動きの変化。変動や見えるものについて追加確認。",
+    C:"歩行・脳卒中・排尿の変化。脳血管・歩行障害の方向で追加確認。",
+    D:"性格・行動の変化。本人と家族の困り感の差も含めて追加確認。",
+    E:"体調・薬・気分の変化。急な経過や身体要因の方向で追加確認。"
+  };
+
+  // 非スコア項目（各群末尾）
+  var neutralOpts = ["この項目には当てはまらない","わからない"];
+
+  // 一番困っていること
+  var troubles = ["物忘れ","薬の管理","お金の管理","家事","運転","仕事","迷子","幻が見える",
+    "睡眠中の異常行動","転倒","尿もれ","怒りっぽさ","意欲低下","介護負担","その他"];
+
+  /* ---------- 状態 ---------- */
+  var state = {
+    writer:null, onset:null, course:null, first:null,
+    sym:{A:[],B:[],C:[],D:[],E:[]},       // スコア対象の選択テキスト
+    neutral:{A:[],B:[],C:[],D:[],E:[]},   // 非スコア選択
+    troubles:[], troubleOther:"", completedAt:null
+  };
+
+  // ステップ定義
+  var steps = ["start","basic","A","B","C","D","E","trouble","result"];
+  var cur = 0;
+  var totalQ = 7; // 進捗対象（basic + 5群 + trouble）
+
+  var app = document.getElementById("app");
+  var topbar = document.getElementById("topbar");
+  var nav = document.getElementById("nav");
+  var btnBack = document.getElementById("btnBack");
+  var btnNext = document.getElementById("btnNext");
+  var stepLabel = document.getElementById("stepLabel");
+  var progress = document.getElementById("progress");
+  var progressFill = document.getElementById("progressFill");
+
+  var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 10 18 20 6"/></svg>';
+
+  function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function itemText(it){ return typeof it === "string" ? it : it.t; }
+
+  function showToast(msg){
+    var t=document.getElementById("toast");
+    t.textContent=msg; t.classList.add("show");
+    clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove("show");},1900);
+  }
+
+  function pad2(n){ return (n<10?"0":"")+n; }
+  function formatStamp(d){
+    var w=["日","月","火","水","木","金","土"][d.getDay()];
+    return d.getFullYear()+"年"+(d.getMonth()+1)+"月"+d.getDate()+"日（"+w+"）"+
+      pad2(d.getHours())+":"+pad2(d.getMinutes());
+  }
+
+  /* ---------- 描画 ---------- */
+  function render(){
+    var name = steps[cur];
+    window.scrollTo(0,0);
+    if(name==="start"){ renderStart(); return; }
+    if(name==="result"){ renderResult(); return; }
+
+    topbar.hidden=false; nav.hidden=false;
+    btnBack.style.visibility = "visible";
+
+    if(name==="basic") renderBasic();
+    else if(name==="trouble") renderTrouble();
+    else renderGroup(name);
+
+    updateProgress();
+    focusHeading();
+  }
+
+  function updateProgress(){
+    // basic=1, A=2, B=3, C=4, D=5, E=6, trouble=7
+    var idx = cur; // steps index; start=0
+    var qNo = idx; // basic at idx1 -> 1 ... trouble idx7 ->7
+    var pct = Math.round((qNo/totalQ)*100);
+    progressFill.style.width = pct + "%";
+    progress.setAttribute("aria-valuenow", String(pct));
+    var labels = {basic:"基本情報", A:groupHeads.A, B:groupHeads.B, C:groupHeads.C, D:groupHeads.D, E:groupHeads.E, trouble:"一番困っていること"};
+    stepLabel.textContent = "ステップ " + qNo + " / " + totalQ + "　" + (labels[steps[cur]]||"");
+  }
+
+  function renderStart(){
+    topbar.hidden=true; nav.hidden=true;
+    app.innerHTML =
+      '<div class="panel">'+
+        '<span class="badge" data-focus tabindex="-1">診察前の 事前問診票</span>'+
+        '<h1 style="margin-top:10px;">認知機能低下　事前問診票</h1>'+
+        '<p class="lead">診察の前に，気になっていることを整理しておくための問診です。当てはまるものを選んでいくだけで終わります。</p>'+
+        '<p class="lead">結果は診断ではありません。ご家族・同伴の方とご一緒の回答も歓迎です。</p>'+
+        '<div class="meta"><span>所要時間 約3〜5分</span><span>全7ステップ</span><span>選ぶだけ</span></div>'+
+        '<button class="btn btn-primary btn-wide" id="startBtn" type="button" style="margin-top:18px;">はじめる</button>'+
+        '<p class="privacy-min">お名前や連絡先は入力しません。回答は端末の中だけで使われ，保存・送信はされません。</p>'+
+      '</div>'+
+      '<div class="safety-min">急な悪化・強い頭痛・麻痺・ろれつの乱れ・発熱や脱水があるときは，順番を待たずにスタッフへお声がけください。</div>';
+    document.getElementById("startBtn").onclick=function(){ cur=1; render(); };
+    focusHeading();
+  }
+
+  // roving: undefined=通常(button) / true=ロービングtabindex 0 / false=-1
+  function makeCard(label, selected, radio, neutral, roving){
+    var ti = (roving===undefined) ? '' : ' tabindex="'+(roving?'0':'-1')+'"';
+    return '<button class="card'+(radio?' radio':'')+(neutral?' neutral':'')+(selected?' sel':'')+'" type="button" role="'+(radio?'radio':'checkbox')+'" aria-checked="'+(selected?'true':'false')+'" data-val="'+esc(label)+'"'+ti+'>'+
+      '<span class="tick" aria-hidden="true">'+CHECK+'</span>'+
+      '<span class="lab">'+esc(label)+'</span></button>';
+  }
+
+  // 描画後にその画面の見出しへフォーカスを移す（スクリーンリーダー配慮）
+  function focusHeading(){
+    var h = app.querySelector('[data-focus]');
+    if(h){ h.setAttribute('tabindex','-1'); try{ h.focus({preventScroll:true}); }catch(e){ h.focus(); } }
+  }
+
+  function renderBasic(){
+    var html = '<div class="panel"><h2 data-focus>基本情報</h2><p class="hint">あてはまるものを1つずつお選びください。</p>';
+    basic.forEach(function(b){
+      html += '<h3 id="lbl-'+b.id+'">'+esc(b.title)+'</h3>'+
+        '<div class="cards" role="radiogroup" aria-labelledby="lbl-'+b.id+'" data-field="'+b.id+'">';
+      var sel = state[b.id];
+      var hasSel = b.opts.indexOf(sel)>=0;
+      b.opts.forEach(function(o,idx){
+        var isSel = (sel===o);
+        // ロービングtabindex：選択肢が1つ。なければ先頭をtab対象に。
+        var roving = hasSel ? isSel : (idx===0);
+        html += makeCard(o, isSel, true, false, roving);
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    app.innerHTML = html;
+
+    app.querySelectorAll('.cards').forEach(function(grp){
+      var field = grp.getAttribute("data-field");
+      var cards = Array.prototype.slice.call(grp.querySelectorAll('.card'));
+
+      function selectCard(card){
+        var label = card.dataset.val;
+        state[field] = (state[field]===label) ? null : label;
+        cards.forEach(function(c){
+          var on = (c.dataset.val===state[field]);
+          c.classList.toggle('sel',on);
+          c.setAttribute('aria-checked',on?'true':'false');
+          c.setAttribute('tabindex', on ? '0' : '-1');
+        });
+        // 選択解除した場合は先頭をtab対象に戻す
+        if(!state[field] && cards[0]){ cards[0].setAttribute('tabindex','0'); }
+      }
+
+      cards.forEach(function(card,idx){
+        card.onclick=function(){ selectCard(card); };
+        card.addEventListener('keydown', function(e){
+          var k=e.key, next=-1;
+          if(k==='ArrowDown'||k==='ArrowRight'){ next=(idx+1)%cards.length; }
+          else if(k==='ArrowUp'||k==='ArrowLeft'){ next=(idx-1+cards.length)%cards.length; }
+          else { return; }
+          e.preventDefault();
+          var t=cards[next];
+          cards.forEach(function(c){ c.setAttribute('tabindex','-1'); });
+          t.setAttribute('tabindex','0'); t.focus();
+          selectCard(t);
+        });
+      });
+    });
+    btnNext.textContent="次へ";
+  }
+
+  function renderGroup(key){
+    var g = groups.find(function(x){return x.key===key;});
+    var html = '<div class="panel"><h2 data-focus>'+esc(groupHeads[key])+'</h2>'+
+      '<p class="hint">あてはまるものを，いくつでもお選びください（複数選択できます）。</p>'+
+      '<p class="sel-count" id="selCount" aria-live="polite"></p>'+
+      '<div class="cards" data-grp="'+key+'">';
+    g.items.forEach(function(it){
+      var t = itemText(it);
+      html += makeCard(t, state.sym[key].indexOf(t)>=0, false, false);
+    });
+    html += '</div>';
+    html += '<div class="group-sep">下の2つは点数には数えません。</div><div class="cards" data-neu="'+key+'">';
+    neutralOpts.forEach(function(o){
+      html += makeCard(o, state.neutral[key].indexOf(o)>=0, false, true);
+    });
+    html += '</div></div>';
+    app.innerHTML = html;
+
+    var selCount=document.getElementById("selCount");
+    function updateCount(){
+      var n=state.sym[key].length;
+      selCount.textContent = n>0 ? ("選択中：" + n + "件") : "（あてはまるものがなければ，そのまま次へ進めます）";
+    }
+    updateCount();
+
+    var symWrap = app.querySelector('[data-grp]');
+    symWrap.querySelectorAll('.card').forEach(function(card){
+      card.onclick=function(){
+        var label=card.dataset.val;
+        var arr=state.sym[key]; var i=arr.indexOf(label);
+        if(i>=0){arr.splice(i,1);} else {
+          arr.push(label);
+          // 症状を選んだら「当てはまらない／わからない」は解除
+          state.neutral[key]=[];
+          refreshNeutral(key);
+        }
+        toggle(card,i<0);
+        updateCount();
+      };
+    });
+    var neuWrap = app.querySelector('[data-neu]');
+    neuWrap.querySelectorAll('.card').forEach(function(card){
+      card.onclick=function(){
+        var label=card.dataset.val;
+        var arr=state.neutral[key]; var i=arr.indexOf(label);
+        if(i>=0){arr.splice(i,1); toggle(card,false);}
+        else{
+          // 非スコアは単独扱い：症状選択を消し、もう一方の非スコアも消す
+          state.neutral[key]=[label];
+          state.sym[key]=[];
+          refreshSym(key);
+          neuWrap.querySelectorAll('.card').forEach(function(c){
+            var on=(c.dataset.val===label);
+            c.classList.toggle('sel',on); c.setAttribute('aria-checked',on?'true':'false');
+          });
+        }
+        updateCount();
+      };
+    });
+    btnNext.textContent="次へ";
+
+    function refreshNeutral(k){
+      app.querySelectorAll('[data-neu] .card').forEach(function(c){
+        c.classList.remove('sel'); c.setAttribute('aria-checked','false');
+      });
+    }
+    function refreshSym(k){
+      app.querySelectorAll('[data-grp] .card').forEach(function(c){
+        c.classList.remove('sel'); c.setAttribute('aria-checked','false');
+      });
+    }
+  }
+
+  function toggle(card,on){ card.classList.toggle('sel',on); card.setAttribute('aria-checked',on?'true':'false'); }
+
+  function renderTrouble(){
+    var html='<div class="panel"><h2 data-focus>一番困っていること</h2>'+
+      '<p class="hint">最大3つまでお選びください。</p>'+
+      '<p class="limit-msg" id="limitMsg" aria-live="polite"></p>'+
+      '<div class="cards" data-trouble>';
+    troubles.forEach(function(o){
+      html += makeCard(o, state.troubles.indexOf(o)>=0, false, false);
+    });
+    html += '</div>'+
+      '<div id="otherWrap" '+(state.troubles.indexOf("その他")>=0?'':'hidden')+'>'+
+        '<h3>その他の内容</h3>'+
+        '<textarea id="otherText" maxlength="200" placeholder="自由にご記入ください">'+esc(state.troubleOther)+'</textarea>'+
+      '</div></div>';
+    app.innerHTML=html;
+
+    var wrap=app.querySelector('[data-trouble]');
+    var limitMsg=document.getElementById("limitMsg");
+    wrap.querySelectorAll('.card').forEach(function(card){
+      card.onclick=function(){
+        var label=card.dataset.val;
+        var arr=state.troubles; var i=arr.indexOf(label);
+        if(i>=0){ arr.splice(i,1); toggle(card,false); limitMsg.textContent=""; }
+        else{
+          if(arr.length>=3){ limitMsg.textContent="選べるのは3つまでです。"; showToast("3つまで選べます"); return; }
+          arr.push(label); toggle(card,true); limitMsg.textContent="";
+        }
+        var ow=document.getElementById("otherWrap");
+        if(label==="その他"){ ow.hidden = arr.indexOf("その他")<0; }
+      };
+    });
+    var ot=document.getElementById("otherText");
+    if(ot){ ot.oninput=function(){ state.troubleOther=ot.value; }; }
+    btnNext.textContent="まとめを見る";
+  }
+
+  /* ---------- 検証 ---------- */
+  function validate(){
+    var name=steps[cur];
+    if(name==="basic"){
+      if(!state.writer||!state.onset||!state.course||!state.first){
+        showToast("未選択の項目があります"); return false;
+      }
+    }
+    return true;
+  }
+
+  /* ---------- ナビ ---------- */
+  btnNext.onclick=function(){
+    if(!validate()) return;
+    if(cur<steps.length-1){ cur++; render(); }
+  };
+  btnBack.onclick=function(){
+    if(cur>0){ cur--; render(); }
+  };
+
+  /* ---------- 結果 ---------- */
+  function scoreOf(key){
+    var g=groups.find(function(x){return x.key===key;});
+    return { n: state.sym[key].length, total: g.items.length };
+  }
+  function collectWarnings(){
+    var out=[];
+    groups.forEach(function(g){
+      g.items.forEach(function(it){
+        if(typeof it==="object" && it.warn){
+          if(state.sym[g.key].indexOf(it.t)>=0){ out.push(it.warnText||it.t); }
+        }
+      });
+    });
+    return out;
+  }
+
+  function renderResult(){
+    topbar.hidden=true; nav.hidden=true;
+    var warns=collectWarnings();
+    state.completedAt = new Date();
+
+    var html='<div class="panel"><h1 data-focus>回答のまとめ</h1>'+
+      '<p class="lead">回答内容が整理できました。これは診察時に確認したい方向性を整理したもので，診断ではありません。医師が診察や検査とあわせて確認します。安心してお待ちください。</p>'+
+      '<p class="lead">診察のときに，この画面を医師・スタッフへお見せください。</p>'+
+      '<p class="stamp">記入日時：'+esc(formatStamp(state.completedAt))+'</p></div>';
+
+    if(warns.length){
+      html+='<div class="note"><strong>早めに医療者へ伝えてください</strong><br>次の内容は，受付や看護師に早めにお伝えいただけると安心です。<div class="chips" style="margin-top:8px;">';
+      warns.forEach(function(w){ html+='<span class="chip" style="background:#fff;border:1px solid var(--warn-line);color:var(--warn);">'+esc(w)+'</span>'; });
+      html+='</div></div>';
+    }
+
+    // 基本情報まとめ
+    html+='<div class="panel">';
+    html+=resRow("記入する方", state.writer);
+    html+=resRow("気になる時期", state.onset);
+    html+=resRow("悪くなり方", state.course);
+    html+=resRow("最初に目立った変化", state.first);
+    var tr = state.troubles.slice();
+    var trDisp = tr.map(function(t){ return (t==="その他" && state.troubleOther)? "その他（"+state.troubleOther+"）" : t; });
+    html+='<div class="result-row"><div class="k">一番困っていること</div>'+
+      (trDisp.length? '<div class="chips">'+trDisp.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>' : '<div class="v">（選択なし）</div>')+
+      '</div></div>';
+
+    // チェックされた症状一覧
+    html+='<div class="panel"><h2>チェックされた症状</h2>';
+    var any=false;
+    ["A","B","C","D","E"].forEach(function(k){
+      if(state.sym[k].length){
+        any=true;
+        html+='<div class="sym-group"><div class="gh">'+esc(groupHeads[k])+'</div><div class="chips">'+
+          state.sym[k].map(function(s){return '<span class="chip">'+esc(s)+'</span>';}).join('')+'</div></div>';
+      }
+    });
+    if(!any){ html+='<p class="hint">チェックされた症状はありませんでした。</p>'; }
+    html+='</div>';
+
+    // 医療者向け
+    html+='<details class="pro"><summary>医療者向け詳細を表示 <span class="caret" aria-hidden="true">▾</span></summary><div class="pro-body">';
+    ["A","B","C","D","E"].forEach(function(k){
+      var s=scoreOf(k); var pct=s.total? Math.round((s.n/s.total)*100):0;
+      html+='<div class="score-row"><span class="lab">'+k+'群</span>'+
+        '<span class="meter"><i style="width:'+pct+'%"></i></span>'+
+        '<span class="num">'+s.n+' / '+s.total+'</span></div>';
+    });
+    // 診察時に確認したい方向性（最多群）
+    var maxK=null,maxN=-1;
+    ["A","B","C","D","E"].forEach(function(k){ if(state.sym[k].length>maxN){maxN=state.sym[k].length;maxK=k;} });
+    if(maxN>0){
+      html+='<div class="dir"><strong>診察時に確認したい方向性：</strong>'+esc(groupDir[maxK])+'</div>';
+    }
+    html+='<p class="pro-note">本ツールは事前整理用であり，診断を示すものではありません。チェック数は診察時に確認したい方向性の目安です。急な経過や身体要因（E群関連）は他群に優先して確認してください。</p>';
+    html+='</div></details>';
+
+    // 操作
+    html+='<div class="res-actions">'+
+      '<button class="btn btn-primary btn-wide" id="printBtn" type="button">結果を印刷する</button>'+
+      '<button class="btn btn-ghost btn-wide" id="copyBtn" type="button" style="flex:1;">結果をコピーする</button>'+
+      '<button class="btn btn-ghost btn-wide" id="restartBtn" type="button" style="flex:1;">最初からやり直す</button>'+
+      '</div>';
+
+    app.innerHTML=html;
+
+    document.getElementById("printBtn").onclick=function(){
+      var d=app.querySelector('details.pro'); if(d) d.open=true;
+      window.print();
+    };
+    document.getElementById("copyBtn").onclick=function(){ copyResult(); };
+    document.getElementById("restartBtn").onclick=function(){
+      if(confirm("回答を消して最初からやり直しますか？")){ resetAll(); cur=0; render(); }
+    };
+
+    progressFill.style.width="100%";
+    focusHeading();
+  }
+
+  function resRow(k,v){
+    return '<div class="result-row"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v||"（未選択）")+'</div></div>';
+  }
+
+  function buildText(){
+    var L=[];
+    L.push("認知機能低下 事前問診票 ／ 回答のまとめ");
+    L.push("※この結果は診断ではありません。医師が診察・検査とあわせて確認します。");
+    L.push("記入日時：" + formatStamp(state.completedAt||new Date()));
+    L.push("");
+    L.push("【基本情報】");
+    L.push("記入する方：" + (state.writer||"未選択"));
+    L.push("気になる時期：" + (state.onset||"未選択"));
+    L.push("悪くなり方：" + (state.course||"未選択"));
+    L.push("最初に目立った変化：" + (state.first||"未選択"));
+    L.push("");
+    var tr=state.troubles.map(function(t){return (t==="その他"&&state.troubleOther)?"その他（"+state.troubleOther+"）":t;});
+    L.push("【一番困っていること】 " + (tr.length?tr.join("、"):"選択なし"));
+    L.push("");
+    L.push("【チェックされた症状】");
+    ["A","B","C","D","E"].forEach(function(k){
+      if(state.sym[k].length){ L.push("■"+groupHeads[k]); state.sym[k].forEach(function(s){L.push("・"+s);}); }
+    });
+    var w=collectWarnings();
+    if(w.length){ L.push(""); L.push("【早めに医療者へ伝えてください】"); w.forEach(function(x){L.push("・"+x);}); }
+    L.push("");
+    L.push("【医療者向け：群別チェック数（診察時に確認したい方向性の目安）】");
+    ["A","B","C","D","E"].forEach(function(k){ var s=scoreOf(k); L.push(k+"群："+s.n+" / "+s.total); });
+    return L.join("\n");
+  }
+
+  function copyResult(){
+    var text=buildText();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ showToast("コピーしました"); },function(){ fallbackCopy(text); });
+    } else { fallbackCopy(text); }
+  }
+  function fallbackCopy(text){
+    var ta=document.createElement("textarea");
+    ta.value=text; ta.style.position="fixed"; ta.style.top="-9999px"; ta.setAttribute("readonly","");
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,text.length);
+    var ok=false; try{ ok=document.execCommand("copy"); }catch(e){ ok=false; }
+    document.body.removeChild(ta);
+    showToast(ok?"コピーしました":"コピーできませんでした");
+  }
+
+  function resetAll(){
+    state.writer=state.onset=state.course=state.first=null;
+    state.sym={A:[],B:[],C:[],D:[],E:[]};
+    state.neutral={A:[],B:[],C:[],D:[],E:[]};
+    state.troubles=[]; state.troubleOther=""; state.completedAt=null;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
