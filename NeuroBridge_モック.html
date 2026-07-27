@@ -4,6 +4,2304 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroBridge — 症状メモ（モック）</title>
+<script id="qrlib">//---------------------------------------------------------------------
+//
+// QR Code Generator for JavaScript
+//
+// Copyright (c) 2009 Kazuhiko Arase
+//
+// URL: http://www.d-project.com/
+//
+// Licensed under the MIT license:
+//  http://www.opensource.org/licenses/mit-license.php
+//
+// The word 'QR Code' is registered trademark of
+// DENSO WAVE INCORPORATED
+//  http://www.denso-wave.com/qrcode/faqpatent-e.html
+//
+//---------------------------------------------------------------------
+
+var qrcode = function() {
+
+  //---------------------------------------------------------------------
+  // qrcode
+  //---------------------------------------------------------------------
+
+  /**
+   * qrcode
+   * @param typeNumber 1 to 40
+   * @param errorCorrectionLevel 'L','M','Q','H'
+   */
+  var qrcode = function(typeNumber, errorCorrectionLevel) {
+
+    var PAD0 = 0xEC;
+    var PAD1 = 0x11;
+
+    var _typeNumber = typeNumber;
+    var _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+    var _modules = null;
+    var _moduleCount = 0;
+    var _dataCache = null;
+    var _dataList = [];
+
+    var _this = {};
+
+    var makeImpl = function(test, maskPattern) {
+
+      _moduleCount = _typeNumber * 4 + 17;
+      _modules = function(moduleCount) {
+        var modules = new Array(moduleCount);
+        for (var row = 0; row < moduleCount; row += 1) {
+          modules[row] = new Array(moduleCount);
+          for (var col = 0; col < moduleCount; col += 1) {
+            modules[row][col] = null;
+          }
+        }
+        return modules;
+      }(_moduleCount);
+
+      setupPositionProbePattern(0, 0);
+      setupPositionProbePattern(_moduleCount - 7, 0);
+      setupPositionProbePattern(0, _moduleCount - 7);
+      setupPositionAdjustPattern();
+      setupTimingPattern();
+      setupTypeInfo(test, maskPattern);
+
+      if (_typeNumber >= 7) {
+        setupTypeNumber(test);
+      }
+
+      if (_dataCache == null) {
+        _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+      }
+
+      mapData(_dataCache, maskPattern);
+    };
+
+    var setupPositionProbePattern = function(row, col) {
+
+      for (var r = -1; r <= 7; r += 1) {
+
+        if (row + r <= -1 || _moduleCount <= row + r) continue;
+
+        for (var c = -1; c <= 7; c += 1) {
+
+          if (col + c <= -1 || _moduleCount <= col + c) continue;
+
+          if ( (0 <= r && r <= 6 && (c == 0 || c == 6) )
+              || (0 <= c && c <= 6 && (r == 0 || r == 6) )
+              || (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+            _modules[row + r][col + c] = true;
+          } else {
+            _modules[row + r][col + c] = false;
+          }
+        }
+      }
+    };
+
+    var getBestMaskPattern = function() {
+
+      var minLostPoint = 0;
+      var pattern = 0;
+
+      for (var i = 0; i < 8; i += 1) {
+
+        makeImpl(true, i);
+
+        var lostPoint = QRUtil.getLostPoint(_this);
+
+        if (i == 0 || minLostPoint > lostPoint) {
+          minLostPoint = lostPoint;
+          pattern = i;
+        }
+      }
+
+      return pattern;
+    };
+
+    var setupTimingPattern = function() {
+
+      for (var r = 8; r < _moduleCount - 8; r += 1) {
+        if (_modules[r][6] != null) {
+          continue;
+        }
+        _modules[r][6] = (r % 2 == 0);
+      }
+
+      for (var c = 8; c < _moduleCount - 8; c += 1) {
+        if (_modules[6][c] != null) {
+          continue;
+        }
+        _modules[6][c] = (c % 2 == 0);
+      }
+    };
+
+    var setupPositionAdjustPattern = function() {
+
+      var pos = QRUtil.getPatternPosition(_typeNumber);
+
+      for (var i = 0; i < pos.length; i += 1) {
+
+        for (var j = 0; j < pos.length; j += 1) {
+
+          var row = pos[i];
+          var col = pos[j];
+
+          if (_modules[row][col] != null) {
+            continue;
+          }
+
+          for (var r = -2; r <= 2; r += 1) {
+
+            for (var c = -2; c <= 2; c += 1) {
+
+              if (r == -2 || r == 2 || c == -2 || c == 2
+                  || (r == 0 && c == 0) ) {
+                _modules[row + r][col + c] = true;
+              } else {
+                _modules[row + r][col + c] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    var setupTypeNumber = function(test) {
+
+      var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+      }
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+      }
+    };
+
+    var setupTypeInfo = function(test, maskPattern) {
+
+      var data = (_errorCorrectionLevel << 3) | maskPattern;
+      var bits = QRUtil.getBCHTypeInfo(data);
+
+      // vertical
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 6) {
+          _modules[i][8] = mod;
+        } else if (i < 8) {
+          _modules[i + 1][8] = mod;
+        } else {
+          _modules[_moduleCount - 15 + i][8] = mod;
+        }
+      }
+
+      // horizontal
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 8) {
+          _modules[8][_moduleCount - i - 1] = mod;
+        } else if (i < 9) {
+          _modules[8][15 - i - 1 + 1] = mod;
+        } else {
+          _modules[8][15 - i - 1] = mod;
+        }
+      }
+
+      // fixed module
+      _modules[_moduleCount - 8][8] = (!test);
+    };
+
+    var mapData = function(data, maskPattern) {
+
+      var inc = -1;
+      var row = _moduleCount - 1;
+      var bitIndex = 7;
+      var byteIndex = 0;
+      var maskFunc = QRUtil.getMaskFunction(maskPattern);
+
+      for (var col = _moduleCount - 1; col > 0; col -= 2) {
+
+        if (col == 6) col -= 1;
+
+        while (true) {
+
+          for (var c = 0; c < 2; c += 1) {
+
+            if (_modules[row][col - c] == null) {
+
+              var dark = false;
+
+              if (byteIndex < data.length) {
+                dark = ( ( (data[byteIndex] >>> bitIndex) & 1) == 1);
+              }
+
+              var mask = maskFunc(row, col - c);
+
+              if (mask) {
+                dark = !dark;
+              }
+
+              _modules[row][col - c] = dark;
+              bitIndex -= 1;
+
+              if (bitIndex == -1) {
+                byteIndex += 1;
+                bitIndex = 7;
+              }
+            }
+          }
+
+          row += inc;
+
+          if (row < 0 || _moduleCount <= row) {
+            row -= inc;
+            inc = -inc;
+            break;
+          }
+        }
+      }
+    };
+
+    var createBytes = function(buffer, rsBlocks) {
+
+      var offset = 0;
+
+      var maxDcCount = 0;
+      var maxEcCount = 0;
+
+      var dcdata = new Array(rsBlocks.length);
+      var ecdata = new Array(rsBlocks.length);
+
+      for (var r = 0; r < rsBlocks.length; r += 1) {
+
+        var dcCount = rsBlocks[r].dataCount;
+        var ecCount = rsBlocks[r].totalCount - dcCount;
+
+        maxDcCount = Math.max(maxDcCount, dcCount);
+        maxEcCount = Math.max(maxEcCount, ecCount);
+
+        dcdata[r] = new Array(dcCount);
+
+        for (var i = 0; i < dcdata[r].length; i += 1) {
+          dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
+        }
+        offset += dcCount;
+
+        var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+        var rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+
+        var modPoly = rawPoly.mod(rsPoly);
+        ecdata[r] = new Array(rsPoly.getLength() - 1);
+        for (var i = 0; i < ecdata[r].length; i += 1) {
+          var modIndex = i + modPoly.getLength() - ecdata[r].length;
+          ecdata[r][i] = (modIndex >= 0)? modPoly.getAt(modIndex) : 0;
+        }
+      }
+
+      var totalCodeCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalCodeCount += rsBlocks[i].totalCount;
+      }
+
+      var data = new Array(totalCodeCount);
+      var index = 0;
+
+      for (var i = 0; i < maxDcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < dcdata[r].length) {
+            data[index] = dcdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      for (var i = 0; i < maxEcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < ecdata[r].length) {
+            data[index] = ecdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      return data;
+    };
+
+    var createData = function(typeNumber, errorCorrectionLevel, dataList) {
+
+      var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel);
+
+      var buffer = qrBitBuffer();
+
+      for (var i = 0; i < dataList.length; i += 1) {
+        var data = dataList[i];
+        buffer.put(data.getMode(), 4);
+        buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+        data.write(buffer);
+      }
+
+      // calc num max data.
+      var totalDataCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalDataCount += rsBlocks[i].dataCount;
+      }
+
+      if (buffer.getLengthInBits() > totalDataCount * 8) {
+        throw 'code length overflow. ('
+          + buffer.getLengthInBits()
+          + '>'
+          + totalDataCount * 8
+          + ')';
+      }
+
+      // end code
+      if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+        buffer.put(0, 4);
+      }
+
+      // padding
+      while (buffer.getLengthInBits() % 8 != 0) {
+        buffer.putBit(false);
+      }
+
+      // padding
+      while (true) {
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD0, 8);
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD1, 8);
+      }
+
+      return createBytes(buffer, rsBlocks);
+    };
+
+    _this.addData = function(data, mode) {
+
+      mode = mode || 'Byte';
+
+      var newData = null;
+
+      switch(mode) {
+      case 'Numeric' :
+        newData = qrNumber(data);
+        break;
+      case 'Alphanumeric' :
+        newData = qrAlphaNum(data);
+        break;
+      case 'Byte' :
+        newData = qr8BitByte(data);
+        break;
+      case 'Kanji' :
+        newData = qrKanji(data);
+        break;
+      default :
+        throw 'mode:' + mode;
+      }
+
+      _dataList.push(newData);
+      _dataCache = null;
+    };
+
+    _this.isDark = function(row, col) {
+      if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+        throw row + ',' + col;
+      }
+      return _modules[row][col];
+    };
+
+    _this.getModuleCount = function() {
+      return _moduleCount;
+    };
+
+    _this.make = function() {
+      if (_typeNumber < 1) {
+        var typeNumber = 1;
+
+        for (; typeNumber < 40; typeNumber++) {
+          var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, _errorCorrectionLevel);
+          var buffer = qrBitBuffer();
+
+          for (var i = 0; i < _dataList.length; i++) {
+            var data = _dataList[i];
+            buffer.put(data.getMode(), 4);
+            buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+            data.write(buffer);
+          }
+
+          var totalDataCount = 0;
+          for (var i = 0; i < rsBlocks.length; i++) {
+            totalDataCount += rsBlocks[i].dataCount;
+          }
+
+          if (buffer.getLengthInBits() <= totalDataCount * 8) {
+            break;
+          }
+        }
+
+        _typeNumber = typeNumber;
+      }
+
+      makeImpl(false, getBestMaskPattern() );
+    };
+
+    _this.createTableTag = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var qrHtml = '';
+
+      qrHtml += '<table style="';
+      qrHtml += ' border-width: 0px; border-style: none;';
+      qrHtml += ' border-collapse: collapse;';
+      qrHtml += ' padding: 0px; margin: ' + margin + 'px;';
+      qrHtml += '">';
+      qrHtml += '<tbody>';
+
+      for (var r = 0; r < _this.getModuleCount(); r += 1) {
+
+        qrHtml += '<tr>';
+
+        for (var c = 0; c < _this.getModuleCount(); c += 1) {
+          qrHtml += '<td style="';
+          qrHtml += ' border-width: 0px; border-style: none;';
+          qrHtml += ' border-collapse: collapse;';
+          qrHtml += ' padding: 0px; margin: 0px;';
+          qrHtml += ' width: ' + cellSize + 'px;';
+          qrHtml += ' height: ' + cellSize + 'px;';
+          qrHtml += ' background-color: ';
+          qrHtml += _this.isDark(r, c)? '#000000' : '#ffffff';
+          qrHtml += ';';
+          qrHtml += '"/>';
+        }
+
+        qrHtml += '</tr>';
+      }
+
+      qrHtml += '</tbody>';
+      qrHtml += '</table>';
+
+      return qrHtml;
+    };
+
+    _this.createSvgTag = function(cellSize, margin, alt, title) {
+
+      var opts = {};
+      if (typeof arguments[0] == 'object') {
+        // Called by options.
+        opts = arguments[0];
+        // overwrite cellSize and margin.
+        cellSize = opts.cellSize;
+        margin = opts.margin;
+        alt = opts.alt;
+        title = opts.title;
+      }
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      // Compose alt property surrogate
+      alt = (typeof alt === 'string') ? {text: alt} : alt || {};
+      alt.text = alt.text || null;
+      alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
+
+      // Compose title property surrogate
+      title = (typeof title === 'string') ? {text: title} : title || {};
+      title.text = title.text || null;
+      title.id = (title.text) ? title.id || 'qrcode-title' : null;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var c, mc, r, mr, qrSvg='', rect;
+
+      rect = 'l' + cellSize + ',0 0,' + cellSize +
+        ' -' + cellSize + ',0 0,-' + cellSize + 'z ';
+
+      qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+      qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : '';
+      qrSvg += ' viewBox="0 0 ' + size + ' ' + size + '" ';
+      qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+      qrSvg += (title.text || alt.text) ? ' role="img" aria-labelledby="' +
+          escapeXml([title.id, alt.id].join(' ').trim() ) + '"' : '';
+      qrSvg += '>';
+      qrSvg += (title.text) ? '<title id="' + escapeXml(title.id) + '">' +
+          escapeXml(title.text) + '</title>' : '';
+      qrSvg += (alt.text) ? '<description id="' + escapeXml(alt.id) + '">' +
+          escapeXml(alt.text) + '</description>' : '';
+      qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+      qrSvg += '<path d="';
+
+      for (r = 0; r < _this.getModuleCount(); r += 1) {
+        mr = r * cellSize + margin;
+        for (c = 0; c < _this.getModuleCount(); c += 1) {
+          if (_this.isDark(r, c) ) {
+            mc = c*cellSize+margin;
+            qrSvg += 'M' + mc + ',' + mr + rect;
+          }
+        }
+      }
+
+      qrSvg += '" stroke="transparent" fill="black"/>';
+      qrSvg += '</svg>';
+
+      return qrSvg;
+    };
+
+    _this.createDataURL = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      return createDataURL(size, size, function(x, y) {
+        if (min <= x && x < max && min <= y && y < max) {
+          var c = Math.floor( (x - min) / cellSize);
+          var r = Math.floor( (y - min) / cellSize);
+          return _this.isDark(r, c)? 0 : 1;
+        } else {
+          return 1;
+        }
+      } );
+    };
+
+    _this.createImgTag = function(cellSize, margin, alt) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+
+      var img = '';
+      img += '<img';
+      img += '\u0020src="';
+      img += _this.createDataURL(cellSize, margin);
+      img += '"';
+      img += '\u0020width="';
+      img += size;
+      img += '"';
+      img += '\u0020height="';
+      img += size;
+      img += '"';
+      if (alt) {
+        img += '\u0020alt="';
+        img += escapeXml(alt);
+        img += '"';
+      }
+      img += '/>';
+
+      return img;
+    };
+
+    var escapeXml = function(s) {
+      var escaped = '';
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charAt(i);
+        switch(c) {
+        case '<': escaped += '&lt;'; break;
+        case '>': escaped += '&gt;'; break;
+        case '&': escaped += '&amp;'; break;
+        case '"': escaped += '&quot;'; break;
+        default : escaped += c; break;
+        }
+      }
+      return escaped;
+    };
+
+    var _createHalfASCII = function(margin) {
+      var cellSize = 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r1, r2, p;
+
+      var blocks = {
+        '██': '█',
+        '█ ': '▀',
+        ' █': '▄',
+        '  ': ' '
+      };
+
+      var blocksLastLineNoMargin = {
+        '██': '▀',
+        '█ ': '▀',
+        ' █': ' ',
+        '  ': ' '
+      };
+
+      var ascii = '';
+      for (y = 0; y < size; y += 2) {
+        r1 = Math.floor((y - min) / cellSize);
+        r2 = Math.floor((y + 1 - min) / cellSize);
+        for (x = 0; x < size; x += 1) {
+          p = '█';
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+            p = ' ';
+          }
+
+          if (min <= x && x < max && min <= y+1 && y+1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+            p += ' ';
+          }
+          else {
+            p += '█';
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
+        }
+
+        ascii += '\n';
+      }
+
+      if (size % 2 && margin > 0) {
+        return ascii.substring(0, ascii.length - size - 1) + Array(size+1).join('▀');
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.createASCII = function(cellSize, margin) {
+      cellSize = cellSize || 1;
+
+      if (cellSize < 2) {
+        return _createHalfASCII(margin);
+      }
+
+      cellSize -= 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r, p;
+
+      var white = Array(cellSize+1).join('██');
+      var black = Array(cellSize+1).join('  ');
+
+      var ascii = '';
+      var line = '';
+      for (y = 0; y < size; y += 1) {
+        r = Math.floor( (y - min) / cellSize);
+        line = '';
+        for (x = 0; x < size; x += 1) {
+          p = 1;
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+            p = 0;
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          line += p ? white : black;
+        }
+
+        for (r = 0; r < cellSize; r += 1) {
+          ascii += line + '\n';
+        }
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.renderTo2dContext = function(context, cellSize) {
+      cellSize = cellSize || 2;
+      var length = _this.getModuleCount();
+      for (var row = 0; row < length; row++) {
+        for (var col = 0; col < length; col++) {
+          context.fillStyle = _this.isDark(row, col) ? 'black' : 'white';
+          context.fillRect(row * cellSize, col * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrcode.stringToBytes
+  //---------------------------------------------------------------------
+
+  qrcode.stringToBytesFuncs = {
+    'default' : function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        bytes.push(c & 0xff);
+      }
+      return bytes;
+    }
+  };
+
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
+
+  //---------------------------------------------------------------------
+  // qrcode.createStringToBytes
+  //---------------------------------------------------------------------
+
+  /**
+   * @param unicodeData base64 string of byte array.
+   * [16bit Unicode],[16bit Bytes], ...
+   * @param numChars
+   */
+  qrcode.createStringToBytes = function(unicodeData, numChars) {
+
+    // create conversion map.
+
+    var unicodeMap = function() {
+
+      var bin = base64DecodeInputStream(unicodeData);
+      var read = function() {
+        var b = bin.read();
+        if (b == -1) throw 'eof';
+        return b;
+      };
+
+      var count = 0;
+      var unicodeMap = {};
+      while (true) {
+        var b0 = bin.read();
+        if (b0 == -1) break;
+        var b1 = read();
+        var b2 = read();
+        var b3 = read();
+        var k = String.fromCharCode( (b0 << 8) | b1);
+        var v = (b2 << 8) | b3;
+        unicodeMap[k] = v;
+        count += 1;
+      }
+      if (count != numChars) {
+        throw count + ' != ' + numChars;
+      }
+
+      return unicodeMap;
+    }();
+
+    var unknownChar = '?'.charCodeAt(0);
+
+    return function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        if (c < 128) {
+          bytes.push(c);
+        } else {
+          var b = unicodeMap[s.charAt(i)];
+          if (typeof b == 'number') {
+            if ( (b & 0xff) == b) {
+              // 1byte
+              bytes.push(b);
+            } else {
+              // 2bytes
+              bytes.push(b >>> 8);
+              bytes.push(b & 0xff);
+            }
+          } else {
+            bytes.push(unknownChar);
+          }
+        }
+      }
+      return bytes;
+    };
+  };
+
+  //---------------------------------------------------------------------
+  // QRMode
+  //---------------------------------------------------------------------
+
+  var QRMode = {
+    MODE_NUMBER :    1 << 0,
+    MODE_ALPHA_NUM : 1 << 1,
+    MODE_8BIT_BYTE : 1 << 2,
+    MODE_KANJI :     1 << 3
+  };
+
+  //---------------------------------------------------------------------
+  // QRErrorCorrectionLevel
+  //---------------------------------------------------------------------
+
+  var QRErrorCorrectionLevel = {
+    L : 1,
+    M : 0,
+    Q : 3,
+    H : 2
+  };
+
+  //---------------------------------------------------------------------
+  // QRMaskPattern
+  //---------------------------------------------------------------------
+
+  var QRMaskPattern = {
+    PATTERN000 : 0,
+    PATTERN001 : 1,
+    PATTERN010 : 2,
+    PATTERN011 : 3,
+    PATTERN100 : 4,
+    PATTERN101 : 5,
+    PATTERN110 : 6,
+    PATTERN111 : 7
+  };
+
+  //---------------------------------------------------------------------
+  // QRUtil
+  //---------------------------------------------------------------------
+
+  var QRUtil = function() {
+
+    var PATTERN_POSITION_TABLE = [
+      [],
+      [6, 18],
+      [6, 22],
+      [6, 26],
+      [6, 30],
+      [6, 34],
+      [6, 22, 38],
+      [6, 24, 42],
+      [6, 26, 46],
+      [6, 28, 50],
+      [6, 30, 54],
+      [6, 32, 58],
+      [6, 34, 62],
+      [6, 26, 46, 66],
+      [6, 26, 48, 70],
+      [6, 26, 50, 74],
+      [6, 30, 54, 78],
+      [6, 30, 56, 82],
+      [6, 30, 58, 86],
+      [6, 34, 62, 90],
+      [6, 28, 50, 72, 94],
+      [6, 26, 50, 74, 98],
+      [6, 30, 54, 78, 102],
+      [6, 28, 54, 80, 106],
+      [6, 32, 58, 84, 110],
+      [6, 30, 58, 86, 114],
+      [6, 34, 62, 90, 118],
+      [6, 26, 50, 74, 98, 122],
+      [6, 30, 54, 78, 102, 126],
+      [6, 26, 52, 78, 104, 130],
+      [6, 30, 56, 82, 108, 134],
+      [6, 34, 60, 86, 112, 138],
+      [6, 30, 58, 86, 114, 142],
+      [6, 34, 62, 90, 118, 146],
+      [6, 30, 54, 78, 102, 126, 150],
+      [6, 24, 50, 76, 102, 128, 154],
+      [6, 28, 54, 80, 106, 132, 158],
+      [6, 32, 58, 84, 110, 136, 162],
+      [6, 26, 54, 82, 110, 138, 166],
+      [6, 30, 58, 86, 114, 142, 170]
+    ];
+    var G15 = (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0);
+    var G18 = (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0);
+    var G15_MASK = (1 << 14) | (1 << 12) | (1 << 10) | (1 << 4) | (1 << 1);
+
+    var _this = {};
+
+    var getBCHDigit = function(data) {
+      var digit = 0;
+      while (data != 0) {
+        digit += 1;
+        data >>>= 1;
+      }
+      return digit;
+    };
+
+    _this.getBCHTypeInfo = function(data) {
+      var d = data << 10;
+      while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+        d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15) ) );
+      }
+      return ( (data << 10) | d) ^ G15_MASK;
+    };
+
+    _this.getBCHTypeNumber = function(data) {
+      var d = data << 12;
+      while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+        d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18) ) );
+      }
+      return (data << 12) | d;
+    };
+
+    _this.getPatternPosition = function(typeNumber) {
+      return PATTERN_POSITION_TABLE[typeNumber - 1];
+    };
+
+    _this.getMaskFunction = function(maskPattern) {
+
+      switch (maskPattern) {
+
+      case QRMaskPattern.PATTERN000 :
+        return function(i, j) { return (i + j) % 2 == 0; };
+      case QRMaskPattern.PATTERN001 :
+        return function(i, j) { return i % 2 == 0; };
+      case QRMaskPattern.PATTERN010 :
+        return function(i, j) { return j % 3 == 0; };
+      case QRMaskPattern.PATTERN011 :
+        return function(i, j) { return (i + j) % 3 == 0; };
+      case QRMaskPattern.PATTERN100 :
+        return function(i, j) { return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 == 0; };
+      case QRMaskPattern.PATTERN101 :
+        return function(i, j) { return (i * j) % 2 + (i * j) % 3 == 0; };
+      case QRMaskPattern.PATTERN110 :
+        return function(i, j) { return ( (i * j) % 2 + (i * j) % 3) % 2 == 0; };
+      case QRMaskPattern.PATTERN111 :
+        return function(i, j) { return ( (i * j) % 3 + (i + j) % 2) % 2 == 0; };
+
+      default :
+        throw 'bad maskPattern:' + maskPattern;
+      }
+    };
+
+    _this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+      var a = qrPolynomial([1], 0);
+      for (var i = 0; i < errorCorrectLength; i += 1) {
+        a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0) );
+      }
+      return a;
+    };
+
+    _this.getLengthInBits = function(mode, type) {
+
+      if (1 <= type && type < 10) {
+
+        // 1 - 9
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 10;
+        case QRMode.MODE_ALPHA_NUM : return 9;
+        case QRMode.MODE_8BIT_BYTE : return 8;
+        case QRMode.MODE_KANJI     : return 8;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 27) {
+
+        // 10 - 26
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 12;
+        case QRMode.MODE_ALPHA_NUM : return 11;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 10;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 41) {
+
+        // 27 - 40
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 14;
+        case QRMode.MODE_ALPHA_NUM : return 13;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 12;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else {
+        throw 'type:' + type;
+      }
+    };
+
+    _this.getLostPoint = function(qrcode) {
+
+      var moduleCount = qrcode.getModuleCount();
+
+      var lostPoint = 0;
+
+      // LEVEL1
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount; col += 1) {
+
+          var sameCount = 0;
+          var dark = qrcode.isDark(row, col);
+
+          for (var r = -1; r <= 1; r += 1) {
+
+            if (row + r < 0 || moduleCount <= row + r) {
+              continue;
+            }
+
+            for (var c = -1; c <= 1; c += 1) {
+
+              if (col + c < 0 || moduleCount <= col + c) {
+                continue;
+              }
+
+              if (r == 0 && c == 0) {
+                continue;
+              }
+
+              if (dark == qrcode.isDark(row + r, col + c) ) {
+                sameCount += 1;
+              }
+            }
+          }
+
+          if (sameCount > 5) {
+            lostPoint += (3 + sameCount - 5);
+          }
+        }
+      };
+
+      // LEVEL2
+
+      for (var row = 0; row < moduleCount - 1; row += 1) {
+        for (var col = 0; col < moduleCount - 1; col += 1) {
+          var count = 0;
+          if (qrcode.isDark(row, col) ) count += 1;
+          if (qrcode.isDark(row + 1, col) ) count += 1;
+          if (qrcode.isDark(row, col + 1) ) count += 1;
+          if (qrcode.isDark(row + 1, col + 1) ) count += 1;
+          if (count == 0 || count == 4) {
+            lostPoint += 3;
+          }
+        }
+      }
+
+      // LEVEL3
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount - 6; col += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row, col + 1)
+              &&  qrcode.isDark(row, col + 2)
+              &&  qrcode.isDark(row, col + 3)
+              &&  qrcode.isDark(row, col + 4)
+              && !qrcode.isDark(row, col + 5)
+              &&  qrcode.isDark(row, col + 6) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount - 6; row += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row + 1, col)
+              &&  qrcode.isDark(row + 2, col)
+              &&  qrcode.isDark(row + 3, col)
+              &&  qrcode.isDark(row + 4, col)
+              && !qrcode.isDark(row + 5, col)
+              &&  qrcode.isDark(row + 6, col) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      // LEVEL4
+
+      var darkCount = 0;
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount; row += 1) {
+          if (qrcode.isDark(row, col) ) {
+            darkCount += 1;
+          }
+        }
+      }
+
+      var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+      lostPoint += ratio * 10;
+
+      return lostPoint;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // QRMath
+  //---------------------------------------------------------------------
+
+  var QRMath = function() {
+
+    var EXP_TABLE = new Array(256);
+    var LOG_TABLE = new Array(256);
+
+    // initialize tables
+    for (var i = 0; i < 8; i += 1) {
+      EXP_TABLE[i] = 1 << i;
+    }
+    for (var i = 8; i < 256; i += 1) {
+      EXP_TABLE[i] = EXP_TABLE[i - 4]
+        ^ EXP_TABLE[i - 5]
+        ^ EXP_TABLE[i - 6]
+        ^ EXP_TABLE[i - 8];
+    }
+    for (var i = 0; i < 255; i += 1) {
+      LOG_TABLE[EXP_TABLE[i] ] = i;
+    }
+
+    var _this = {};
+
+    _this.glog = function(n) {
+
+      if (n < 1) {
+        throw 'glog(' + n + ')';
+      }
+
+      return LOG_TABLE[n];
+    };
+
+    _this.gexp = function(n) {
+
+      while (n < 0) {
+        n += 255;
+      }
+
+      while (n >= 256) {
+        n -= 255;
+      }
+
+      return EXP_TABLE[n];
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrPolynomial
+  //---------------------------------------------------------------------
+
+  function qrPolynomial(num, shift) {
+
+    if (typeof num.length == 'undefined') {
+      throw num.length + '/' + shift;
+    }
+
+    var _num = function() {
+      var offset = 0;
+      while (offset < num.length && num[offset] == 0) {
+        offset += 1;
+      }
+      var _num = new Array(num.length - offset + shift);
+      for (var i = 0; i < num.length - offset; i += 1) {
+        _num[i] = num[i + offset];
+      }
+      return _num;
+    }();
+
+    var _this = {};
+
+    _this.getAt = function(index) {
+      return _num[index];
+    };
+
+    _this.getLength = function() {
+      return _num.length;
+    };
+
+    _this.multiply = function(e) {
+
+      var num = new Array(_this.getLength() + e.getLength() - 1);
+
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        for (var j = 0; j < e.getLength(); j += 1) {
+          num[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i) ) + QRMath.glog(e.getAt(j) ) );
+        }
+      }
+
+      return qrPolynomial(num, 0);
+    };
+
+    _this.mod = function(e) {
+
+      if (_this.getLength() - e.getLength() < 0) {
+        return _this;
+      }
+
+      var ratio = QRMath.glog(_this.getAt(0) ) - QRMath.glog(e.getAt(0) );
+
+      var num = new Array(_this.getLength() );
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        num[i] = _this.getAt(i);
+      }
+
+      for (var i = 0; i < e.getLength(); i += 1) {
+        num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
+      }
+
+      // recursive call
+      return qrPolynomial(num, 0).mod(e);
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // QRRSBlock
+  //---------------------------------------------------------------------
+
+  var QRRSBlock = function() {
+
+    var RS_BLOCK_TABLE = [
+
+      // L
+      // M
+      // Q
+      // H
+
+      // 1
+      [1, 26, 19],
+      [1, 26, 16],
+      [1, 26, 13],
+      [1, 26, 9],
+
+      // 2
+      [1, 44, 34],
+      [1, 44, 28],
+      [1, 44, 22],
+      [1, 44, 16],
+
+      // 3
+      [1, 70, 55],
+      [1, 70, 44],
+      [2, 35, 17],
+      [2, 35, 13],
+
+      // 4
+      [1, 100, 80],
+      [2, 50, 32],
+      [2, 50, 24],
+      [4, 25, 9],
+
+      // 5
+      [1, 134, 108],
+      [2, 67, 43],
+      [2, 33, 15, 2, 34, 16],
+      [2, 33, 11, 2, 34, 12],
+
+      // 6
+      [2, 86, 68],
+      [4, 43, 27],
+      [4, 43, 19],
+      [4, 43, 15],
+
+      // 7
+      [2, 98, 78],
+      [4, 49, 31],
+      [2, 32, 14, 4, 33, 15],
+      [4, 39, 13, 1, 40, 14],
+
+      // 8
+      [2, 121, 97],
+      [2, 60, 38, 2, 61, 39],
+      [4, 40, 18, 2, 41, 19],
+      [4, 40, 14, 2, 41, 15],
+
+      // 9
+      [2, 146, 116],
+      [3, 58, 36, 2, 59, 37],
+      [4, 36, 16, 4, 37, 17],
+      [4, 36, 12, 4, 37, 13],
+
+      // 10
+      [2, 86, 68, 2, 87, 69],
+      [4, 69, 43, 1, 70, 44],
+      [6, 43, 19, 2, 44, 20],
+      [6, 43, 15, 2, 44, 16],
+
+      // 11
+      [4, 101, 81],
+      [1, 80, 50, 4, 81, 51],
+      [4, 50, 22, 4, 51, 23],
+      [3, 36, 12, 8, 37, 13],
+
+      // 12
+      [2, 116, 92, 2, 117, 93],
+      [6, 58, 36, 2, 59, 37],
+      [4, 46, 20, 6, 47, 21],
+      [7, 42, 14, 4, 43, 15],
+
+      // 13
+      [4, 133, 107],
+      [8, 59, 37, 1, 60, 38],
+      [8, 44, 20, 4, 45, 21],
+      [12, 33, 11, 4, 34, 12],
+
+      // 14
+      [3, 145, 115, 1, 146, 116],
+      [4, 64, 40, 5, 65, 41],
+      [11, 36, 16, 5, 37, 17],
+      [11, 36, 12, 5, 37, 13],
+
+      // 15
+      [5, 109, 87, 1, 110, 88],
+      [5, 65, 41, 5, 66, 42],
+      [5, 54, 24, 7, 55, 25],
+      [11, 36, 12, 7, 37, 13],
+
+      // 16
+      [5, 122, 98, 1, 123, 99],
+      [7, 73, 45, 3, 74, 46],
+      [15, 43, 19, 2, 44, 20],
+      [3, 45, 15, 13, 46, 16],
+
+      // 17
+      [1, 135, 107, 5, 136, 108],
+      [10, 74, 46, 1, 75, 47],
+      [1, 50, 22, 15, 51, 23],
+      [2, 42, 14, 17, 43, 15],
+
+      // 18
+      [5, 150, 120, 1, 151, 121],
+      [9, 69, 43, 4, 70, 44],
+      [17, 50, 22, 1, 51, 23],
+      [2, 42, 14, 19, 43, 15],
+
+      // 19
+      [3, 141, 113, 4, 142, 114],
+      [3, 70, 44, 11, 71, 45],
+      [17, 47, 21, 4, 48, 22],
+      [9, 39, 13, 16, 40, 14],
+
+      // 20
+      [3, 135, 107, 5, 136, 108],
+      [3, 67, 41, 13, 68, 42],
+      [15, 54, 24, 5, 55, 25],
+      [15, 43, 15, 10, 44, 16],
+
+      // 21
+      [4, 144, 116, 4, 145, 117],
+      [17, 68, 42],
+      [17, 50, 22, 6, 51, 23],
+      [19, 46, 16, 6, 47, 17],
+
+      // 22
+      [2, 139, 111, 7, 140, 112],
+      [17, 74, 46],
+      [7, 54, 24, 16, 55, 25],
+      [34, 37, 13],
+
+      // 23
+      [4, 151, 121, 5, 152, 122],
+      [4, 75, 47, 14, 76, 48],
+      [11, 54, 24, 14, 55, 25],
+      [16, 45, 15, 14, 46, 16],
+
+      // 24
+      [6, 147, 117, 4, 148, 118],
+      [6, 73, 45, 14, 74, 46],
+      [11, 54, 24, 16, 55, 25],
+      [30, 46, 16, 2, 47, 17],
+
+      // 25
+      [8, 132, 106, 4, 133, 107],
+      [8, 75, 47, 13, 76, 48],
+      [7, 54, 24, 22, 55, 25],
+      [22, 45, 15, 13, 46, 16],
+
+      // 26
+      [10, 142, 114, 2, 143, 115],
+      [19, 74, 46, 4, 75, 47],
+      [28, 50, 22, 6, 51, 23],
+      [33, 46, 16, 4, 47, 17],
+
+      // 27
+      [8, 152, 122, 4, 153, 123],
+      [22, 73, 45, 3, 74, 46],
+      [8, 53, 23, 26, 54, 24],
+      [12, 45, 15, 28, 46, 16],
+
+      // 28
+      [3, 147, 117, 10, 148, 118],
+      [3, 73, 45, 23, 74, 46],
+      [4, 54, 24, 31, 55, 25],
+      [11, 45, 15, 31, 46, 16],
+
+      // 29
+      [7, 146, 116, 7, 147, 117],
+      [21, 73, 45, 7, 74, 46],
+      [1, 53, 23, 37, 54, 24],
+      [19, 45, 15, 26, 46, 16],
+
+      // 30
+      [5, 145, 115, 10, 146, 116],
+      [19, 75, 47, 10, 76, 48],
+      [15, 54, 24, 25, 55, 25],
+      [23, 45, 15, 25, 46, 16],
+
+      // 31
+      [13, 145, 115, 3, 146, 116],
+      [2, 74, 46, 29, 75, 47],
+      [42, 54, 24, 1, 55, 25],
+      [23, 45, 15, 28, 46, 16],
+
+      // 32
+      [17, 145, 115],
+      [10, 74, 46, 23, 75, 47],
+      [10, 54, 24, 35, 55, 25],
+      [19, 45, 15, 35, 46, 16],
+
+      // 33
+      [17, 145, 115, 1, 146, 116],
+      [14, 74, 46, 21, 75, 47],
+      [29, 54, 24, 19, 55, 25],
+      [11, 45, 15, 46, 46, 16],
+
+      // 34
+      [13, 145, 115, 6, 146, 116],
+      [14, 74, 46, 23, 75, 47],
+      [44, 54, 24, 7, 55, 25],
+      [59, 46, 16, 1, 47, 17],
+
+      // 35
+      [12, 151, 121, 7, 152, 122],
+      [12, 75, 47, 26, 76, 48],
+      [39, 54, 24, 14, 55, 25],
+      [22, 45, 15, 41, 46, 16],
+
+      // 36
+      [6, 151, 121, 14, 152, 122],
+      [6, 75, 47, 34, 76, 48],
+      [46, 54, 24, 10, 55, 25],
+      [2, 45, 15, 64, 46, 16],
+
+      // 37
+      [17, 152, 122, 4, 153, 123],
+      [29, 74, 46, 14, 75, 47],
+      [49, 54, 24, 10, 55, 25],
+      [24, 45, 15, 46, 46, 16],
+
+      // 38
+      [4, 152, 122, 18, 153, 123],
+      [13, 74, 46, 32, 75, 47],
+      [48, 54, 24, 14, 55, 25],
+      [42, 45, 15, 32, 46, 16],
+
+      // 39
+      [20, 147, 117, 4, 148, 118],
+      [40, 75, 47, 7, 76, 48],
+      [43, 54, 24, 22, 55, 25],
+      [10, 45, 15, 67, 46, 16],
+
+      // 40
+      [19, 148, 118, 6, 149, 119],
+      [18, 75, 47, 31, 76, 48],
+      [34, 54, 24, 34, 55, 25],
+      [20, 45, 15, 61, 46, 16]
+    ];
+
+    var qrRSBlock = function(totalCount, dataCount) {
+      var _this = {};
+      _this.totalCount = totalCount;
+      _this.dataCount = dataCount;
+      return _this;
+    };
+
+    var _this = {};
+
+    var getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+
+      switch(errorCorrectionLevel) {
+      case QRErrorCorrectionLevel.L :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+      case QRErrorCorrectionLevel.M :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+      case QRErrorCorrectionLevel.Q :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+      case QRErrorCorrectionLevel.H :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+      default :
+        return undefined;
+      }
+    };
+
+    _this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+
+      var rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+
+      if (typeof rsBlock == 'undefined') {
+        throw 'bad rs block @ typeNumber:' + typeNumber +
+            '/errorCorrectionLevel:' + errorCorrectionLevel;
+      }
+
+      var length = rsBlock.length / 3;
+
+      var list = [];
+
+      for (var i = 0; i < length; i += 1) {
+
+        var count = rsBlock[i * 3 + 0];
+        var totalCount = rsBlock[i * 3 + 1];
+        var dataCount = rsBlock[i * 3 + 2];
+
+        for (var j = 0; j < count; j += 1) {
+          list.push(qrRSBlock(totalCount, dataCount) );
+        }
+      }
+
+      return list;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrBitBuffer
+  //---------------------------------------------------------------------
+
+  var qrBitBuffer = function() {
+
+    var _buffer = [];
+    var _length = 0;
+
+    var _this = {};
+
+    _this.getBuffer = function() {
+      return _buffer;
+    };
+
+    _this.getAt = function(index) {
+      var bufIndex = Math.floor(index / 8);
+      return ( (_buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+    };
+
+    _this.put = function(num, length) {
+      for (var i = 0; i < length; i += 1) {
+        _this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+      }
+    };
+
+    _this.getLengthInBits = function() {
+      return _length;
+    };
+
+    _this.putBit = function(bit) {
+
+      var bufIndex = Math.floor(_length / 8);
+      if (_buffer.length <= bufIndex) {
+        _buffer.push(0);
+      }
+
+      if (bit) {
+        _buffer[bufIndex] |= (0x80 >>> (_length % 8) );
+      }
+
+      _length += 1;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrNumber
+  //---------------------------------------------------------------------
+
+  var qrNumber = function(data) {
+
+    var _mode = QRMode.MODE_NUMBER;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _data;
+
+      var i = 0;
+
+      while (i + 2 < data.length) {
+        buffer.put(strToNum(data.substring(i, i + 3) ), 10);
+        i += 3;
+      }
+
+      if (i < data.length) {
+        if (data.length - i == 1) {
+          buffer.put(strToNum(data.substring(i, i + 1) ), 4);
+        } else if (data.length - i == 2) {
+          buffer.put(strToNum(data.substring(i, i + 2) ), 7);
+        }
+      }
+    };
+
+    var strToNum = function(s) {
+      var num = 0;
+      for (var i = 0; i < s.length; i += 1) {
+        num = num * 10 + chatToNum(s.charAt(i) );
+      }
+      return num;
+    };
+
+    var chatToNum = function(c) {
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      }
+      throw 'illegal char :' + c;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrAlphaNum
+  //---------------------------------------------------------------------
+
+  var qrAlphaNum = function(data) {
+
+    var _mode = QRMode.MODE_ALPHA_NUM;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var s = _data;
+
+      var i = 0;
+
+      while (i + 1 < s.length) {
+        buffer.put(
+          getCode(s.charAt(i) ) * 45 +
+          getCode(s.charAt(i + 1) ), 11);
+        i += 2;
+      }
+
+      if (i < s.length) {
+        buffer.put(getCode(s.charAt(i) ), 6);
+      }
+    };
+
+    var getCode = function(c) {
+
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      } else if ('A' <= c && c <= 'Z') {
+        return c.charCodeAt(0) - 'A'.charCodeAt(0) + 10;
+      } else {
+        switch (c) {
+        case ' ' : return 36;
+        case '$' : return 37;
+        case '%' : return 38;
+        case '*' : return 39;
+        case '+' : return 40;
+        case '-' : return 41;
+        case '.' : return 42;
+        case '/' : return 43;
+        case ':' : return 44;
+        default :
+          throw 'illegal char :' + c;
+        }
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qr8BitByte
+  //---------------------------------------------------------------------
+
+  var qr8BitByte = function(data) {
+
+    var _mode = QRMode.MODE_8BIT_BYTE;
+    var _data = data;
+    var _bytes = qrcode.stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _bytes.length;
+    };
+
+    _this.write = function(buffer) {
+      for (var i = 0; i < _bytes.length; i += 1) {
+        buffer.put(_bytes[i], 8);
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrKanji
+  //---------------------------------------------------------------------
+
+  var qrKanji = function(data) {
+
+    var _mode = QRMode.MODE_KANJI;
+    var _data = data;
+
+    var stringToBytes = qrcode.stringToBytesFuncs['SJIS'];
+    if (!stringToBytes) {
+      throw 'sjis not supported.';
+    }
+    !function(c, code) {
+      // self test for sjis support.
+      var test = stringToBytes(c);
+      if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
+        throw 'sjis not supported.';
+      }
+    }('\u53cb', 0x9746);
+
+    var _bytes = stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return ~~(_bytes.length / 2);
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _bytes;
+
+      var i = 0;
+
+      while (i + 1 < data.length) {
+
+        var c = ( (0xff & data[i]) << 8) | (0xff & data[i + 1]);
+
+        if (0x8140 <= c && c <= 0x9FFC) {
+          c -= 0x8140;
+        } else if (0xE040 <= c && c <= 0xEBBF) {
+          c -= 0xC140;
+        } else {
+          throw 'illegal char at ' + (i + 1) + '/' + c;
+        }
+
+        c = ( (c >>> 8) & 0xff) * 0xC0 + (c & 0xff);
+
+        buffer.put(c, 13);
+
+        i += 2;
+      }
+
+      if (i < data.length) {
+        throw 'illegal char at ' + (i + 1);
+      }
+    };
+
+    return _this;
+  };
+
+  //=====================================================================
+  // GIF Support etc.
+  //
+
+  //---------------------------------------------------------------------
+  // byteArrayOutputStream
+  //---------------------------------------------------------------------
+
+  var byteArrayOutputStream = function() {
+
+    var _bytes = [];
+
+    var _this = {};
+
+    _this.writeByte = function(b) {
+      _bytes.push(b & 0xff);
+    };
+
+    _this.writeShort = function(i) {
+      _this.writeByte(i);
+      _this.writeByte(i >>> 8);
+    };
+
+    _this.writeBytes = function(b, off, len) {
+      off = off || 0;
+      len = len || b.length;
+      for (var i = 0; i < len; i += 1) {
+        _this.writeByte(b[i + off]);
+      }
+    };
+
+    _this.writeString = function(s) {
+      for (var i = 0; i < s.length; i += 1) {
+        _this.writeByte(s.charCodeAt(i) );
+      }
+    };
+
+    _this.toByteArray = function() {
+      return _bytes;
+    };
+
+    _this.toString = function() {
+      var s = '';
+      s += '[';
+      for (var i = 0; i < _bytes.length; i += 1) {
+        if (i > 0) {
+          s += ',';
+        }
+        s += _bytes[i];
+      }
+      s += ']';
+      return s;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64EncodeOutputStream
+  //---------------------------------------------------------------------
+
+  var base64EncodeOutputStream = function() {
+
+    var _buffer = 0;
+    var _buflen = 0;
+    var _length = 0;
+    var _base64 = '';
+
+    var _this = {};
+
+    var writeEncoded = function(b) {
+      _base64 += String.fromCharCode(encode(b & 0x3f) );
+    };
+
+    var encode = function(n) {
+      if (n < 0) {
+        // error.
+      } else if (n < 26) {
+        return 0x41 + n;
+      } else if (n < 52) {
+        return 0x61 + (n - 26);
+      } else if (n < 62) {
+        return 0x30 + (n - 52);
+      } else if (n == 62) {
+        return 0x2b;
+      } else if (n == 63) {
+        return 0x2f;
+      }
+      throw 'n:' + n;
+    };
+
+    _this.writeByte = function(n) {
+
+      _buffer = (_buffer << 8) | (n & 0xff);
+      _buflen += 8;
+      _length += 1;
+
+      while (_buflen >= 6) {
+        writeEncoded(_buffer >>> (_buflen - 6) );
+        _buflen -= 6;
+      }
+    };
+
+    _this.flush = function() {
+
+      if (_buflen > 0) {
+        writeEncoded(_buffer << (6 - _buflen) );
+        _buffer = 0;
+        _buflen = 0;
+      }
+
+      if (_length % 3 != 0) {
+        // padding
+        var padlen = 3 - _length % 3;
+        for (var i = 0; i < padlen; i += 1) {
+          _base64 += '=';
+        }
+      }
+    };
+
+    _this.toString = function() {
+      return _base64;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64DecodeInputStream
+  //---------------------------------------------------------------------
+
+  var base64DecodeInputStream = function(str) {
+
+    var _str = str;
+    var _pos = 0;
+    var _buffer = 0;
+    var _buflen = 0;
+
+    var _this = {};
+
+    _this.read = function() {
+
+      while (_buflen < 8) {
+
+        if (_pos >= _str.length) {
+          if (_buflen == 0) {
+            return -1;
+          }
+          throw 'unexpected end of file./' + _buflen;
+        }
+
+        var c = _str.charAt(_pos);
+        _pos += 1;
+
+        if (c == '=') {
+          _buflen = 0;
+          return -1;
+        } else if (c.match(/^\s$/) ) {
+          // ignore if whitespace.
+          continue;
+        }
+
+        _buffer = (_buffer << 6) | decode(c.charCodeAt(0) );
+        _buflen += 6;
+      }
+
+      var n = (_buffer >>> (_buflen - 8) ) & 0xff;
+      _buflen -= 8;
+      return n;
+    };
+
+    var decode = function(c) {
+      if (0x41 <= c && c <= 0x5a) {
+        return c - 0x41;
+      } else if (0x61 <= c && c <= 0x7a) {
+        return c - 0x61 + 26;
+      } else if (0x30 <= c && c <= 0x39) {
+        return c - 0x30 + 52;
+      } else if (c == 0x2b) {
+        return 62;
+      } else if (c == 0x2f) {
+        return 63;
+      } else {
+        throw 'c:' + c;
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // gifImage (B/W)
+  //---------------------------------------------------------------------
+
+  var gifImage = function(width, height) {
+
+    var _width = width;
+    var _height = height;
+    var _data = new Array(width * height);
+
+    var _this = {};
+
+    _this.setPixel = function(x, y, pixel) {
+      _data[y * _width + x] = pixel;
+    };
+
+    _this.write = function(out) {
+
+      //---------------------------------
+      // GIF Signature
+
+      out.writeString('GIF87a');
+
+      //---------------------------------
+      // Screen Descriptor
+
+      out.writeShort(_width);
+      out.writeShort(_height);
+
+      out.writeByte(0x80); // 2bit
+      out.writeByte(0);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Global Color Map
+
+      // black
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+
+      // white
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+
+      //---------------------------------
+      // Image Descriptor
+
+      out.writeString(',');
+      out.writeShort(0);
+      out.writeShort(0);
+      out.writeShort(_width);
+      out.writeShort(_height);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Local Color Map
+
+      //---------------------------------
+      // Raster Data
+
+      var lzwMinCodeSize = 2;
+      var raster = getLZWRaster(lzwMinCodeSize);
+
+      out.writeByte(lzwMinCodeSize);
+
+      var offset = 0;
+
+      while (raster.length - offset > 255) {
+        out.writeByte(255);
+        out.writeBytes(raster, offset, 255);
+        offset += 255;
+      }
+
+      out.writeByte(raster.length - offset);
+      out.writeBytes(raster, offset, raster.length - offset);
+      out.writeByte(0x00);
+
+      //---------------------------------
+      // GIF Terminator
+      out.writeString(';');
+    };
+
+    var bitOutputStream = function(out) {
+
+      var _out = out;
+      var _bitLength = 0;
+      var _bitBuffer = 0;
+
+      var _this = {};
+
+      _this.write = function(data, length) {
+
+        if ( (data >>> length) != 0) {
+          throw 'length over';
+        }
+
+        while (_bitLength + length >= 8) {
+          _out.writeByte(0xff & ( (data << _bitLength) | _bitBuffer) );
+          length -= (8 - _bitLength);
+          data >>>= (8 - _bitLength);
+          _bitBuffer = 0;
+          _bitLength = 0;
+        }
+
+        _bitBuffer = (data << _bitLength) | _bitBuffer;
+        _bitLength = _bitLength + length;
+      };
+
+      _this.flush = function() {
+        if (_bitLength > 0) {
+          _out.writeByte(_bitBuffer);
+        }
+      };
+
+      return _this;
+    };
+
+    var getLZWRaster = function(lzwMinCodeSize) {
+
+      var clearCode = 1 << lzwMinCodeSize;
+      var endCode = (1 << lzwMinCodeSize) + 1;
+      var bitLength = lzwMinCodeSize + 1;
+
+      // Setup LZWTable
+      var table = lzwTable();
+
+      for (var i = 0; i < clearCode; i += 1) {
+        table.add(String.fromCharCode(i) );
+      }
+      table.add(String.fromCharCode(clearCode) );
+      table.add(String.fromCharCode(endCode) );
+
+      var byteOut = byteArrayOutputStream();
+      var bitOut = bitOutputStream(byteOut);
+
+      // clear code
+      bitOut.write(clearCode, bitLength);
+
+      var dataIndex = 0;
+
+      var s = String.fromCharCode(_data[dataIndex]);
+      dataIndex += 1;
+
+      while (dataIndex < _data.length) {
+
+        var c = String.fromCharCode(_data[dataIndex]);
+        dataIndex += 1;
+
+        if (table.contains(s + c) ) {
+
+          s = s + c;
+
+        } else {
+
+          bitOut.write(table.indexOf(s), bitLength);
+
+          if (table.size() < 0xfff) {
+
+            if (table.size() == (1 << bitLength) ) {
+              bitLength += 1;
+            }
+
+            table.add(s + c);
+          }
+
+          s = c;
+        }
+      }
+
+      bitOut.write(table.indexOf(s), bitLength);
+
+      // end code
+      bitOut.write(endCode, bitLength);
+
+      bitOut.flush();
+
+      return byteOut.toByteArray();
+    };
+
+    var lzwTable = function() {
+
+      var _map = {};
+      var _size = 0;
+
+      var _this = {};
+
+      _this.add = function(key) {
+        if (_this.contains(key) ) {
+          throw 'dup key:' + key;
+        }
+        _map[key] = _size;
+        _size += 1;
+      };
+
+      _this.size = function() {
+        return _size;
+      };
+
+      _this.indexOf = function(key) {
+        return _map[key];
+      };
+
+      _this.contains = function(key) {
+        return typeof _map[key] != 'undefined';
+      };
+
+      return _this;
+    };
+
+    return _this;
+  };
+
+  var createDataURL = function(width, height, getPixel) {
+    var gif = gifImage(width, height);
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 1) {
+        gif.setPixel(x, y, getPixel(x, y) );
+      }
+    }
+
+    var b = byteArrayOutputStream();
+    gif.write(b);
+
+    var base64 = base64EncodeOutputStream();
+    var bytes = b.toByteArray();
+    for (var i = 0; i < bytes.length; i += 1) {
+      base64.writeByte(bytes[i]);
+    }
+    base64.flush();
+
+    return 'data:image/gif;base64,' + base64;
+  };
+
+  //---------------------------------------------------------------------
+  // returns qrcode function.
+
+  return qrcode;
+}();
+
+// multibyte support
+!function() {
+
+  qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
+    // http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
+    function toUTF8Array(str) {
+      var utf8 = [];
+      for (var i=0; i < str.length; i++) {
+        var charcode = str.charCodeAt(i);
+        if (charcode < 0x80) utf8.push(charcode);
+        else if (charcode < 0x800) {
+          utf8.push(0xc0 | (charcode >> 6),
+              0x80 | (charcode & 0x3f));
+        }
+        else if (charcode < 0xd800 || charcode >= 0xe000) {
+          utf8.push(0xe0 | (charcode >> 12),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+        // surrogate pair
+        else {
+          i++;
+          // UTF-16 encodes 0x10000-0x10FFFF by
+          // subtracting 0x10000 and splitting the
+          // 20 bits of 0x0-0xFFFFF into two halves
+          charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+            | (str.charCodeAt(i) & 0x3ff));
+          utf8.push(0xf0 | (charcode >>18),
+              0x80 | ((charcode>>12) & 0x3f),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+      }
+      return utf8;
+    }
+    return toUTF8Array(s);
+  };
+
+}();
+
+(function (factory) {
+  if (typeof define === 'function' && define.amd) {
+      define([], factory);
+  } else if (typeof exports === 'object') {
+      module.exports = factory();
+  }
+}(function () {
+    return qrcode;
+}));
+</script>
 <style>
   :root{
     --bg:#eef3f9; --card:#fff; --ink:#16222e; --sub:#5d6e7e;
@@ -52,15 +2350,15 @@
   .qnum{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--brand-l);
     color:var(--brand-d);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;margin-top:2px}
   .qtext{font-weight:700;font-size:calc(18px * var(--fs));line-height:1.5}
-  .hint{color:var(--sub);font-size:calc(14px * var(--fs));margin:-6px 0 12px 38px}
-  .grouplab{font-weight:800;color:var(--brand-d);font-size:calc(14px*var(--fs));
+  .hint{color:var(--sub);font-size:calc(15px * var(--fs));margin:-6px 0 12px 38px}
+  .grouplab{font-weight:800;color:var(--brand-d);font-size:calc(15px*var(--fs));
     margin:18px 0 8px;padding-left:10px;border-left:4px solid var(--brand)}
 
   .opts{display:grid;grid-template-columns:1fr;gap:10px}
   .opts.grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
   .opt{position:relative;border:2px solid var(--line);background:#fcfdff;border-radius:14px;
-    padding:15px 16px 15px 50px;cursor:pointer;font-size:calc(17px * var(--fs));
-    user-select:none;transition:.12s;min-height:56px;display:flex;align-items:center;gap:8px}
+    padding:17px 16px 17px 52px;cursor:pointer;font-size:calc(17px * var(--fs));
+    user-select:none;transition:.12s;min-height:62px;display:flex;align-items:center;gap:8px}
   .opt:hover{border-color:#9fc3e8;background:#f7fbff}
   .opt:active{transform:scale(.99)}
   .opt::before{content:"";position:absolute;left:16px;top:50%;transform:translateY(-50%);
@@ -71,6 +2369,12 @@
   .opt.multi.sel::before{background:var(--brand);box-shadow:none;content:"✓";color:#fff;
     font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center}
   .opt .emo{font-size:1.25em;margin-left:-2px}
+  /* 選択肢はbutton要素（キーボード・スクリーンリーダー対応） */
+  button.opt{font-family:inherit;text-align:left;width:100%;color:var(--ink);line-height:inherit;display:flex}
+  button.opt.sel{color:var(--brand-d)}
+  .opt:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+  .tri button:focus-visible,button.nav:focus-visible,.qstepnav button:focus-visible,
+  .fsbtns button:focus-visible,.copybtn:focus-visible,.voice:focus-visible{outline:3px solid var(--brand-d);outline-offset:2px}
 
   textarea{width:100%;min-height:84px;border:2px solid var(--line);border-radius:14px;
     padding:14px;font-size:calc(17px * var(--fs));font-family:inherit;resize:vertical;background:#fcfdff}
@@ -82,7 +2386,7 @@
   .tri .nm{flex:1;font-size:calc(16px * var(--fs));font-weight:600}
   .tri .grp{display:flex;gap:6px}
   .tri button{border:1.5px solid var(--line);background:#fff;border-radius:11px;
-    padding:9px 13px;font-size:calc(14px * var(--fs));cursor:pointer;color:var(--sub);font-weight:700;min-width:54px}
+    padding:12px 15px;font-size:calc(14px * var(--fs));cursor:pointer;color:var(--sub);font-weight:700;min-width:62px}
   .tri button.on-y{background:var(--pos);color:#fff;border-color:var(--pos)}
   .tri button.on-n{background:#6b7b8b;color:#fff;border-color:#6b7b8b}
   .tri button.on-u{background:var(--unk);color:#fff;border-color:var(--unk)}
@@ -103,7 +2407,18 @@
     color:var(--brand);background:#fff;border-radius:30px;padding:11px 18px;
     font-size:calc(15px*var(--fs));font-weight:800;cursor:pointer;margin-top:12px}
   .copybtn.done{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
-  .mini{font-size:calc(13px * var(--fs));color:var(--sub)}
+  /* 確認画面：項目ごとの要約＋「直す」導線 */
+  .sumlist{display:flex;flex-direction:column;gap:8px;margin:6px 0}
+  .sumrow{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line);border-radius:12px;
+    padding:11px 13px;background:#fcfdff;font-size:calc(15px*var(--fs));line-height:1.6}
+  .sumrow span{flex:1}
+  .fixbtn{border:1.5px solid var(--brand);background:#fff;color:var(--brand-d);border-radius:10px;
+    padding:9px 13px;font-weight:800;cursor:pointer;font-size:calc(13.5px*var(--fs));flex:0 0 auto;font-family:inherit}
+  .fixbtn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+  .consent{display:flex;gap:10px;align-items:flex-start;background:#f5f9fd;border:1px solid var(--line);
+    border-radius:12px;padding:12px 14px;margin:14px 0 4px;font-size:calc(13.5px*var(--fs));color:var(--ink);cursor:pointer;line-height:1.6}
+  .consent input{width:22px;height:22px;margin-top:2px;flex:0 0 auto}
+  .mini{font-size:calc(14px * var(--fs));color:var(--sub)}
   .note{background:#fff7ee;border:1px solid #f0d9bd;color:#7a4a1f;border-radius:12px;
     padding:12px 14px;font-size:calc(14px * var(--fs));margin:12px 0;line-height:1.6}
   .emerg{background:#fdecec;border:1px solid #f1b9b9;color:#9a2a2a;border-radius:12px;
@@ -147,7 +2462,7 @@
   .tlp .dot{width:14px;height:14px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 2px var(--brand)}
   .tlp.worse .dot{background:#c0392b;box-shadow:0 0 0 2px #c0392b}
   .tlp.now .dot{background:var(--warn);box-shadow:0 0 0 2px var(--warn)}
-  .tlp .tll{font-size:calc(11.5px*var(--fs));margin-top:5px;line-height:1.35;color:var(--sub)}
+  .tlp .tll{font-size:calc(12.5px*var(--fs));margin-top:5px;line-height:1.35;color:var(--sub)}
   .tlp .tll b{color:var(--brand-d);display:block;font-size:calc(12px*var(--fs))}
   .tlbar{flex:1 1 auto;height:3px;background:linear-gradient(90deg,var(--brand),var(--warn));margin-top:7px;min-width:22px;border-radius:2px;opacity:.55}
   .sheet .foot{border-top:2px solid var(--line);margin-top:11px;padding-top:8px;font-size:calc(11px * var(--fs));color:var(--sub)}
@@ -182,23 +2497,65 @@
   .sresure{margin-top:14px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--sub)}
   .sresure div{display:flex;align-items:center;gap:9px} .sresure span{font-size:1.25em}
 
+  /* 読み上げボタン */
+  .spk{border:1.5px solid rgba(255,255,255,0);background:var(--brand-l);color:var(--brand-d);
+    border-radius:50%;width:34px;height:34px;min-width:34px;cursor:pointer;font-size:16px;
+    display:inline-flex;align-items:center;justify-content:center;padding:0;margin-left:6px;flex:0 0 auto;vertical-align:middle}
+  .spk:active{transform:scale(.92)} .spk.on{background:var(--brand);color:#fff}
+  body.tts-off .spk{display:none}
+  /* 1問ずつ表示 */
+  .qstepnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:20px;
+    padding-top:14px;border-top:1px dashed var(--line)}
+  .qstepnav button{border:2px solid var(--line);background:#fff;color:var(--brand-d);border-radius:12px;
+    padding:12px 16px;font-size:calc(15px*var(--fs));font-weight:800;cursor:pointer}
+  .qstepnav button:disabled{opacity:.4;cursor:not-allowed}
+  .qstepnav span{font-size:calc(13px*var(--fs));color:var(--sub);font-weight:700}
+  .qstep{animation:fadein .18s} @keyframes fadein{from{opacity:0}to{opacity:1}}
+  /* 引き継ぎ / QR モーダル */
+  .modal{position:fixed;inset:0;z-index:60;background:rgba(16,34,46,.55);display:flex;
+    align-items:center;justify-content:center;padding:20px}
+  .modal .box{background:#fff;border-radius:18px;padding:22px;max-width:380px;width:100%;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  .modal h3{margin:0 0 4px;color:var(--brand-d)}
+  .modal .qr{display:flex;justify-content:center;margin:14px 0}
+  .modal .qr img,.modal .qr canvas{width:230px;height:230px}
+  .modal .lk{font-size:11px;color:var(--sub);word-break:break-all;background:#f5f9fd;border-radius:8px;padding:8px;margin-top:8px;max-height:70px;overflow:auto}
+  .modal .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  .modal .row button{border-radius:12px;padding:11px 16px;font-weight:800;cursor:pointer;font-size:14px;border:2px solid var(--line);background:#fff;color:var(--sub)}
+  .modal .row button.pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+  /* 人体図 */
+  .bodywrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center;margin:4px 0 8px}
+  .bodysvg{touch-action:manipulation}
+  .bodysvg .reg{fill:#eef3f9;stroke:#9fc3e8;stroke-width:2;cursor:pointer;transition:.1s}
+  .bodysvg .reg:active{opacity:.7}
+  .bodysvg .reg.sel{fill:var(--brand);stroke:var(--brand-d)}
+  .bodysvg .rlab{font-size:11px;fill:#5d6e7e;pointer-events:none}
+  .bodyleg{font-size:calc(14px*var(--fs));color:var(--sub);max-width:240px;text-align:left}
+
   @media print{
     @page{size:A4 portrait;margin:12mm}
-    header,.btnrow,.no-print,.tabs,.outtabs,.side,#midout{display:none!important}
+    header,.btnrow,.no-print,.tabs,.outtabs,.side,#midout,.modal{display:none!important}
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-    body{background:#fff;font-size:13px}
+    body{background:#fff;--fs:1!important}
     .layout{display:block;padding:0} .main{max-width:none;padding:0}
-    .card{border:none;box-shadow:none;margin:0 0 12px;padding:0}
-    /* 印刷は医療者向けシートのみ（A4・1枚を目安） */
+    .card{border:none;box-shadow:none;margin:0 0 8px;padding:0}
+    /* 印刷は医療者向けシートのみ（A4・1枚に収める） */
     .panels{display:block!important}
     .panel{display:none!important} .panel:last-child{display:block!important}
-    .sheet{border:none}
+    /* A4一枚に収めるため、印刷時はコンパクトに */
+    .sheet{border:none;font-size:10.5px!important;line-height:1.35!important}
+    .sheet h3{font-size:13px!important} .sheet .meta{font-size:9.5px!important;padding-bottom:5px;margin-bottom:6px}
+    .sheet .sec{margin:6px 0}
+    .sheet .lab{font-size:10.5px!important;margin-bottom:3px}
+    .sheet .kv{font-size:10px!important;gap:1px 12px}
+    .sheet .assoc,.sheet .quote{font-size:10px!important}
+    .sheet .foot{font-size:9px!important;margin-top:7px;padding-top:5px}
+    .sheet svg{max-height:120px}
     .sheet .sec{page-break-inside:avoid;break-inside:avoid}
     .tl{page-break-inside:avoid;break-inside:avoid}
   }
 </style>
 </head>
-<body class="fs-l">
+<body class="fs-l tts-off">
 <header>
   <div class="hin">
     <div class="hbar">
@@ -212,6 +2569,11 @@
         <button class="a1" onclick="setFs('')">あ</button>
         <button class="a2 on" onclick="setFs('fs-l')">あ</button>
         <button class="a3" onclick="setFs('fs-xl')">あ</button>
+      </div>
+      <div class="fsbtns" style="margin-left:8px">
+        <button id="ttsBtn" onclick="toggleTTS()" title="質問を声で読み上げます">🔊 読み上げ</button>
+        <button id="oneqBtn" onclick="toggleOneQ()" title="1問ずつ表示します">1問ずつ</button>
+        <button id="handoffBtn" onclick="showHandoff()" title="スマホに続きを引き継ぎます">📱 引き継ぎ</button>
       </div>
     </div>
     <div id="mstep"></div>
@@ -227,6 +2589,7 @@
       <div class="sresure">
         <div><span>🎤</span>声でも入力できます</div>
         <div><span>👪</span>家族の代理入力もOK</div>
+        <div><span>🧑‍💼</span>スタッフの聞き取り入力もOK</div>
         <div><span>🔒</span>入力内容は保存されません</div>
       </div>
     </div>
@@ -239,6 +2602,7 @@
         <button class="nav back" id="backBtn" onclick="prev()">← 戻る</button>
         <button class="nav next" id="nextBtn" onclick="next()">次へ →</button>
       </div>
+      <div id="navhint" class="mini" style="text-align:center;margin-top:6px" aria-live="polite"></div>
     </div>
   </main>
 </div>
@@ -246,37 +2610,99 @@
 <script>
 /* ===== 状態（画面内メモリのみ・保存しない） ===== */
 const D = { who:null, ageBand:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{},3:{}},
-            assoc:{}, func:[], bg:{risk:[],med:null,medText:"",family:null,immune:[]},
+            assoc:{}, func:[], daily:[], dailyNone:{}, vis:{}, sx:{},
+            bg:{risk:[],med:null,medText:"",family:null,immune:[],lifestyle:[],exposure:[],allergy:"",history:"",
+                autonomic:[],dopaDrug:null,preInfection:null,pregnancy:null},
             visited:[], tests:"", free:"", familyChange:"" };
+/* 症状ごとの経過（時系列グラフ用）：発症時期バケット・程度・変化の向き */
+const ONSET_OPTS=[["今日",0.03],["数日前",0.15],["1〜2週間前",0.4],["1か月前",1],
+  ["2〜3か月前",2.5],["半年前",6],["1年前",12],["2年以上前",30],["わからない",null]];
+const SEV_OPTS=["軽い","中くらい","重い"];
+const TREND_OPTS=["だんだん強くなる","出たり治ったり（波がある）","変わらない","軽くなってきた"];
+function sxMonths(s){const o=D.sx[s]&&D.sx[s].onset;const f=ONSET_OPTS.find(x=>x[0]===o);return f?f[1]:null;}
+/* 今回の受診理由（急に悪くなった時期）の月数。グラフに目印を出す */
+function visitMonths(){const f=ONSET_OPTS.find(x=>x[0]===D.common.visitBucket);return f?f[1]:null;}
+function setVisit(o){D.common.visitBucket=(D.common.visitBucket===o?null:o);render();}
+/* 最も古い症状の発症ラベル（全体の発症時期として利用） */
+function overallOnset(){let best=null,lab=null;D.symptoms.forEach(s=>{const m=sxMonths(s);if(m!=null&&(best==null||m>best)){best=m;lab=D.sx[s].onset;}});return lab;}
 const AGES = ["〜39","40代","50代","60代","70代","80代","90歳〜","答えない"];
 const VISITED = ["かかりつけ医","脳神経外科","眼科","整形外科","耳鼻科","リハビリ","救急","未受診"];
+
+/* ===== データ保存（任意・研究/改善用） =====
+   SAVE_ENDPOINT に保存先URL（Google Apps Script など）を入れると、
+   利用者が同意した場合のみ完了時に送信します。空のままなら保存機能はオフ。 */
+const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る
+const SESSION = { id:"NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000), start:Date.now() };
+let _saved=false;
+/* 保存対象は「選択式の回答」のみ。自由記述（free/familyChange/tests/medText/trouble/編集後文）は送信しない */
+function buildPayload(){
+  const c=D.common;
+  return {
+    sessionId:SESSION.id,
+    createdAt:new Date().toISOString(),
+    durationSec:Math.round((Date.now()-SESSION.start)/1000),
+    who:D.who, ageBand:D.ageBand,
+    symptoms:D.symptoms, mods:D.mods,
+    timeline:{onset:c.onset||null, onsetMonth:c.onsetMonth||null, onsetDate:c.onsetDate||null,
+      tempo:c.tempo||null, episodeDur:c.episodeDur||null, worsenMonth:c.worsenMonth||null, worsenDate:c.worsenDate||null,
+      course:c.course||null, side:c.side||null, diurnal:c.diurnal||null,
+      relapse:c.relapse||null, relapseRecover:c.relapseRecover||null, visitBucket:c.visitBucket||null},
+    modules:D.m,            // 各モジュールの選択肢（自由記述なし）
+    sx:D.sx,                // 症状ごとの発症時期・程度・変化（時系列）
+    assoc:D.assoc,          // はい/いいえ/未確認
+    func:D.func,
+    daily:D.daily,          // ふだんの困りごと（選択式・id）
+    dailyNone:D.dailyNone,  // 領域ごとの「該当なし」
+    vis:D.vis,              // 見えにくさの詳細（自由記述は除外）
+    bg:{risk:D.bg.risk, med:D.bg.med, family:D.bg.family, immune:D.bg.immune,
+        lifestyle:D.bg.lifestyle, exposure:D.bg.exposure,
+        autonomic:D.bg.autonomic, dopaDrug:D.bg.dopaDrug, preInfection:D.bg.preInfection, pregnancy:D.bg.pregnancy}, // 自由記述(薬名/アレルギー/既往)は除外
+    visited:D.visited       // tests(検査自由記述)は除外
+  };
+}
+function saveSubmission(){
+  if(!SAVE_ENDPOINT||!D.researchConsent||_saved)return;
+  try{
+    fetch(SAVE_ENDPOINT,{method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify(buildPayload())});
+    _saved=true;
+  }catch(e){/* 失敗してもメモ作成は続行 */}
+}
 const MODS = {1:"歩行障害・転倒", 2:"脱力・しびれ", 3:"複視・眼瞼下垂・易疲労性"};
+/* 患者・家族向けのやさしい呼び名（医療語はシート側のみで使用） */
+const MODS_PT = {1:"歩きにくい・転びやすい", 2:"力が入らない・しびれる", 3:"目・まぶた・疲れやすさ"};
+/* 任意項目の折りたたみ状態 */
+const UI={bgMore:false,commonMore:false};
+function toggleUI(k){UI[k]=!UI[k];render();}
+function moreToggle(k,label){return `<div style="text-align:center;margin:14px 0 4px">
+  <button class="no-print" onclick="toggleUI('${k}')" style="border:1.5px solid var(--brand);background:${UI[k]?'var(--brand-l)':'#fff'};color:var(--brand-d);border-radius:30px;padding:10px 20px;font-size:calc(14px*var(--fs));font-weight:800;cursor:pointer">${UI[k]?'▲ とじる':'＋ '+label}</button></div>`;}
 
 const WHO = [["self","本人","🙂"],["family","家族","👪"],["care","介護者","🤝"],
-             ["med","医療者","🩺"],["rehab","リハビリ職","💪"],["other","その他","✏️"]];
+             ["staff","受付・スタッフ","🧑‍💼"],["med","医療者","🩺"],["rehab","リハビリ職","💪"],["other","その他","✏️"]];
 
 const SYMPTOMS = [
-  ["歩きにくい",1,"🚶"],["転びやすい",1,"⚠️"],["力が入らない",2,"💪"],["しびれる",2,"✋"],
-  ["飲み込みにくい",0,"🍵"],["ろれつが回らない",0,"💬"],["ものが二重に見える",3,"👀"],
-  ["まぶたが下がる",3,"😴"],["めまい・ふらつき",0,"🌀"],["疲れると悪くなる",3,"🔋"],
+  ["歩きにくい",1,"🚶"],["転びやすい",1,"⚠️"],["力が入らない",2,"💪"],["しびれる・感覚が鈍い",2,"✋"],
+  ["手足がやせる・ぴくつく",2,"〰️"],["飲み込みにくい・むせる",0,"🍵"],["ろれつが回らない",0,"💬"],
+  ["ものが二重に見える",3,"👀"],["まぶたが下がる",3,"😴"],["視力が落ちた・目が痛い",0,"👁"],
+  ["めまい・ふらつき",0,"🌀"],["疲れると悪くなる・夕方につらい",3,"🔋"],
   ["家族から見て動き・表情が変わった",0,"🔎"],["その他",0,"➕"],
 ];
 
 /* === 時間軸（いつから・突然か進行性か発作性か・経過） === */
 const COMMON = [
-  {k:"onset",q:"いつから始まりましたか？",sub:"だいたいで大丈夫です",o:["今日","数日前","1〜2週間前","1か月前","数か月前","1年以上前","わからない"]},
   {k:"tempo",q:"どんなふうに始まりましたか？",sub:"いちばん近いもの（突然・徐々に・くり返す）",o:["突然（秒〜分で）","急に（時間〜数日で）","だんだん（週〜月で進む）","ゆっくり（年単位で進む）","出たり治ったりをくり返す","一度出て今は落ち着いた","わからない"]},
   {k:"course",q:"その後の変化は？",o:["悪くなってきている","変わらない","良くなったり悪くなったり","段階的に悪化","良くなってきた","わからない"]},
   {k:"side",q:"左右の差はありますか？",sub:"どちら側が強いか",o:["右が強い","左が強い","両側","左右差なし","わからない"]},
-  {k:"diurnal",q:"時間帯や疲れで変わりますか？",sub:"日内変動・易疲労性",o:["朝は良く夕方に悪化","使うと悪化・休むと改善","一日中同じ","わからない"]},
 ];
 
 /* === 一緒に出ている症状（局在の手がかり：部位ごとにグループ化） === */
 const ASSOC_GROUPS = [
-  {g:"目・顔のうごき", items:["ものが二重に見える","まぶたが下がる","顔がゆがむ・動きにくい"]},
+  {g:"目・顔のうごき", items:["目が上下に動きにくい","顔がゆがむ・動きにくい","視力が落ちた・目が痛い"]},
   {g:"話す・飲み込む・息", items:["ろれつが回りにくい","飲み込みにくさ・むせ","息苦しさ"]},
-  {g:"感覚・自律神経", items:["しびれ・感覚の鈍さ","尿のトラブル","便秘","立ちくらみ"]},
-  {g:"頭のはたらき・その他", items:["物忘れ・性格や行動の変化","手のふるえ"]},
+  {g:"動き・ふるえ", items:["安静にしていても手がふるえる","動作が遅い・小さくなった","表情が乏しい・声が小さい","筋肉がやせる・ぴくつく"]},
+  {g:"感覚", items:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感"]},
+  {g:"頭のはたらき・睡眠・その他", items:["物忘れ・性格や行動の変化","夢で大声・手足が動く（睡眠中）","においが分かりにくい","吐き気・しゃっくりが続く"]},
 ];
 const ASSOC = ASSOC_GROUPS.flatMap(g=>g.items);
 
@@ -284,19 +2710,40 @@ const ASSOC = ASSOC_GROUPS.flatMap(g=>g.items);
 const FUNC = ["一人で歩く","外出・買い物","階段の上り下り","食事・飲み込み",
   "トイレ（排尿・排便）","入浴・着替え","字を書く・ボタン・はし","会話","仕事・家事","物事の段取り・記憶"];
 
+/* === ふだんの困りごと（感覚・気分・疲労・排尿・認知の複数領域。短い見出し＋補足） ===
+   各項目は id で管理（文言を変えても判定が壊れないように）。t=見出し / sub=補足 */
+const DAILY_GROUPS = [
+  {g:"感覚の不調", e:"✋", key:"sensory", items:[
+    {id:"numb", t:"手足がしびれる"},
+    {id:"vis",  t:"画面や文字が見えにくい", sub:"パソコンの画面、文字などが見えにくくなった"},
+    {id:"temp", t:"お湯の温度が分かりにくい", sub:"シャワーやお風呂の湯の温度が分かりにくい"}]},
+  {g:"気分の不調", e:"😔", key:"mood", items:[
+    {id:"anx",   t:"漠然とした不安がある"},
+    {id:"misun", t:"やる気がないと誤解される"},
+    {id:"start", t:"日常の活動に取りかかれない", sub:"出勤、通学、買いものなど"},
+    {id:"down",  t:"気が滅入って行く気が起こらない", sub:"仕事や学校に行く気が起こらない"}]},
+  {g:"疲れやすさ", e:"🔋", key:"fatigue", items:[
+    {id:"battery",   t:"使っていると電池が切れたように動けなくなる", sub:"休むと少し戻る"},
+    {id:"getup",     t:"疲れると起き上がるのも難しい"}]},
+];
+const DAILY_ITEMS = DAILY_GROUPS.flatMap(g=>g.items.map(it=>({...it,key:g.key,gname:g.g})));
+function dItem(id){return DAILY_ITEMS.find(x=>x.id===id);}
+function dSel(g){return g.items.filter(it=>D.daily.includes(it.id));}      // 選択された項目
+function dStatus(g){return dSel(g).length?"sel":(D.dailyNone[g.key]?"none":"unasked");}
+
 /* === 症候別モジュール（どこが・何ができないか） === */
 const QM = {
  1:[
   {k:"what",q:"歩くときに起きていることは？",sub:"あてはまるものすべて",multi:true,o:["ふらつく","足が出ない・すくむ","片足を引きずる","体が傾く","つまずきやすい","階段がこわい","立ち上がりにくい"]},
   {k:"fall",q:"転んだことはありますか？",o:["なし","1〜2回","3回以上","数えきれない"]},
   {k:"falldir",q:"転び方の傾向は？",o:["前のめり","後ろ向き","横向き","つまずいて","一定しない","わからない"]},
+  {k:"fallinj",q:"転んでケガ・骨折・頭を打ったことは？",sub:"あてはまるものすべて",multi:true,o:["頭を打った","骨折した","打撲・すり傷","出血した","ケガはない"]},
   {k:"ortho",q:"整形外科の治療で良くなりましたか？",o:["受けて良くなった","受けたが変わらない","受けていない","わからない"]},
  ],
  2:[
-  {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた"]},
+  {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた","ぴくぴくとひきつる"]},
   {k:"prox",q:"力が入りにくい・症状が強いのは？",sub:"からだのどのあたりか",o:["肩・股に近い側","手足の先","両方","わからない"]},
   {k:"area",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:["顔","片腕","両腕","片脚","両脚","体幹","手足の先（手袋・くつ下のように）"]},
-  {k:"adl",q:"やりにくくなった動作は？",sub:"あてはまるものすべて",multi:true,o:["階段","立ち上がり","箸","ボタン","ペットボトル","字を書く"]},
  ],
  3:[
   {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい"]},
@@ -307,8 +2754,14 @@ const QM = {
 };
 
 /* === 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍） === */
-const BG_RISK=["高血圧","糖尿病","コレステロール高め","不整脈・心房細動","脳卒中・心筋梗塞をしたことがある","たばこを吸う"];
+const BG_RISK=["高血圧","糖尿病","コレステロール高め","不整脈・心房細動","脳卒中・心筋梗塞をしたことがある"];
 const BG_IMMUNE=["最近の発熱・感染","体重が減った","がんの治療歴・指摘あり","予防接種・手術のあとから"];
+const BG_LIFESTYLE=["お酒をよく飲む","たばこを吸う","サプリ・健康食品をとる","市販薬・その他の薬を使う"];
+const BG_EXPOSURE=["最近の旅行（国内・海外）","仕事で化学物質・金属などを扱う","身近に同じ症状の人がいる","動物・虫にかまれた"];
+/* 自律神経（MSA/PD の手がかり：起立性低血圧・排尿・便秘・発汗） */
+const BG_AUTONOMIC=["立ってすぐの強いめまい・立ちくらみ・失神","尿が近い・もれる・出にくい","ひどい便秘が続く","汗が異常に多い／ほとんど出ない"];
+/* パーキンソン様症状を起こしうる薬（薬剤性の鑑別。可逆性を見逃さない） */
+const BG_DOPADRUG=["飲んでいる／最近飲んだ","以前飲んでいた","飲んでいない","わからない"];
 
 function unconfirmedItems(){
   const out=[];const A=D.assoc;const miss=n=>!A[n]||A[n]==="u";
@@ -317,7 +2770,7 @@ function unconfirmedItems(){
       out.push("飲み込みにくさ・ろれつ・息苦しさの有無を確認するとよいかもしれません");
   }
   if(D.mods.includes(1)){
-    if(!D.m[1].falldir||!D.common.tempo||miss("尿のトラブル"))
+    if(!D.m[1].falldir||!D.common.tempo)
       out.push("転び方・進み方・尿のトラブルの有無を確認するとよいかもしれません");
   }
   if(D.mods.includes(2)){
@@ -334,30 +2787,45 @@ function unconfirmedItems(){
   }
   if(A["物忘れ・性格や行動の変化"]==="y")
     out.push("物忘れ・行動の変化について、いつ頃からか・日常生活への影響を確認するとよいかもしれません");
-  if((A["尿のトラブル"]==="y"||A["立ちくらみ"]==="y")&&!D.common.tempo)
-    out.push("自律神経症状（尿・立ちくらみ）の経過を確認するとよいかもしれません");
+  if(D.bg.autonomic&&D.bg.autonomic.length&&!D.common.tempo)
+    out.push("自律神経症状（尿・立ちくらみ・便秘）の経過・順序を確認するとよいかもしれません");
+  // 複数領域に症状が及ぶ場合：過去の似たエピソードの有無（順序・時系列の手がかり）
+  const dGroups=DAILY_GROUPS.filter(g=>dSel(g).length).length;
+  if(dGroups>=2||D.symptoms.length>=3)
+    out.push("以前にも似た症状が出て自然に良くなったこと（出たり治ったり）がなかったかを確認するとよいかもしれません");
+  const aggrGiven=(D.common.aggravTags&&D.common.aggravTags.length)||D.common.aggrav;
+  if(!aggrGiven)
+    out.push("悪くなる・楽になるきっかけ（疲れ・時間帯・暑さ・入浴・姿勢など）を確認するとよいかもしれません");
+  if((D.daily.includes("vis")||D.symptoms.includes("視力が落ちた・目が痛い"))&&!D.vis.note&&!D.vis.side)
+    out.push("目の症状について、片目か両目か・いつからか・見え方の変化を確認するとよいかもしれません");
+  if(D.common.tempo&&(D.common.tempo.includes("くり返す")||D.common.tempo.includes("落ち着いた"))&&!D.common.episodeDur)
+    out.push("症状が1回どれくらい続くか（持続時間）を確認するとよいかもしれません");
   if(!D.common.tempo) out.push("発症が突然か・徐々にか・くり返すかを確認するとよいかもしれません");
-  if(!D.common.onset&&!D.common.onsetMonth&&!D.common.onsetDate)
-    out.push("いつから始まったか（おおよその時期）を確認するとよいかもしれません");
-  return out;
+  if(!overallOnset()&&!D.common.onsetMonth&&!D.common.onsetDate)
+    out.push("それぞれの症状がいつから始まったか（おおよその時期・順序）を確認するとよいかもしれません");
+  /* 仕様§5: 提示は最大5件（症候特異的ルールを優先。配列前方＝症候別が先に入る構成） */
+  return out.slice(0,5);
 }
 
 /* ===== フロー ===== */
 let phase="intro",modCursor=0,OUT='p';
-const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["common","時間の経過"],
-  ["module","くわしく"],["assoc","一緒の症状"],["func","生活への影響"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
+const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["sxtime","症状の経過"],["common","全体の様子"],
+  ["module","くわしく"],["assoc","一緒の症状"],["daily","生活と困りごと"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
 const app=document.getElementById("app");
 
 let _lastPhase=null,_lastMod=null;
 function render(){
   let h="";
-  const fn={intro:scrIntro,who:scrWho,symptoms:scrSymptoms,common:scrCommon,module:scrModule,
-    assoc:scrAssoc,func:scrFunc,bg:scrBg,free:scrFree,confirm:scrConfirm,output:scrOutput}[phase];
+  const fn={intro:scrIntro,who:scrWho,symptoms:scrSymptoms,sxtime:scrSxtime,common:scrCommon,module:scrModule,
+    assoc:scrAssoc,daily:scrDaily,bg:scrBg,free:scrFree,confirm:scrConfirm,output:scrOutput}[phase];
   h=fn();
   // 画面（フェーズ／モジュール）が変わったときだけ先頭へ。同じ画面内の操作はスクロール位置を保持
   const screenChanged=(phase!==_lastPhase)||(phase==="module"&&modCursor!==_lastMod);
   const sy=window.scrollY;
   app.innerHTML=h; drawStepper(); updateNav();
+  if(phase==="sxtime")attachWaveHandlers();
+  applyOneQ(screenChanged);
+  if(screenChanged)autoRead();
   window.scrollTo(0,screenChanged?0:sy);
   _lastPhase=phase; _lastMod=modCursor;
 }
@@ -385,8 +2853,14 @@ function scrIntro(){return `<div class="card">
     ${infoRow("🕒","いつから・どう変化したか")}
     ${infoRow("📍","どこが・何ができないか")}
     ${infoRow("➕","一緒に出ている症状")}
+    ${infoRow("🧑‍💼","スタッフが聞き取って入力もできます")}
     ${infoRow("🔒","入力内容は保存されません")}
   </div>
+  <div class="grouplab" style="margin-top:18px">進め方をえらべます</div>
+  <button type="button" class="opt multi ${SLOW?'sel':''}" aria-pressed="${SLOW}" onclick="toggleSlow()" style="width:100%">
+    <span class="emo">🐢</span>ゆっくりモードで進める<br>
+    <span style="font-weight:500;font-size:calc(14px*var(--fs));color:var(--sub)">文字を大きく・質問を1つずつ・声で読み上げ</span></button>
+  <div class="mini" style="margin:8px 0 0">あとから画面上部のボタンでも変えられます。</div>
   <div class="note">このツールは診断や治療を行うものではありません。病名は判断しません。診察を待つ間の準備としてお使いください。体調の変化など気がかりなことがあれば、受付・スタッフにお知らせください。</div>
 </div>`;}
 function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10px;font-size:calc(15px*var(--fs));
@@ -394,8 +2868,8 @@ function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10
   <span style="font-size:1.4em">${e}</span><span>${t}</span></div>`;}
 
 function scrWho(){return card(`
-  <div class="qhead"><span class="qnum">?</span><span class="qtext">入力するのはどなたですか？</span></div>
-  <div class="hint">ご家族・介護者の代理入力もできます</div>
+  <div class="qhead"><span class="qnum">?</span><span class="qtext">入力するのはどなたですか？</span>${spkBtn("入力するのはどなたですか？")}</div>
+  <div class="hint">ご家族・介護者のほか、受付スタッフが患者さんに聞きながら入力することもできます</div>
   <div class="opts grid">${WHO.map(([v,l,e])=>opt(v===D.who,`<span class="emo">${e}</span>${l}`,`setWho('${v}')`)).join("")}</div>
   ${qhead("年","ご本人の年代を教えてください","任意。年齢の幅だけで大丈夫です")}
   <div class="opts grid">${AGES.map(a=>opt(D.ageBand===a,a,`setAge('${a}')`)).join("")}</div>`);}
@@ -404,27 +2878,62 @@ function setAge(a){D.ageBand=(D.ageBand===a?null:a);render();}
 /* 家族・介護者など代理入力かどうか */
 function isProxy(){return D.who&&D.who!=="self";}
 
-function proxyBanner(){return isProxy()?`<div class="note" style="background:var(--brand-l);border-color:#bcd9f4;color:var(--brand-d)">👪 ${whoLabel()}として、ご本人の様子を代理で入力しています。本人が気づきにくい変化も拾えます。</div>`:"";}
+function proxyBanner(){
+  if(D.who==="staff")return `<div class="note" style="background:var(--brand-l);border-color:#bcd9f4;color:var(--brand-d)">🗣 <b>聞き取り入力モード</b>：質問を患者さんにそのまま読み上げて、答えを選んでください。迷ったら「わからない」「？」で大丈夫です。</div>`;
+  return isProxy()?`<div class="note" style="background:var(--brand-l);border-color:#bcd9f4;color:var(--brand-d)">👪 ${whoLabel()}として、ご本人の様子を代理で入力しています。本人が気づきにくい変化も拾えます。</div>`:"";}
 function scrSymptoms(){
   const items=SYMPTOMS.map(([nm,,e])=>opt(D.symptoms.includes(nm),`<span class="emo">${e}</span>${nm}`,
     `toggleSym('${nm.replace(/'/g,"")}')`,true)).join("");
   return card(`
    ${proxyBanner()}
-   <div class="qhead"><span class="qnum">?</span><span class="qtext">${isProxy()?"ご本人の気になる症状を選んでください":"気になる症状を選んでください"}</span></div>
+   <div class="qhead"><span class="qnum">?</span><span class="qtext">${isProxy()?"ご本人の気になる症状を選んでください":"気になる症状を選んでください"}</span>${spkBtn("気になる症状を選んでください。いくつでも選べます")}</div>
    <div class="hint">病名がわからなくて大丈夫。いくつでも選べます。</div>
    <div class="opts grid">${items}</div>
-   ${D.mods.length?`<div class="note">📋 選んだ内容に合わせて質問します：<b>${D.mods.map(i=>MODS[i]).join("、")}</b></div>`:''}`);}
+   ${D.mods.length?`<div class="note">📋 選んだ内容に合わせて質問します：<b>${D.mods.map(i=>MODS_PT[i]).join("、")}</b></div>`:''}`);}
 
+const AGGRAV_TAGS=["疲れたとき","夕方・夜","暑いとき・入浴後","体を動かすと","朝","同じ姿勢が続くと","ストレス"];
+const RELIEF_TAGS=["休むと","朝はよい","涼しくすると","薬をのむと","特にない"];
 function scrCommon(){
-  let h=`<p class="lead">🕒 <b>いつから・どんなふうに</b> を教えてください</p>`;
+  let h=proxyBanner()+`<p class="lead">🕒 <b>全体の様子</b>を教えてください（症状ごとの時期はさきほどの通りでOK）</p>`;
   COMMON.forEach((it,i)=>{
     h+=qhead(i+1,it.q,it.sub)+
       `<div class="opts grid">`+it.o.map(o=>opt(D.common[it.k]===o,o,`setCommon('${it.k}','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
-    if(it.k==="onset") h+=dateBlock("onset","始まった時期が具体的にわかる場合（任意）");
   });
+  // 再発・寛解（過去に出て自然に治ったエピソード：MS/NMOSDなどの手がかり）
+  h+=qhead("＋","以前にも同じような症状が出て、自然に治まったことはありますか？","「出て、治って、また出た」があるかは、とても大切な手がかりです");
+  h+=`<div class="opts grid">`+["はじめて","1回あった","2回以上くり返している","わからない"]
+    .map(o=>opt(D.common.relapse===o,o,`setCommon('relapse','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+  if(D.common.relapse&&D.common.relapse.includes("回")){
+    h+=`<div class="hint" style="margin:6px 0 2px">前回はどれくらいで治まりましたか？（任意）</div>`;
+    h+=`<div class="opts grid">`+["数日","数週間","数か月","完全には治っていない","わからない"]
+      .map(o=>opt(D.common.relapseRecover===o,o,`setCommon('relapseRecover','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+  }
+  h+=moreToggle("commonMore","くわしく（頻度・きっかけ・悪化した時期など）を入力");
+  if(!UI.commonMore)return card(h);
+  h+=`<div class="note" style="background:#f5f9fd;border-color:var(--line);color:var(--sub)">ここから下はすべて任意です。わかる範囲でどうぞ。</div>`;
+  // 頻度・持続（どれくらいの頻度で・1回どれくらい続くか）
+  h+=qhead("＋","どれくらいの頻度で起きますか？","（任意）",);
+  h+=`<div class="opts grid">`+["ずっと続いている","ほぼ毎日","週に数回","月に数回","ときどき（不定期）","わからない"]
+    .map(o=>opt(D.common.freq===o,o,`setCommon('freq','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+  h+=qhead("＋","1回の症状はどれくらい続きますか？","出たり治ったりする場合など（任意）");
+  h+=`<div class="opts grid">`+["数分〜数時間","半日〜1日","数日続く","数週間続く","ずっと続く","わからない"]
+    .map(o=>opt(D.common.episodeDur===o,o,`setCommon('episodeDur','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+  // 生活への支障（重症度）
+  h+=qhead("＋","生活にどのくらい支障がありますか？","（任意）");
+  h+=`<div class="opts grid">`+["少し支障がある","かなり支障がある","生活に大きく支障"]
+    .map(o=>opt(D.common.severity===o,o,`setCommon('severity','${o}')`)).join("")+`</div>`;
+  // 増悪因子（開かれた質問＋任意タグ）
+  h+=qhead("＋","悪くなる・出やすいきっかけはありますか？","思い当たることを自由に。下から選んでも大丈夫（任意）");
+  h+=`<div class="opts grid">`+AGGRAV_TAGS.map(o=>opt((D.common.aggravTags||[]).includes(o),o,`toggleCommonTag('aggravTags','${o.replace(/'/g,"")}')`,true)).join("")+`</div>`;
+  h+=`<textarea id="aggravtxt" placeholder="例：暑い日や湯上がりに見えにくさが強くなる／夕方になると声が出にくい" oninput="D.common.aggrav=this.value">${D.common.aggrav||""}</textarea>`;
+  // 軽減因子
+  h+=qhead("＋","楽になる・良くなることはありますか？","（任意）");
+  h+=`<div class="opts grid">`+RELIEF_TAGS.map(o=>opt((D.common.reliefTags||[]).includes(o),o,`toggleCommonTag('reliefTags','${o.replace(/'/g,"")}')`,true)).join("")+`</div>`;
+  h+=`<textarea id="relieftxt" placeholder="例：少し休むと戻る／朝はほとんど気にならない" oninput="D.common.relief=this.value">${D.common.relief||""}</textarea>`;
   h+=qhead("＋","その後さらに悪くなった時期はありますか？","急に悪化した・段階的に進んだ時期がわかれば（任意）");
   h+=dateBlock("worsen","悪くなった時期");
   return card(h);}
+function toggleCommonTag(key,val){D.common[key]=D.common[key]||[];const a=D.common[key];const i=a.indexOf(val);if(i>=0)a.splice(i,1);else a.push(val);render();}
 
 /* 日付ブロック：だいたいの年月 と 正確な日付 のどちらでも入力可 */
 function dateBlock(key,label){
@@ -448,14 +2957,47 @@ function fmtWhen(key){const dd=D.common[key+"Date"],md=D.common[key+"Month"];
   if(md){const[y,m]=md.split("-");return `${y}年${+m}月ごろ`;}
   return null;}
 
+/* === 人体図（部位・左右差をタップ）。module2（脱力・しびれ）の分布入力に使用 === */
+const BODY_REGIONS=[
+ {id:"face", label:"顔",   shape:`<circle cx="100" cy="34" r="24"/>`},
+ {id:"trunk",label:"体幹", shape:`<rect x="72" y="62" width="56" height="98" rx="12"/>`},
+ {id:"armR", label:"右腕", shape:`<rect x="40" y="66" width="24" height="86" rx="11"/>`},
+ {id:"armL", label:"左腕", shape:`<rect x="136" y="66" width="24" height="86" rx="11"/>`},
+ {id:"handR",label:"右手先",shape:`<circle cx="52" cy="166" r="16"/>`},
+ {id:"handL",label:"左手先",shape:`<circle cx="148" cy="166" r="16"/>`},
+ {id:"legR", label:"右脚", shape:`<rect x="74" y="164" width="24" height="120" rx="11"/>`},
+ {id:"legL", label:"左脚", shape:`<rect x="102" y="164" width="24" height="120" rx="11"/>`},
+ {id:"footR",label:"右足先",shape:`<ellipse cx="84" cy="296" rx="16" ry="13"/>`},
+ {id:"footL",label:"左足先",shape:`<ellipse cx="116" cy="296" rx="16" ry="13"/>`},
+];
+function bodyMapSVG(){
+  const sel=(D.m[2]&&D.m[2].bodyparts)||[];
+  const el=BODY_REGIONS.map(r=>r.shape.replace(/^<(\w+)/,`<$1 class="reg ${sel.includes(r.id)?"sel":""}" onclick="toggleBody('${r.id}')"`)).join("");
+  const chosen=sel.length?BODY_REGIONS.filter(r=>sel.includes(r.id)).map(r=>r.label).join("・"):"まだ選ばれていません";
+  return `<div class="bodywrap">
+    <svg class="bodysvg" viewBox="0 0 200 320" width="224" height="358" xmlns="http://www.w3.org/2000/svg">
+      <text x="24" y="14" class="rlab">← 右</text><text x="150" y="14" class="rlab">左 →</text>${el}</svg>
+    <div class="bodyleg"><b>症状のある場所</b>をタップしてください（複数可・もう一度で解除）
+      <div style="color:var(--brand-d);font-weight:700;margin:6px 0">選択：${chosen}</div>
+      <span class="mini">手先・足先の丸は「手袋・くつ下のように先の方」を表します。</span></div></div>`;
+}
+function toggleBody(id){
+  D.m[2]=D.m[2]||{};const a=D.m[2].bodyparts=D.m[2].bodyparts||[];
+  const i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);
+  const labs=BODY_REGIONS.filter(r=>a.includes(r.id)).map(r=>r.label);
+  if(["handL","handR","footL","footR"].every(x=>a.includes(x)))labs.push("手足の先（手袋・くつ下のように）");
+  D.m[2].area=labs;render();
+}
 function scrModule(){
   const id=D.mods[modCursor];
-  let h=`<div style="display:inline-block;background:var(--brand-l);color:var(--brand-d);font-weight:800;
-    border-radius:20px;padding:5px 14px;font-size:calc(14px*var(--fs))">📍 ${id}．${MODS[id]}　(${modCursor+1}/${D.mods.length})</div>
+  let h=proxyBanner()+`<div style="display:inline-block;background:var(--brand-l);color:var(--brand-d);font-weight:800;
+    border-radius:20px;padding:5px 14px;font-size:calc(14px*var(--fs))">📍 ${MODS_PT[id]}　(${modCursor+1}/${D.mods.length})</div>
     <p class="lead" style="margin-top:8px">どこが・何ができなくなったかを教えてください</p>`;
   QM[id].forEach((it,i)=>{
     h+=qhead(i+1,it.q,it.sub);
-    if(it.multi){
+    if(id===2&&it.k==="area"){
+      h+=bodyMapSVG();
+    }else if(it.multi){
       h+=`<div class="opts grid">`+it.o.map(o=>{const arr=D.m[id][it.k]||[];
         return opt(arr.includes(o),o,`toggleMulti(${id},'${it.k}','${o.replace(/'/g,"")}')`,true);}).join("")+`</div>`;
     }else{
@@ -466,65 +3008,239 @@ function scrModule(){
   return card(h);}
 
 function scrAssoc(){
-  let h=`<div class="qhead"><span class="qnum">➕</span><span class="qtext">一緒に出ている症状はありますか？</span></div>
+  let h=proxyBanner()+`<div class="qhead"><span class="qnum">➕</span><span class="qtext">一緒に出ている症状はありますか？</span>${spkBtn("一緒に出ている症状はありますか？わかる範囲で、はい・いいえ・？で選んでください")}</div>
     <div class="hint">わかる範囲で。「？」を選んでもOK（医師が確認します）</div>`;
   ASSOC_GROUPS.forEach(grp=>{
     h+=`<div class="grouplab">${grp.g}</div><div class="triwrap">`;
     grp.items.forEach(nm=>{const v=D.assoc[nm];
-      h+=`<div class="tri"><span class="nm">${nm}</span><span class="grp">
-        <button class="${v==='y'?'on-y':''}" onclick="setTri('${nm}','y')">はい</button>
-        <button class="${v==='n'?'on-n':''}" onclick="setTri('${nm}','n')">いいえ</button>
-        <button class="${v==='u'?'on-u':''}" onclick="setTri('${nm}','u')">？</button></span></div>`;});
+      h+=`<div class="tri"><span class="nm">${nm}</span><span class="grp" role="group" aria-label="${nm}">
+        <button type="button" aria-pressed="${v==='y'}" class="${v==='y'?'on-y':''}" onclick="setTri('${nm}','y')">はい</button>
+        <button type="button" aria-pressed="${v==='n'}" class="${v==='n'?'on-n':''}" onclick="setTri('${nm}','n')">いいえ</button>
+        <button type="button" aria-pressed="${v==='u'}" class="${v==='u'?'on-u':''}" onclick="setTri('${nm}','u')" aria-label="わからない・未確認">？</button></span></div>`;});
     h+=`</div>`;
   });
   return card(h);}
 
-function scrFunc(){
-  return card(`
-   <div class="qhead"><span class="qnum">📍</span><span class="qtext">できなくなった・やりにくくなったことは？</span></div>
+/* === 症状ごとの経過（時系列）：選んだ症状それぞれの「いつから・程度・変化」 === */
+function scrSxtime(){
+  let h=proxyBanner()+`<div class="qhead"><span class="qnum">🕒</span><span class="qtext">選んだ症状は、それぞれいつ頃からですか？</span>${spkBtn("選んだ症状は、それぞれいつ頃からですか？だいたいで大丈夫です")}</div>
+   <div class="hint">順番や時期がわかると、経過がグラフになります。だいたいで大丈夫です。</div>`;
+  D.symptoms.forEach(s=>{
+    const r=D.sx[s]||{};
+    h+=`<div class="qunit" style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:12px 0;background:#fcfdff">
+      <div style="font-weight:800;color:var(--brand-d);margin-bottom:6px">${s}</div>
+      <div class="hint" style="margin:2px 0 4px">いつ頃から</div>
+      <div class="opts grid">`+ONSET_OPTS.map(([o])=>opt(r.onset===o,o,`setSx('${s.replace(/'/g,"")}','onset','${o.replace(/'/g,"")}')`)).join("")+`</div>
+      <div class="hint" style="margin:8px 0 4px">今のつらさ</div>
+      <div class="opts grid">`+SEV_OPTS.map(o=>opt(r.sev===o,o,`setSx('${s.replace(/'/g,"")}','sev','${o}')`)).join("")+`</div>
+      <div class="hint" style="margin:8px 0 4px">その後の変化</div>
+      <div class="opts grid">`+TREND_OPTS.map(o=>opt(r.trend===o,o,`setSx('${s.replace(/'/g,"")}','trend','${o.replace(/'/g,"")}')`)).join("")+`</div>
+    </div>`;
+  });
+  h+=qhead("📣","今回、受診しようと思うほど悪くなったのはいつ頃ですか？","（任意）グラフに赤い目印を付けます");
+  h+=`<div class="opts grid">`+ONSET_OPTS.filter(o=>o[0]!=="わからない").map(([o])=>opt(D.common.visitBucket===o,o,`setVisit('${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+  h+=`<div class="hint" style="margin-top:6px">📅 最初の症状の正確な日付がわかれば（任意）</div>`;
+  h+=dateBlock("onset","最初に何か症状が出た時期");
+  h+=trajectoryChart(true);
+  return card(h);}
+function setSx(s,k,v){D.sx[s]=D.sx[s]||{};D.sx[s][k]=(D.sx[s][k]===v?null:v);render();}
+
+/* 症状ごとの推移カーブ。問診の「程度・その後の変化」から初期の線をつくり、
+   指で丸を上下に動かして各時期の「つらさ」の“ゆらぎ”を表現できる（自己完結SVG）。 */
+const WAVE_N=5;
+let WAVE_EDIT=false; /* ドラッグ編集は任意の上級機能（既定OFF。選択式回答から自動で線を生成） */
+function waveArr(s){
+  const r=D.sx[s]||{};
+  if(r.wave&&r.wave.length===WAVE_N)return r.wave;
+  const sev=r.sev,tr=r.trend;
+  const base=sev==="重い"?0.85:sev==="中くらい"?0.6:sev==="軽い"?0.4:0.55;
+  const a=[];
+  for(let i=0;i<WAVE_N;i++){const t=i/(WAVE_N-1);let v;
+    if(tr==="だんだん強くなる")v=0.3+0.6*t;
+    else if(tr==="軽くなってきた")v=0.9-0.6*t;
+    else if(tr&&tr.indexOf("出たり")>=0)v=[0.35,0.8,0.4,0.85,base][i];
+    else v=base;
+    a.push(Math.max(0.12,Math.min(1,v)));}
+  return a;
+}
+function trajectoryChart(editable){
+  const rows=D.symptoms.map(s=>({s,m:sxMonths(s)})).filter(r=>r.m!=null);
+  if(rows.length<1)return editable?`<div class="note" style="margin-top:14px;background:#f5f9fd;border-color:var(--line);color:var(--sub)">時期を選ぶと、ここに症状の推移グラフが表示されます。</div>`:"";
+  rows.sort((a,b)=>b.m-a.m);
+  const maxM=Math.max(...rows.map(r=>r.m),0.4);
+  const W=560,padL=132,padR=54,padT=16,laneH=74,H=padT+rows.length*laneH+30;
+  const x=m=>padL+(1-(m/maxM))*(W-padL-padR);
+  const now=x(0);
+  const ticks=[maxM,maxM/2,0].map(m=>{const lb=m<0.05?"今":(m>=12?`${Math.round(m/12)}年前`:`${Math.round(m)}か月前`);
+    return `<line x1="${x(m)}" y1="${padT-2}" x2="${x(m)}" y2="${H-22}" stroke="#eef2f7"/>
+      <text x="${x(m)}" y="${H-8}" text-anchor="middle" font-size="12" fill="#71828f">${lb}</text>`;}).join("");
+  const GEO=[];let body="";
+  rows.forEach((r,ri)=>{
+    const top=padT+ri*laneH;
+    const yHi=top+12, yLo=top+laneH-26;          // 上=つらい / 下=軽い
+    const x0=x(r.m);
+    const xs=[];for(let i=0;i<WAVE_N;i++)xs.push(x0+(now-x0)*(i/(WAVE_N-1)));
+    const wv=waveArr(r.s);
+    const yOf=v=>yLo-(yLo-yHi)*v;
+    const pts=xs.map((xx,i)=>`${xx.toFixed(1)},${yOf(wv[i]).toFixed(1)}`).join(" ");
+    body+=`<line x1="${padL}" y1="${top+laneH-12}" x2="${now}" y2="${top+laneH-12}" stroke="#eef2f7"/>`;
+    body+=`<text x="${padL-10}" y="${top+laneH/2+4}" text-anchor="end" font-size="13" fill="#16222e">${r.s.length>11?r.s.slice(0,10)+"…":r.s}</text>`;
+    body+=`<polyline id="wl${ri}" points="${pts}" fill="none" stroke="#2f7fc4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
+    if(editable&&WAVE_EDIT)xs.forEach((xx,i)=>{body+=`<circle class="wdot" data-r="${ri}" data-i="${i}" id="wd${ri}_${i}" cx="${xx.toFixed(1)}" cy="${yOf(wv[i]).toFixed(1)}" r="13" fill="#fff" stroke="#2f7fc4" stroke-width="3"/>`;});
+    GEO.push({s:r.s,yHi,yLo,xs});
+  });
+  window.__WAVE={geo:GEO};
+  const nowLine=`<line x1="${now}" y1="${padT-2}" x2="${now}" y2="${H-22}" stroke="var(--warn)" stroke-dasharray="3 3"/>
+    <text x="${now}" y="${padT-4}" text-anchor="middle" font-size="10" fill="var(--warn)">今</text>`;
+  const vm=visitMonths();
+  const visitLine=(vm!=null&&vm<=maxM+0.001)?`<line x1="${x(vm).toFixed(1)}" y1="${padT-2}" x2="${x(vm).toFixed(1)}" y2="${H-22}" stroke="#c0392b" stroke-width="2"/>
+    <text x="${x(vm).toFixed(1)}" y="${padT+9}" text-anchor="middle" font-size="10" fill="#c0392b" font-weight="700">受診理由</text>`:"";
+  const btn=(lab,fn)=>`<button type="button" onclick="${fn}" style="font-size:calc(14px*var(--fs));padding:10px 16px;border:1.5px solid var(--line);background:#fff;border-radius:9px;cursor:pointer;color:var(--sub);font-weight:700;font-family:inherit">${lab}</button>`;
+  const controls=editable?(WAVE_EDIT
+    ?`<div class="hint" style="margin:8px 0 2px">👆 青い丸を<b>上下に</b>動かして、その時期の「つらさ」を線にできます（上＝つらい／下＝軽い）。だいたいで大丈夫です。</div>
+      <div style="text-align:right;margin-top:4px;display:flex;gap:8px;justify-content:flex-end">${btn("↺ 線を描き直す","resetWaves()")}${btn("✓ 調整をおわる","WAVE_EDIT=false;render()")}</div>`
+    :`<div style="text-align:right;margin-top:4px">${btn("✏ 線を指で調整する（任意）","WAVE_EDIT=true;render()")}</div>`):"";
+  const legend=`<div style="font-size:calc(13px*var(--fs));color:var(--sub);margin-top:6px">縦＝つらさ（上ほど強い）／横＝時間（左が昔・右が今）。ご本人・ご家族の実感を表した線です。</div>`;
+  return `<div class="blk"><h4 style="color:var(--brand-d);margin:14px 0 4px">📈 症状の推移（ご本人・ご家族の実感）</h4>
+    <svg id="wsvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-width:${W}px;background:#fff;border:1px solid var(--line);border-radius:12px;touch-action:none">
+      ${ticks}${nowLine}${visitLine}${body}</svg>${controls}${legend}</div>`;}
+/* ドラッグ操作の割り当て（sxtime画面の描画後に呼ぶ）。描画中はrender()しないので途中で失われない */
+function attachWaveHandlers(){
+  const svg=document.getElementById("wsvg");if(!svg||!window.__WAVE)return;
+  const geo=window.__WAVE.geo;let cur=null;
+  const toSvg=e=>{const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse());};
+  svg.querySelectorAll(".wdot").forEach(dot=>{
+    dot.addEventListener("pointerdown",e=>{e.preventDefault();cur={r:+dot.dataset.r,i:+dot.dataset.i,el:dot};
+      try{dot.setPointerCapture(e.pointerId);}catch(_){}dot.setAttribute("r","12");dot.setAttribute("fill","#dcecfb");});
+  });
+  svg.addEventListener("pointermove",e=>{
+    if(!cur)return;e.preventDefault();
+    const g=geo[cur.r];const loc=toSvg(e);
+    const y=Math.max(g.yHi,Math.min(g.yLo,loc.y));
+    const v=(g.yLo-y)/(g.yLo-g.yHi);
+    cur.el.setAttribute("cy",y.toFixed(1));
+    const s=g.s;D.sx[s]=D.sx[s]||{};if(!D.sx[s].wave||D.sx[s].wave.length!==WAVE_N)D.sx[s].wave=waveArr(s).slice();
+    D.sx[s].wave[cur.i]=v;
+    const line=document.getElementById("wl"+cur.r);
+    line.setAttribute("points",g.xs.map((xx,i)=>xx.toFixed(1)+","+document.getElementById("wd"+cur.r+"_"+i).getAttribute("cy")).join(" "));
+  });
+  const end=e=>{if(!cur)return;try{cur.el.releasePointerCapture(e.pointerId);}catch(_){}cur.el.setAttribute("r","9");cur.el.setAttribute("fill","#fff");cur=null;};
+  svg.addEventListener("pointerup",end);svg.addEventListener("pointercancel",end);
+}
+function resetWaves(){D.symptoms.forEach(s=>{if(D.sx[s])delete D.sx[s].wave;});render();}
+
+/* 症状ごとの発症・程度・変化（医療者シート用の簡易表） */
+function sxOnsetTable(){
+  const rows=D.symptoms.filter(s=>D.sx[s]&&(D.sx[s].onset||D.sx[s].sev||D.sx[s].trend));
+  if(!rows.length)return "";
+  return `<div class="assoc" style="margin:2px 0 6px">`+rows.map(s=>{const r=D.sx[s];
+    return `<div><span class="g">${s}:</span> ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend].filter(Boolean).join(" / ")}</div>`;}).join("")+`</div>`;}
+
+function dailyLabel(it){return it.t+(it.sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${it.sub}</span>`:"");}
+function scrDaily(){
+  let h=`<div class="qhead"><span class="qnum">📍</span><span class="qtext">${isProxy()?"ご本人が、できなくなった・やりにくくなったことは？":"できなくなった・やりにくくなったことは？"}</span>${spkBtn("できなくなった・やりにくくなったことはありますか？あてはまるものを選んでください")}</div>
    <div class="hint">日常生活で困っていることを選んでください（複数可・なければ次へ）</div>
-   <div class="opts grid">${FUNC.map(o=>opt(D.func.includes(o),o,`toggleFunc('${o.replace(/'/g,"")}')`,true)).join("")}</div>`);}
+   <div class="opts grid">${FUNC.map(o=>opt(D.func.includes(o),o,`toggleFunc('${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+  h+=`<div class="qhead" style="margin-top:26px"><span class="qnum">＋</span><span class="qtext">${isProxy()?"ご本人にこんな困りごとはありませんか？":"こんな困りごとはありませんか？"}</span>${spkBtn("こんな困りごとはありませんか？あてはまるものを選んでください")}</div>
+   <div class="hint">気づきにくい変化もあります。あてはまるものを選んでください（複数可）。なければ各項目の「あてはまるものはない」を選べます。</div>`;
+  DAILY_GROUPS.forEach(grp=>{
+    h+=`<div class="grouplab">${grp.e?grp.e+" ":""}${grp.g}</div><div class="opts grid">`;
+    h+=grp.items.map(it=>opt(D.daily.includes(it.id),dailyLabel(it),`toggleDaily('${it.id}')`,true)).join("");
+    h+=opt(!!D.dailyNone[grp.key],`<span class="emo">—</span>あてはまるものはない`,`setDailyNone('${grp.key}')`,true);
+    h+=`</div>`;
+    if(grp.key==="sensory"&&D.daily.includes("vis"))h+=visBlock();
+  });
+  h+=`<div class="note" style="background:#f5f9fd;border-color:var(--line);color:var(--sub)">これは症状を<b>整理</b>するためのチェックです。チェックの数が多くても重症度を表すものではありません。これらの困りごとは他の原因でも起こります。</div>`;
+  return card(h);}
+function toggleDaily(id){const i=D.daily.indexOf(id);if(i>=0)D.daily.splice(i,1);else{D.daily.push(id);const g=dItem(id);if(g)delete D.dailyNone[g.key];}render();}
+function setDailyNone(key){
+  if(D.dailyNone[key])delete D.dailyNone[key];
+  else{D.dailyNone[key]=true;D.daily=D.daily.filter(id=>{const it=dItem(id);return!it||it.key!==key;});}
+  render();}
+/* 見えにくさについて、開かれた質問で。片目/両目だけ選択式、あとは自由記述 */
+function visBlock(){
+  return `<div style="background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 14px">
+    <div class="hint" style="margin:0 0 6px"><b>👁 目の症状について、気づいたことを教えてください（任意）</b></div>
+    <div class="opts grid">`+["片目だけ","両目","わからない"].map(o=>opt(D.vis.side===o,o,`setVis('side','${o}')`)).join("")+`</div>
+    <textarea id="visnote" placeholder="例：見えにくい範囲、色の見え方、目を動かしたときの感じ、いつからか など" oninput="D.vis.note=this.value" style="margin-top:8px">${D.vis.note||""}</textarea></div>`;}
+function setVis(k,v){D.vis[k]=(D.vis[k]===v?null:v);render();}
 
 function scrBg(){
-  let h=`<p class="lead">🩺 持病やお薬など、<b>背景</b>を教えてください（任意）</p>`;
+  let h=proxyBanner()+`<p class="lead">🩺 持病やお薬など、<b>背景</b>を教えてください（任意）</p>`;
   h+=`<div class="grouplab">持病・体質</div>
     <div class="opts grid">${BG_RISK.map(o=>opt(D.bg.risk.includes(o),o,`toggleBg('risk','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
   h+=qhead("薬","飲んでいるお薬はありますか？")+
     `<div class="opts grid">${["飲んでいる薬がある","最近始めた・変えた薬がある","飲んでいない","わからない"]
       .map(o=>opt(D.bg.med===o,o,`setBg('med','${o.replace(/'/g,"")}')`)).join("")}</div>
     <textarea id="medt" placeholder="お薬の名前がわかれば（任意）" oninput="D.bg.medText=this.value">${D.bg.medText}</textarea>`;
+  h+=qhead("薬2","吐き気止め・胃薬・精神科の薬などを使っていますか？","スルピリド・メトクロプラミド・抗精神病薬など（手のふるえ・動作の遅さに関係することがあります）")+
+    `<div class="opts grid">${BG_DOPADRUG.map(o=>opt(D.bg.dopaDrug===o,o,`setBg('dopaDrug','${o.replace(/'/g,"")}')`)).join("")}</div>`;
   h+=qhead("家","似た症状の家族はいますか？")+
     `<div class="opts grid">${["いる","いない","わからない"].map(o=>opt(D.bg.family===o,o,`setBg('family','${o}')`)).join("")}</div>`;
-  h+=`<div class="grouplab">最近あったこと</div>
-    <div class="opts grid">${BG_IMMUNE.map(o=>opt(D.bg.immune.includes(o),o,`toggleBg('immune','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
-  h+=qhead("科","これまでに受診した科はありますか？","あてはまるものすべて（任意）")+
-    `<div class="opts grid">${VISITED.map(o=>opt(D.visited.includes(o),o,`toggleVisited('${o}')`,true)).join("")}</div>`;
-  h+=qhead("査","受けた検査があれば（任意）","例：頭のMRI、血液検査、筋電図 など")+
-    `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${D.tests}</textarea>`;
+  h+=`<div class="grouplab">自律神経の症状（あてはまるものすべて）</div>
+    <div class="opts grid">${BG_AUTONOMIC.map(o=>opt(D.bg.autonomic.includes(o),o,`toggleBg('autonomic','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+  h+=qhead("感","症状が出る前に、発熱・かぜ・下痢などの感染がありましたか？","発症の1〜4週間前（任意）")+
+    `<div class="opts grid">${["あった","ワクチン接種のあとから","なかった","わからない"].map(o=>opt(D.bg.preInfection===o,o,`setBg('preInfection','${o.replace(/'/g,"")}')`)).join("")}</div>`;
+  h+=qhead("妊","妊娠中・授乳中ですか？","治療の選択に関わることがあります（任意）")+
+    `<div class="opts grid">${["妊娠中","授乳中","どちらでもない","答えない"].map(o=>opt(D.bg.pregnancy===o,o,`setBg('pregnancy','${o.replace(/'/g,"")}')`)).join("")}</div>`;
+  h+=moreToggle("bgMore","そのほか（最近の出来事・生活・既往・受診歴など）を入力");
+  if(UI.bgMore){
+    h+=`<div class="grouplab">最近あったこと</div>
+      <div class="opts grid">${BG_IMMUNE.map(o=>opt(D.bg.immune.includes(o),o,`toggleBg('immune','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+    h+=`<div class="grouplab">生活・習慣</div>
+      <div class="opts grid">${BG_LIFESTYLE.map(o=>opt(D.bg.lifestyle.includes(o),o,`toggleBg('lifestyle','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+    h+=`<div class="grouplab">仕事・環境・接触</div>
+      <div class="opts grid">${BG_EXPOSURE.map(o=>opt(D.bg.exposure.includes(o),o,`toggleBg('exposure','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+    h+=qhead("既","これまでの大きな病気・手術があれば（任意）")+
+      `<textarea id="hist" placeholder="例：〇年に△△の手術、□□で通院中 など" oninput="D.bg.history=this.value">${D.bg.history}</textarea>`;
+    h+=qhead("ア","アレルギー（薬・食べ物など）があれば（任意）")+
+      `<textarea id="alle" placeholder="例：〇〇でじんましん など" oninput="D.bg.allergy=this.value">${D.bg.allergy}</textarea>`;
+    h+=qhead("科","これまでに受診した科はありますか？","あてはまるものすべて（任意）")+
+      `<div class="opts grid">${VISITED.map(o=>opt(D.visited.includes(o),o,`toggleVisited('${o}')`,true)).join("")}</div>`;
+    h+=qhead("査","受けた検査があれば（任意）","例：頭のMRI、血液検査、筋電図 など")+
+      `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${D.tests}</textarea>`;
+  }
   return card(h);}
 
 function scrFree(){
   return card(`
-   <div class="qhead"><span class="qnum">1</span><span class="qtext">${isProxy()?"ご本人の様子を自由にお話しください":"自由にお話しください"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
-   <div class="hint">話し言葉のままでOK。マイクでも入力できます。</div>
-   <textarea id="free" placeholder="例：去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる" oninput="D.free=this.value">${D.free}</textarea>
+   <div class="qhead"><span class="qnum">1</span><span class="qtext">医師にいちばん伝えたいこと・困っていること<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("医師にいちばん伝えたいこと、困っていることはありますか？")}</div>
+   <div class="hint">短くて大丈夫です</div>
+   <textarea id="trouble" placeholder="例：転びそうで外出がこわい" oninput="D.common.trouble=this.value">${D.common.trouble||""}</textarea>
+   <div class="qhead" style="margin-top:24px"><span class="qnum">2</span><span class="qtext">${isProxy()?"ご本人の様子を自由にお話しください":"自由にお話しください"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("そのほか、症状の様子を自由にお話しください。ご家族から見て気づいた変化もどうぞ")}</div>
+   <div class="hint">話し言葉のままでOK。ご家族から見た変化（表情・声・動きなど）もここにどうぞ。マイクでも入力できます。</div>
+   <textarea id="free" placeholder="例：去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる。家族から見ると表情が乏しくなった" oninput="D.free=this.value">${D.free}</textarea>
    <div><span class="voice" id="vbtn" onclick="toggleVoice()">🎤 声で入力する</span></div>
-   <div class="mini" id="vstat" style="margin-top:6px"></div>
-   <div class="qhead"><span class="qnum">2</span><span class="qtext">ご家族から見た変化<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
-   <div class="hint">本人が気づきにくい変化を、見ている方の言葉で</div>
-   <textarea id="fc" placeholder="例：表情が乏しくなった、声が小さくなった、動きが遅くなった" oninput="D.familyChange=this.value">${D.familyChange}</textarea>
-   <div class="qhead"><span class="qnum">3</span><span class="qtext">医師に伝えたいこと・困っていること<span style="font-weight:500;color:var(--sub)">（任意）</span></span></div>
-   <textarea id="trouble" placeholder="例：転びそうで外出がこわい" oninput="D.common.trouble=this.value">${D.common.trouble||""}</textarea>`);}
+   <div class="mini" id="vstat" style="margin-top:6px"></div>`);}
 
+let EDIT_SUM=false; /* 文章の直接編集モード（既定は項目ごとの確認＋「直す」導線） */
+let RETC=false;     /* 「直す」で戻ったあと、確認画面への近道を表示する */
+function jumpFix(ph,mod){
+  RETC=true;phase=ph;
+  if(ph==="module"&&mod>=0)modCursor=Math.max(0,D.mods.indexOf(mod));
+  render();
+}
 function scrConfirm(){
-  const s=buildSummary();const u=unconfirmedItems();
-  let unc=u.length?`<div class="note"><b>💡 医師に追加で確認するとよい項目（参考）</b><br>
-    ${u.map(x=>"・"+x).join("<br>")}<br><span class="mini">※診断ではありません。聞き漏れを減らすための参考です。</span></div>`:"";
+  RETC=false;
+  const edited=D.editedSummary!==undefined||EDIT_SUM;
+  let body;
+  if(edited){
+    body=`<div class="hint">文章を直接編集できます。編集後の文がそのままシートに載ります。</div>
+     <textarea id="sumedit" style="min-height:160px" oninput="D.editedSummary=this.value">${buildSummary()}</textarea>`;
+  }else{
+    const parts=buildSummaryParts();
+    body=parts.length?`<div class="sumlist">`+parts.map(p=>
+      `<div class="sumrow"><span>${p.t}</span>
+       <button type="button" class="fixbtn" onclick="jumpFix('${p.ph}',${p.mod!==undefined?p.mod:-1})">✎ 直す</button></div>`).join("")+`</div>
+     <div style="text-align:right"><button type="button" class="fixbtn" style="margin-top:10px" onclick="EDIT_SUM=true;render()">✏ 文章を直接編集する</button></div>`
+     :`<div class="note">まだ入力がありません。「戻る」で症状を選んでください。</div>`;
+  }
   return card(`
-   <div class="qhead"><span class="qnum">✓</span><span class="qtext">この内容でよろしいですか？</span></div>
-   <div class="hint">AIが整理した文です <span class="ai-tag">AI整理・診断ではありません</span>。直したい所は書き直せます。</div>
-   <textarea id="sumedit" style="min-height:160px" oninput="D.editedSummary=this.value">${s}</textarea>
-   ${unc}
+   <div class="qhead"><span class="qnum">✓</span><span class="qtext">この内容でよろしいですか？</span>${spkBtn("この内容でよろしいですか？直したい項目は、直すボタンでその画面に戻れます")}</div>
+   <div class="hint">AIが整理した文です <span class="ai-tag">AI整理・診断ではありません</span>。直したい項目は「直す」でその画面に戻れます。</div>
+   ${body}
+   ${SAVE_ENDPOINT?`<label class="consent"><input type="checkbox" ${D.researchConsent?"checked":""} onchange="D.researchConsent=this.checked">
+     <span>サービス改善・研究のため、<b>選択式の回答（匿名）</b>を保存することに同意します（任意）。自由記述・お名前・連絡先は保存されません。診療には影響しません。</span></label>`:""}
    <div class="mini" style="margin-top:10px">「メモを作る」で、ご本人向けの説明と、医師向けシートを作成します。</div>`);}
 
 function scrOutput(){
@@ -538,6 +3254,7 @@ function scrOutput(){
      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
        <button class="voice" style="border-color:var(--ok);color:var(--ok);margin-top:0" onclick="window.print()">🖨 印刷 / PDFで保存</button>
        <button class="copybtn" id="copyBtn" style="margin-top:0" onclick="copySheet()">📋 医療者シートをコピー</button>
+       <button class="copybtn" style="margin-top:0" onclick="showHandoff('doctor')">📱 医師用シートをQRで開く</button>
      </div>
    </div>
    <div class="panels">
@@ -545,14 +3262,19 @@ function scrOutput(){
      <div class="panel ${OUT==='d'?'active':''}"><div class="card">${doctorSheet()}</div></div>
    </div>
    <div class="card no-print" style="text-align:center">
-     <p class="mini">入力内容は保存されていません。この画面を閉じると消えます。</p>
+     <p class="mini">${_saved?"✓ 選択式の回答（匿名）を保存しました（改善・研究用）。自由記述・個人情報は保存していません。":"入力内容は保存されていません。この画面を閉じると消えます。"}</p>
      <button class="voice" onclick="location.reload()">↺ 最初からやり直す</button></div>`;}
 
 /* ===== 部品 ===== */
 function card(inner){return `<div class="card">${inner}</div>`;}
-function qhead(n,q,sub){return `<div class="qhead"><span class="qnum">${n}</span>
-  <span class="qtext">${q}${sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${sub}</span>`:""}</span></div>`;}
-function opt(sel,label,onclick,multi){return `<div class="opt ${multi?'multi':''} ${sel?'sel':''}" onclick="${onclick}">${label}</div>`;}
+function escAttr(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function spkBtn(text){return `<button class="spk no-print" data-say="${escAttr(text)}" onclick="speakEl(this)" aria-label="読み上げ">🔊</button>`;}
+function qhead(n,q,sub){const say=stripHtml(q)+(sub?"。"+stripHtml(sub):"");
+  return `<div class="qhead"><span class="qnum">${n}</span>
+  <span class="qtext">${q}${sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${sub}</span>`:""}</span>${spkBtn(say)}</div>`;}
+/* 文字列生成時にタグを除去（読み上げ用） */
+function stripHtml(h){return String(h).replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();}
+function opt(sel,label,onclick,multi){return `<button type="button" aria-pressed="${!!sel}" class="opt ${multi?'multi':''} ${sel?'sel':''}" onclick="${onclick}">${label}</button>`;}
 
 function setCommon(k,v){D.common[k]=v;render();}
 function setM(id,k,v){D.m[id][k]=v;render();}
@@ -567,9 +3289,134 @@ function toggleFunc(o){const i=D.func.indexOf(o);if(i>=0)D.func.splice(i,1);else
 function toggleBg(f,o){const a=D.bg[f];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);render();}
 function toggleVisited(o){const i=D.visited.indexOf(o);if(i>=0)D.visited.splice(i,1);else D.visited.push(o);render();}
 function setTri(nm,v){D.assoc[nm]=(D.assoc[nm]===v?undefined:v);render();}
-function setFs(c){document.body.className=c;
-  document.querySelectorAll(".fsbtns button").forEach((b,i)=>b.classList.toggle("on",
-    (c===""&&i===0)||(c==="fs-l"&&i===1)||(c==="fs-xl"&&i===2)));}
+function setFs(c){const b=document.body;b.classList.remove("fs-l","fs-xl");if(c)b.classList.add(c);
+  document.querySelectorAll(".fsbtns .a1,.fsbtns .a2,.fsbtns .a3").forEach((el)=>{
+    el.classList.toggle("on",(c===""&&el.classList.contains("a1"))||(c==="fs-l"&&el.classList.contains("a2"))||(c==="fs-xl"&&el.classList.contains("a3")));});}
+
+/* ===== 音声読み上げ（ブラウザ標準 speechSynthesis） ===== */
+let TTS_ON=false;
+function stripTags(h){const d=document.createElement("div");d.innerHTML=h;return (d.textContent||"").replace(/\s+/g," ").trim();}
+function speak(text){
+  if(!("speechSynthesis"in window)||!text)return;
+  try{window.speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);u.lang="ja-JP";u.rate=.95;window.speechSynthesis.speak(u);}catch(e){}
+}
+function speakEl(el){speak(el.getAttribute("data-say")||el.textContent);}
+function toggleTTS(){
+  TTS_ON=!TTS_ON;document.body.classList.toggle("tts-off",!TTS_ON);
+  const b=document.getElementById("ttsBtn");if(b)b.classList.toggle("on",TTS_ON);
+  if(!TTS_ON&&"speechSynthesis"in window)window.speechSynthesis.cancel();
+  if(TTS_ON)autoRead();
+}
+/* 画面切替時に、その画面の最初の質問を自動で読む */
+function autoRead(){
+  if(!TTS_ON)return;
+  const first=document.querySelector("#app .spk");
+  if(first)speak(first.getAttribute("data-say"));
+}
+
+/* ===== ゆっくりモード（大きな文字＋1問ずつ＋読み上げ） ===== */
+let SLOW=false;
+function toggleSlow(){
+  SLOW=!SLOW;
+  setFs(SLOW?'fs-xl':'fs-l');
+  ONE_Q=SLOW;ONEQ_IDX=0;
+  const ob=document.getElementById("oneqBtn");if(ob)ob.classList.toggle("on",ONE_Q);
+  if(SLOW!==TTS_ON)toggleTTS();
+  render();
+}
+
+/* ===== 1問ずつ表示（1画面1問） ===== */
+let ONE_Q=false,ONEQ_IDX=0;
+function toggleOneQ(){ONE_Q=!ONE_Q;ONEQ_IDX=0;
+  const b=document.getElementById("oneqBtn");if(b)b.classList.toggle("on",ONE_Q);render();}
+function oneQPrev(){ONEQ_IDX--;render();}
+function oneQNext(){ONEQ_IDX++;render();}
+function applyOneQ(screenChanged){
+  if(!ONE_Q)return;
+  const qScreens=["who","common","module","bg","assoc","daily","sxtime"];
+  if(!qScreens.includes(phase))return;
+  const card=[...app.querySelectorAll(".card")].find(c=>c.querySelector(".qhead,.grouplab,.qunit"));
+  if(!card)return;
+  const kids=[...card.childNodes];const groups=[];let intro=[],cur=null;
+  const isStart=n=>n.nodeType===1&&n.classList&&
+    (n.classList.contains("qhead")||n.classList.contains("grouplab")||n.classList.contains("qunit"));
+  kids.forEach(n=>{
+    if(isStart(n)){cur=[n];groups.push(cur);}else if(cur)cur.push(n);else intro.push(n);});
+  /* 見出しだけで選択肢を含まないグループは、次のグループに結合（空ステップを作らない） */
+  const hasUI=g=>g.some(n=>n.nodeType===1&&n.querySelector&&
+    (n.matches(".opts,.triwrap,textarea,.qunit,.bodywrap")||!!n.querySelector(".opt,.tri,textarea,input,.reg")));
+  for(let i=0;i<groups.length-1;i++){
+    if(!hasUI(groups[i])){groups[i+1]=groups[i].concat(groups[i+1]);groups.splice(i,1);i--;}}
+  if(groups.length<2)return;
+  if(screenChanged)ONEQ_IDX=0;
+  ONEQ_IDX=Math.max(0,Math.min(ONEQ_IDX,groups.length-1));
+  card.innerHTML="";
+  intro.forEach(n=>card.appendChild(n));
+  groups.forEach((g,gi)=>{const w=document.createElement("div");w.className="qstep";
+    if(gi!==ONEQ_IDX)w.style.display="none";g.forEach(n=>w.appendChild(n));card.appendChild(w);});
+  const nav=document.createElement("div");nav.className="qstepnav no-print";
+  nav.innerHTML=`<button ${ONEQ_IDX===0?"disabled":""} onclick="oneQPrev()">◀ 前</button>
+    <span>この画面の質問 ${ONEQ_IDX+1} / ${groups.length}</span>
+    <button ${ONEQ_IDX===groups.length-1?"disabled":""} onclick="oneQNext()">次 ▶</button>`;
+  card.appendChild(nav);
+}
+
+/* ===== 状態のURL引き継ぎ（サーバー保存なし・URLに載せる） =====
+   QR上限（約2900字）対策として、空値・空配列を落として軽量化する */
+function encodeState(){try{
+  const slim=JSON.parse(JSON.stringify(D,(k,v)=>{
+    if(v===null||v===undefined||v==="")return undefined;
+    if(Array.isArray(v)&&v.length===0)return undefined;
+    return v;}));
+  return btoa(unescape(encodeURIComponent(JSON.stringify(slim))));}catch(e){return"";}}
+function decodeState(s){try{return JSON.parse(decodeURIComponent(escape(atob(s))));}catch(e){return null;}}
+function handoffURL(extra){const enc=encodeState();
+  const base=location.href.split("#")[0];return base+"#s="+enc+(extra||"");}
+function restoreState(){
+  const m=location.hash.match(/[#&]s=([^&]+)/);if(!m)return false;
+  const obj=decodeState(m[1]);if(!obj)return false;
+  Object.keys(obj).forEach(k=>{D[k]=obj[k];});
+  /* 軽量化で落ちたキーの既定値を復元（undefined参照を防ぐ） */
+  D.symptoms=D.symptoms||[];D.mods=D.mods||[];D.func=D.func||[];D.daily=D.daily||[];D.visited=D.visited||[];
+  D.common=D.common||{};D.assoc=D.assoc||{};D.sx=D.sx||{};D.vis=D.vis||{};D.dailyNone=D.dailyNone||{};
+  D.m=D.m||{};[1,2,3].forEach(i=>{D.m[i]=D.m[i]||{};});
+  D.bg=D.bg||{};["risk","immune","lifestyle","exposure","autonomic"].forEach(k=>{D.bg[k]=D.bg[k]||[];});
+  D.tests=D.tests||"";D.free=D.free||"";D.familyChange=D.familyChange||"";
+  const vm=location.hash.match(/[#&]view=doctor/);
+  if(D.symptoms&&D.symptoms.length){phase=vm?"output":"confirm";if(vm)OUT='d';}
+  return true;
+}
+function showHandoff(view){
+  const url=handoffURL(view==="doctor"?"&view=doctor":"");
+  const title=view==="doctor"?"医師用シートを別端末で開く":"スマホで続きを入力する";
+  const guide=view==="doctor"?"カルテ端末などでこのQRを読み取ると、同じ内容の医師用シートが開きます。":"患者さんのスマホでこのQRコードを読み取ると、続きから入力できます。（サーバーには保存されません）";
+  const wrap=document.createElement("div");wrap.className="modal";wrap.id="hoModal";
+  wrap.innerHTML=`<div class="box">
+    <h3>📱 ${title}</h3>
+    <p class="mini" style="margin:2px 0 0">${guide}</p>
+    <div class="qr" id="qrBox"></div>
+    <div class="lk" id="qrLink">${url}</div>
+    <div class="row">
+      <button class="pri" onclick="copyHandoff('${view==="doctor"?"doctor":""}')">🔗 リンクをコピー</button>
+      <button onclick="closeHandoff()">閉じる</button>
+    </div>
+    <p class="mini" id="qrWarn" style="margin-top:8px"></p></div>`;
+  wrap.addEventListener("click",e=>{if(e.target===wrap)closeHandoff();});
+  document.body.appendChild(wrap);
+  const box=document.getElementById("qrBox");
+  if(url.length>2900){document.getElementById("qrWarn").textContent="※入力が多いためQRが作れません。リンクのコピーをお使いください。";}
+  else if(window.qrcode){try{const qr=qrcode(0,"L");qr.addData(url);qr.make();box.innerHTML=qr.createImgTag(4,8);
+      const im=box.querySelector("img");if(im){im.style.width="230px";im.style.height="230px";im.style.imageRendering="pixelated";}}
+    catch(e){document.getElementById("qrWarn").textContent="※QRを表示できません。リンクのコピーをお使いください。";}}
+  else{document.getElementById("qrWarn").textContent="※QRライブラリを読み込めませんでした。リンクをお使いください。";}
+}
+function closeHandoff(){const m=document.getElementById("hoModal");if(m)m.remove();}
+function copyHandoff(view){const url=handoffURL(view==="doctor"?"&view=doctor":"");
+  const done=()=>{const b=event&&event.target;if(b){b.textContent="✓ コピーしました";setTimeout(()=>b.textContent="🔗 リンクをコピー",1800);}};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(done).catch(()=>fallbackCopy(url,done));
+  else fallbackCopy(url,done);
+}
 
 /* ===== ナビ ===== */
 function updateNav(){
@@ -580,41 +3427,55 @@ function updateNav(){
   else if(phase==="confirm"){nb.textContent="メモを作る →";nb.disabled=false;}
   else{nb.textContent="次へ →";nb.disabled=!canNext();}
   nb.style.display="";bb.textContent="← 戻る";
+  /* 進めない理由をことばで示す（グレーアウトだけにしない） */
+  const nh=document.getElementById("navhint");
+  if(nh)nh.textContent=(nb.disabled&&phase!=="intro")?nextHint():"";
   drawMidout();
+}
+function nextHint(){
+  if(phase==="who")return "どなたが入力するかを選ぶと、次へ進めます";
+  if(phase==="symptoms")return "症状を1つ以上選ぶと、次へ進めます（「その他」でも大丈夫です）";
+  if(phase==="common")return "最初の質問に1つ答えると進めます（「わからない」でも大丈夫です）";
+  return "";
 }
 /* 診察に呼ばれたら：ここまでの内容でメモを作る（F11 途中出力） */
 function drawMidout(){
   const el=document.getElementById("midout");if(!el)return;
+  if(RETC&&!["intro","confirm","output"].includes(phase)){
+    el.innerHTML=`<button onclick="RETC=false;phase='confirm';render()">修正できたら：確認画面にもどる →</button>`;return;
+  }
   const show=!["intro","confirm","output"].includes(phase)&&D.symptoms.length>0;
   el.innerHTML=show?`<button onclick="phase='confirm';render()">診察に呼ばれたら：ここまでの内容でメモを作る →</button>`:"";
 }
 function canNext(){
   if(phase==="who")return !!D.who;
   if(phase==="symptoms")return D.symptoms.length>0;
-  if(phase==="common")return (!!D.common.onset||!!D.common.onsetMonth||!!D.common.onsetDate)&&!!D.common.tempo;
+  if(phase==="common")return !!D.common.tempo;
   return true;
 }
 function next(){
   if(phase==="intro")phase="who";
   else if(phase==="who")phase="symptoms";
-  else if(phase==="symptoms")phase="common";
+  else if(phase==="symptoms")phase="sxtime";
+  else if(phase==="sxtime")phase="common";
   else if(phase==="common"){if(D.mods.length){phase="module";modCursor=0;}else phase="assoc";}
   else if(phase==="module"){if(modCursor<D.mods.length-1)modCursor++;else phase="assoc";}
-  else if(phase==="assoc")phase="func";
-  else if(phase==="func")phase="bg";
+  else if(phase==="assoc")phase="daily";
+  else if(phase==="daily")phase="bg";
   else if(phase==="bg")phase="free";
   else if(phase==="free")phase="confirm";
-  else if(phase==="confirm")phase="output";
+  else if(phase==="confirm"){saveSubmission();phase="output";}
   render();
 }
 function prev(){
   if(phase==="who")phase="intro";
   else if(phase==="symptoms")phase="who";
-  else if(phase==="common")phase="symptoms";
+  else if(phase==="sxtime")phase="symptoms";
+  else if(phase==="common")phase="sxtime";
   else if(phase==="module"){if(modCursor>0)modCursor--;else phase="common";}
   else if(phase==="assoc"){phase=D.mods.length?"module":"common";modCursor=Math.max(0,D.mods.length-1);}
-  else if(phase==="func")phase="assoc";
-  else if(phase==="bg")phase="func";
+  else if(phase==="daily")phase="assoc";
+  else if(phase==="bg")phase="daily";
   else if(phase==="free")phase="bg";
   else if(phase==="confirm")phase="free";
   else if(phase==="output")phase="confirm";
@@ -640,52 +3501,95 @@ function toggleVoice(){
   rec.start();
 }
 
-/* ===== AI整理（モック：中立テンプレート。4軸で要約） ===== */
+/* ===== AI整理（モック：中立テンプレート。4軸で要約） =====
+   各文に入力元画面(ph)を持たせ、確認画面から「直す」で該当画面へ戻れるようにする */
 function buildSummary(){
   if(D.editedSummary!==undefined)return D.editedSummary;
+  return buildSummaryParts().map(p=>p.t).join("\n");
+}
+function buildSummaryParts(){
   const c=D.common;const parts=[];
   /* 時間軸 */
-  const onsetExact=fmtWhen("onset");
-  const onset=onsetExact?`${onsetExact}から`:(c.onset&&c.onset!=="わからない"?`${c.onset}から`:"発症時期は不明だが");
+  const onsetExact=fmtWhen("onset");const onsetLab=overallOnset();
+  const onset=onsetExact?`${onsetExact}から`:(onsetLab&&onsetLab!=="わからない"?`${onsetLab}から`:"発症時期は不明だが");
   const tempo=c.tempo&&c.tempo!=="わからない"?c.tempo.replace(/（.*?）/,""):null;
   const course=c.course&&c.course!=="わからない"?c.course:null;
   const worsen=fmtWhen("worsen");
-  let lead=onset;if(tempo)lead+=`「${tempo}」の経過`;if(worsen)lead+=`、${worsen}にさらに悪化`;if(course)lead+=`、現在は${course}`;
-  parts.push(lead+"。");
+  let lead=onset;if(tempo)lead+=`「${tempo}」の経過`;
+  if(c.freq&&c.freq!=="わからない")lead+=`、頻度は${c.freq}`;
+  if(c.episodeDur&&c.episodeDur!=="わからない")lead+=`（1回の持続は${c.episodeDur}）`;
+  if(worsen)lead+=`、${worsen}にさらに悪化`;if(course)lead+=`、現在は${course}`;
+  parts.push({t:lead+"。",ph:"common"});
+  /* 再発・寛解 */
+  if(c.relapse&&c.relapse!=="わからない"){
+    let rl="";
+    if(c.relapse==="はじめて")rl="今回がはじめてのエピソード。";
+    else rl=`過去にも同様の症状が${c.relapse}`+(c.relapseRecover?`（前回は${c.relapseRecover}で軽快）`:"")+"。";
+    parts.push({t:rl,ph:"common"});
+  }
+  if(c.visitBucket)parts.push({t:`今回の受診理由（増悪）：${c.visitBucket}ごろ。`,ph:"sxtime"});
+  /* 症状が出た順序（時系列） */
+  const ordered=D.symptoms.map(s=>({s,m:sxMonths(s)})).filter(r=>r.m!=null).sort((a,b)=>b.m-a.m);
+  if(ordered.length>=2)parts.push({t:"出現の順序："+ordered.map(r=>r.s).join(" → ")+"。",ph:"sxtime"});
+  if(c.severity)parts.push({t:`生活への支障：${c.severity}。`,ph:"common"});
+  const aggr=[...(c.aggravTags||[])];if(c.aggrav)aggr.push(c.aggrav.trim());
+  if(aggr.length)parts.push({t:"悪化・誘発："+aggr.join("・")+"。",ph:"common"});
+  const rel=[...(c.reliefTags||[])];if(c.relief)rel.push(c.relief.trim());
+  if(rel.length)parts.push({t:"軽減："+rel.join("・")+"。",ph:"common"});
   /* 局在の手がかり（モジュール） */
   D.mods.forEach(id=>{const m=D.m[id];let f="";
     if(id===1){const w=(m.what||[]).join("・");if(w)f+=`歩行に関して${w}。`;
       if(m.fall&&m.fall!=="なし")f+=`転倒は${m.fall}（${m.falldir||"方向不明"}）。`;
+      const inj=(m.fallinj||[]).filter(x=>x!=="ケガはない");if(inj.length)f+=`転倒による外傷：${inj.join("・")}。`;
       if(m.ortho&&m.ortho.includes("変わらない"))f+="整形外科的治療で改善乏しい。";}
     else if(id===2){const w=(m.main||[]).join("・");const ar=(m.area||[]).join("・");
       if(w)f+=`${w}を${ar?ar+"に":""}自覚。`;if(m.prox)f+=`分布は${m.prox}。`;}
     else if(id===3){const w=(m.main||[]).join("・");if(w)f+=`${w}を自覚。`;
       if(m.diurnal&&m.diurnal!=="わからない")f+=`日内変動「${m.diurnal}」。`;
       if(m.lid&&m.lid!=="下がらない")f+=`まぶたは${m.lid}。`;}
-    if(f)parts.push(f);});
-  if(c.side&&!["左右差なし","わからない"].includes(c.side))parts.push(`左右差は${c.side}。`);
+    if(f)parts.push({t:f,ph:"module",mod:id});});
+  if(c.side&&!["左右差なし","わからない"].includes(c.side))parts.push({t:`左右差は${c.side}。`,ph:"common"});
   /* 一緒に出ている症状 */
   const pos=ASSOC.filter(k=>D.assoc[k]==="y");
-  if(pos.length)parts.push("随伴症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("・")+"あり。");
+  if(pos.length)parts.push({t:"随伴症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("・")+"あり。",ph:"assoc"});
   /* 機能 */
-  if(D.func.length)parts.push("生活面では"+D.func.join("・")+"に支障。");
+  if(D.func.length)parts.push({t:"生活面では"+D.func.join("・")+"に支障。",ph:"daily"});
+  /* ふだんの困りごと（領域ごとにまとめる） */
+  if(D.daily.length){
+    const dg=DAILY_GROUPS.filter(g=>dSel(g).length)
+      .map(g=>g.g+"（"+dSel(g).map(it=>it.t).join("・")+"）");
+    parts.push({t:"ふだんの困りごと："+dg.join("、")+"。",ph:"daily"});
+  }
+  /* 見えにくさの詳細 */
+  const vb=[];
+  if(D.vis.side&&D.vis.side!=="わからない")vb.push(D.vis.side);
+  if(D.vis.note)vb.push(D.vis.note.trim());
+  if(vb.length)parts.push({t:"目の症状："+vb.join("／")+"。",ph:"daily"});
   /* 背景 */
   const bgp=[];
   if(D.bg.risk.length)bgp.push(D.bg.risk.join("・"));
   if(D.bg.med&&D.bg.med!=="飲んでいない"&&D.bg.med!=="わからない")bgp.push(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:""));
+  if(D.bg.dopaDrug&&(D.bg.dopaDrug.includes("飲")))bgp.push("パーキンソン症状に関係しうる薬："+D.bg.dopaDrug);
   if(D.bg.family==="いる")bgp.push("似た症状の家族あり");
+  if(D.bg.autonomic&&D.bg.autonomic.length)bgp.push("自律神経症状："+D.bg.autonomic.join("・"));
+  if(D.bg.preInfection&&["あった","ワクチン接種のあとから"].includes(D.bg.preInfection))bgp.push("先行："+D.bg.preInfection);
+  if(D.bg.pregnancy&&["妊娠中","授乳中"].includes(D.bg.pregnancy))bgp.push(D.bg.pregnancy);
   if(D.bg.immune.length)bgp.push(D.bg.immune.join("・"));
-  if(bgp.length)parts.push("背景："+bgp.join("、")+"。");
-  if(D.visited.length)parts.push("既受診："+D.visited.join("・")+"。");
-  if(D.tests)parts.push("受けた検査："+D.tests.trim());
-  if(D.familyChange)parts.push("家族から見た変化："+D.familyChange.trim());
-  return parts.join("\n");
+  if(D.bg.lifestyle.length)bgp.push(D.bg.lifestyle.join("・"));
+  if(D.bg.exposure.length)bgp.push(D.bg.exposure.join("・"));
+  if(D.bg.history)bgp.push("既往："+D.bg.history.trim());
+  if(D.bg.allergy)bgp.push("アレルギー："+D.bg.allergy.trim());
+  if(bgp.length)parts.push({t:"背景："+bgp.join("、")+"。",ph:"bg"});
+  if(D.visited.length)parts.push({t:"既受診："+D.visited.join("・")+"。",ph:"bg"});
+  if(D.tests)parts.push({t:"受けた検査："+D.tests.trim(),ph:"bg"});
+  if(D.familyChange)parts.push({t:"家族から見た変化："+D.familyChange.trim(),ph:"free"});
+  return parts;
 }
 function nowStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 /* 発症→悪化→現在 の横向きタイムライン。時期情報がなければ非表示 */
 function timelineHtml(){
   const c=D.common;
-  const onset=fmtWhen("onset")||(c.onset&&c.onset!=="わからない"?c.onset:null);
+  const onset=fmtWhen("onset")||(overallOnset()&&overallOnset()!=="わからない"?overallOnset():null);
   const worsen=fmtWhen("worsen");
   if(!onset&&!worsen)return "";
   const pts=[{lab:"発症",sub:onset||"時期不明",cls:"start"}];
@@ -705,10 +3609,15 @@ function patientView(){
    <div class="showbanner">📱 診察のとき、この画面をお医者さんに見せてください</div>
    <h3 style="color:var(--brand-d);margin:0 0 4px">あなたの症状のまとめ</h3>
    ${timelineHtml()?`<div class="blk"><h4>🕒 症状の経過</h4>${timelineHtml()}</div>`:""}
+   ${trajectoryChart()}
    <div class="blk"><h4>📝 入力内容のまとめ</h4><div>${sum.replace(/\n/g,"<br>")}</div></div>
+   ${D.daily.length?`<div class="blk"><h4>＋ ふだんの困りごと</h4>
+     ${DAILY_GROUPS.filter(g=>dSel(g).length).map(g=>
+       `<div style="margin:4px 0"><b style="color:var(--brand-d)">${g.e} ${g.g}</b><ul>${dSel(g).map(it=>`<li>${it.t}${it.sub?`（${it.sub}）`:""}</li>`).join("")}</ul></div>`).join("")}
+     <p class="mini">※チェックの数は重症度を表すものではありません。これらは他の原因でも起こります。</p></div>`:""}
    <div class="blk"><h4>💬 医師に伝えるとよいポイント</h4>
      <ul>
-       <li>いつから・どう変化したか（${fmtWhen("onset")||D.common.onset||"—"} / ${D.common.tempo||"—"}${fmtWhen("worsen")?`／${fmtWhen("worsen")}に悪化`:""}）</li>
+       <li>いつから・どう変化したか（${fmtWhen("onset")||overallOnset()||"—"} / ${D.common.tempo||"—"}${fmtWhen("worsen")?`／${fmtWhen("worsen")}に悪化`:""}）</li>
        ${D.func.length?`<li>できなくなったこと：${D.func.join("・")}</li>`:""}
        ${pos.length?`<li>一緒に出ている症状：${pos.map(x=>x.replace(/（.*?）/,"")).join("・")}</li>`:""}
        ${u.map(x=>`<li>${x}</li>`).join("")}
@@ -724,8 +3633,50 @@ function assocGrouped(){
     return `<div><span class="g">${grp.g}:</span> ${inner}</div>`;
   }).join("");
 }
+/* 注意サイン（見落とし防止の目印）。
+   絶対方針: 病名・局在名・疾患を示唆する語（「〜の疑い」「〜様」等）は出力しない。記述的表現のみ。 */
+function redFlags(){
+  const c=D.common,A=D.assoc,f=[];
+  if(A["息苦しさ"]==="y")f.push("息苦しさあり");
+  if(A["飲み込みにくさ・むせ"]==="y")f.push("飲み込みにくさ・むせあり");
+  if(A["ろれつが回りにくい"]==="y")f.push("ろれつの回りにくさあり");
+  if(A["筋肉がやせる・ぴくつく"]==="y")f.push("筋肉のやせ・ぴくつきあり");
+  if(c.tempo&&(c.tempo.includes("突然")||c.tempo.includes("急に")))f.push("急な発症（秒〜数日）");
+  if(c.course&&c.course.includes("悪くなって"))f.push("進行性の悪化");
+  const diu=c.diurnal||(D.m[3]&&D.m[3].diurnal);
+  if(diu&&(diu.includes("夕方")||diu.includes("使うと悪化")))f.push("夕方の増悪・易疲労性あり");
+  if(c.relapse&&c.relapse.includes("くり返"))f.push("出て治まるをくり返す経過");
+  return f;
+}
+/* 陽性所見サマリ（医師が最初の10秒で骨格を掴む1〜2行） */
+function posSummary(){
+  const c=D.common,seg=[];
+  const on=fmtWhen("onset")||((overallOnset()&&overallOnset()!=="わからない")?overallOnset():null);
+  if(on)seg.push(on+"発症");
+  if(c.tempo&&c.tempo!=="わからない")seg.push(c.tempo.replace(/（.*?）/,""));
+  if(c.course&&c.course!=="わからない")seg.push(c.course);
+  if(c.side&&!["左右差なし","わからない"].includes(c.side))seg.push(c.side);
+  if(D.mods.includes(1)&&D.m[1].fall&&D.m[1].fall!=="なし")seg.push("転倒"+D.m[1].fall);
+  if(D.mods.includes(2)&&D.m[2].prox&&D.m[2].prox!=="わからない")seg.push("分布:"+D.m[2].prox);
+  const diu=c.diurnal||(D.m[3]&&D.m[3].diurnal);
+  if(diu&&diu!=="わからない"&&diu!=="一日中同じ")seg.push(diu);
+  const pos=ASSOC.filter(k=>D.assoc[k]==="y").map(x=>x.replace(/（.*?）/,""));
+  if(pos.length)seg.push("随伴＋: "+pos.join("・"));
+  if(D.func.length)seg.push("ADL支障: "+D.func.slice(0,3).join("・")+(D.func.length>3?" 他":""));
+  return seg.join("／");
+}
+/* kv行の共通化：値ありのみ表示し、未聴取は末尾に集約（「—」の曖昧さをなくす） */
+function kvSec(pairs){
+  const have=pairs.filter(x=>x[1]);
+  const miss=pairs.filter(x=>!x[1]).map(x=>x[0]);
+  return `${have.length?`<div class="kv">${have.map(([k,v])=>`<div><b>${k}</b><br>${v}</div>`).join("")}</div>`:""}
+    ${miss.length?`<div class="mini" style="margin-top:3px">未聴取: ${miss.join("・")}</div>`:""}`;
+}
 function doctorSheet(){
   const c=D.common;
+  const rf=redFlags();
+  const rfBox=rf.length?`<div style="background:#fdecec;border:1px solid #f1b9b9;color:#9a2a2a;border-radius:8px;padding:8px 11px;margin:8px 0;font-size:calc(12.5px*var(--fs))">
+     <b>⚠ 注意サイン（見落とし防止・診断ではありません）</b><br>${rf.map(x=>"・"+x).join("<br>")}</div>`:"";
   const sum=(D.editedSummary!==undefined?D.editedSummary:buildSummary()).split("\n").filter(x=>!x.startsWith("家族から見た")).join(" ");
   const modBlocks=D.mods.map(id=>{const m=D.m[id];let rows="";
     QM[id].forEach(it=>{let v=m[it.k];if(Array.isArray(v))v=v.join("・");
@@ -734,25 +3685,38 @@ function doctorSheet(){
   const u=unconfirmedItems();
   const risks=[...D.bg.risk];
   let medline=D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"";
-  const id4="NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000);
+  const id4=SESSION.id;
   return `<div class="sheet">
    <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
    <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}</div>
 
    <div class="sec"><div class="lab">主訴</div>${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}</div>
-
-   <div class="sec"><div class="lab">① 時間軸（発症・経過）</div>
+   ${posSummary()?`<div class="sec"><div class="lab">陽性所見サマリ</div>${posSummary()}</div>`:""}
+   ${rfBox}
+   <div class="sec"><div class="lab">① 時間軸（発症・経過・順序）</div>
      ${timelineHtml()}
-     <div class="kv">
-     <div><b>発症時期</b><br>${fmtWhen("onset")?fmtWhen("onset")+(c.onset?`（${c.onset}）`:""):(c.onset||"—")}</div>
-     <div><b>出方・進み方</b><br>${c.tempo||"—"}</div>
-     ${fmtWhen("worsen")?`<div><b>増悪時期</b><br>${fmtWhen("worsen")}</div>`:""}
-     <div><b>その後の経過</b><br>${c.course||"—"}</div>
-     <div><b>日内変動・易疲労性</b><br>${c.diurnal||"—"}</div></div></div>
+     ${trajectoryChart()}
+     ${sxOnsetTable()}
+     ${(function(){
+       const a=[...(c.aggravTags||[])];if(c.aggrav)a.push(c.aggrav);
+       const r=[...(c.reliefTags||[])];if(c.relief)r.push(c.relief);
+       return kvSec([
+        ["発症時期（最古）",fmtWhen("onset")||overallOnset()],
+        ["出方・進み方",c.tempo],
+        ["頻度",c.freq],
+        ["1回の持続",c.episodeDur],
+        ["増悪時期",fmtWhen("worsen")],
+        ["その後の経過",c.course],
+        ["再発・寛解",c.relapse?c.relapse+(c.relapseRecover?`（前回${c.relapseRecover}で軽快）`:""):null],
+        ["今回の受診理由（増悪）",c.visitBucket],
+        ["日内変動・易疲労性",c.diurnal||(D.m[3]&&D.m[3].diurnal)],
+        ["生活への支障",c.severity],
+        ["増悪因子",a.length?a.join("・"):null],
+        ["軽減因子",r.length?r.join("・"):null]]);})()}</div>
 
    <div class="sec"><div class="lab">② 局在の手がかり（部位・分布・左右差）</div>
-     <div class="kv"><div><b>左右差</b><br>${c.side||"—"}</div></div>
-     ${modBlocks||'<span class="mini">—</span>'}</div>
+     <div class="kv"><div><b>左右差</b><br>${c.side||"未聴取"}</div></div>
+     ${modBlocks||'<span class="mini">未聴取</span>'}</div>
 
    <div class="sec"><div class="lab">③ 一緒に出ている症状（＋陽性 / −陰性 / ?未確認）</div>
      <div class="assoc">${assocGrouped()}</div></div>
@@ -760,17 +3724,31 @@ function doctorSheet(){
    <div class="sec"><div class="lab">④ 機能への影響（歩行・嚥下・排尿・認知・ADL）</div>
      ${D.func.length?D.func.join("・"):'<span class="mini">記載なし</span>'}</div>
 
-   <div class="sec"><div class="lab">⑤ 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍）</div>
-     <div class="kv">
-       <div><b>血管リスク・持病</b><br>${risks.length?risks.join("・"):"—"}</div>
-       <div><b>薬剤</b><br>${medline||"—"}</div>
-       <div><b>家族歴（似た症状）</b><br>${D.bg.family||"—"}</div>
-       <div><b>免疫/感染/腫瘍の手がかり</b><br>${D.bg.immune.length?D.bg.immune.join("・"):"—"}</div></div></div>
+   <div class="sec"><div class="lab">④' ふだんの困りごと（感覚・気分・易疲労・排尿・認知；本人/家族の実感）</div>
+     ${DAILY_GROUPS.map(g=>{const st=dStatus(g);
+       const val=st==="sel"?dSel(g).map(it=>it.t).join("・"):st==="none"?'<span class="n">なし（申告）</span>':'<span class="u">未確認</span>';
+       return `<div><span class="g">${g.g}:</span> ${val}</div>`;}).join("")}
+     ${(D.vis.side||D.vis.note)?`<div style="margin-top:3px"><span class="g">目の症状:</span> ${[D.vis.side&&D.vis.side!=="わからない"?D.vis.side:"",D.vis.note||""].filter(Boolean).join("／")}</div>`:""}</div>
+
+   <div class="sec"><div class="lab">⑤ 背景（持病・薬剤・家族歴・免疫/感染・生活・環境・既往・アレルギー）</div>
+     ${kvSec([
+       ["血管リスク・持病",risks.length?risks.join("・"):null],
+       ["薬剤",medline||null],
+       ["パーキンソニズム関連薬",D.bg.dopaDrug],
+       ["自律神経症状",D.bg.autonomic&&D.bg.autonomic.length?D.bg.autonomic.join("・"):null],
+       ["家族歴（似た症状）",D.bg.family],
+       ["先行感染・ワクチン",D.bg.preInfection],
+       ["妊娠・授乳",D.bg.pregnancy],
+       ["免疫/感染/腫瘍の手がかり",D.bg.immune.length?D.bg.immune.join("・"):null],
+       ["生活・習慣",D.bg.lifestyle.length?D.bg.lifestyle.join("・"):null],
+       ["仕事・環境・接触",D.bg.exposure.length?D.bg.exposure.join("・"):null],
+       ["既往・手術",D.bg.history||null],
+       ["アレルギー",D.bg.allergy||null]])}</div>
 
    <div class="sec"><div class="lab">⑥ 既受診科・受けた検査</div>
-     <div class="kv">
-       <div><b>既受診科</b><br>${D.visited.length?D.visited.join("・"):"—"}</div>
-       <div><b>受けた検査</b><br>${D.tests?D.tests:"—"}</div></div></div>
+     ${kvSec([
+       ["既受診科",D.visited.length?D.visited.join("・"):null],
+       ["受けた検査",D.tests||null]])}</div>
 
    <div class="sec"><div class="lab">⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）</div>
      ${u.length?("・"+u.join("<br>・")):'<span class="mini">特になし</span>'}</div>
@@ -792,12 +3770,23 @@ function plainSheet(){
   L.push(`選択症候: ${D.symptoms.join("、")||"—"}`);
   L.push(sep);
   L.push(`【主訴】 ${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}`);
+  {const ps=posSummary();if(ps)L.push(`【陽性所見サマリ】 ${ps}`);}
+  {const rf=redFlags();if(rf.length){L.push("");L.push("⚠ 注意サイン（見落とし防止・診断ではありません）");rf.forEach(x=>L.push("  ・"+x));}}
   L.push("");
-  L.push("① 時間軸（発症・経過）");
-  L.push(`  発症時期: ${fmtWhen("onset")?fmtWhen("onset")+(c.onset?`（${c.onset}）`:""):(c.onset||"—")}`);
-  L.push(`  出方・進み方: ${c.tempo||"—"}`);
+  L.push("① 時間軸（発症・経過・順序）");
+  L.push(`  発症時期(最古): ${fmtWhen("onset")?fmtWhen("onset"):(overallOnset()||"—")}`);
+  {const rows=D.symptoms.filter(s=>D.sx[s]&&(D.sx[s].onset||D.sx[s].sev||D.sx[s].trend));
+   rows.forEach(s=>{const r=D.sx[s];L.push(`   ・${s}: ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend].filter(Boolean).join(" / ")}`);});
+   const ord=D.symptoms.map(s=>({s,m:sxMonths(s)})).filter(r=>r.m!=null).sort((a,b)=>b.m-a.m);
+   if(ord.length>=2)L.push(`  出現順序: ${ord.map(r=>r.s).join(" → ")}`);}
+  L.push(`  出方・進み方: ${c.tempo||"—"}　頻度: ${c.freq||"—"}`);
+  if(c.episodeDur)L.push(`  1回の持続: ${c.episodeDur}`);
   if(fmtWhen("worsen"))L.push(`  増悪時期: ${fmtWhen("worsen")}`);
-  L.push(`  その後の経過: ${c.course||"—"}　日内変動・易疲労性: ${c.diurnal||"—"}`);
+  if(c.relapse)L.push(`  再発・寛解: ${c.relapse}${c.relapseRecover?`（前回${c.relapseRecover}で軽快）`:""}`);
+  if(c.visitBucket)L.push(`  今回の受診理由（増悪）: ${c.visitBucket}`);
+  L.push(`  その後の経過: ${c.course||"—"}　日内変動・易疲労性: ${c.diurnal||(D.m[3]&&D.m[3].diurnal)||"—"}　生活への支障: ${c.severity||"—"}`);
+  {const a=[...(c.aggravTags||[])];if(c.aggrav)a.push(c.aggrav);const r=[...(c.reliefTags||[])];if(c.relief)r.push(c.relief);
+   L.push(`  増悪因子: ${a.length?a.join("・"):"—"}　軽減因子: ${r.length?r.join("・"):"—"}`);}
   L.push("");
   L.push("② 局在の手がかり（部位・分布・左右差）");
   L.push(`  左右差: ${c.side||"—"}`);
@@ -813,11 +3802,21 @@ function plainSheet(){
     L.push(`  ${g.g}: ${inner}`);});
   L.push("");
   L.push(`④ 機能への影響: ${D.func.length?D.func.join("・"):"記載なし"}`);
+  L.push("④' ふだんの困りごと（感覚・気分・易疲労・排尿・認知）");
+  DAILY_GROUPS.forEach(g=>{const st=dStatus(g);
+    const val=st==="sel"?dSel(g).map(it=>it.t).join("・"):st==="none"?"なし（申告）":"未確認";
+    L.push(`  ${g.g}: ${val}`);});
+  {const v=[D.vis.side&&D.vis.side!=="わからない"?D.vis.side:"",D.vis.note||""].filter(Boolean);
+   if(D.vis.side||D.vis.note)L.push(`  目の症状: ${v.join("／")}`);}
   L.push("");
   L.push("⑤ 背景");
   L.push(`  血管リスク・持病: ${D.bg.risk.length?D.bg.risk.join("・"):"—"}`);
-  L.push(`  薬剤: ${D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"—"}`);
+  L.push(`  薬剤: ${D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"—"}　パーキンソニズム関連薬: ${D.bg.dopaDrug||"—"}`);
+  L.push(`  自律神経症状: ${D.bg.autonomic&&D.bg.autonomic.length?D.bg.autonomic.join("・"):"—"}`);
+  L.push(`  先行感染・ワクチン: ${D.bg.preInfection||"—"}　妊娠・授乳: ${D.bg.pregnancy||"—"}`);
   L.push(`  家族歴（似た症状）: ${D.bg.family||"—"}　免疫/感染/腫瘍: ${D.bg.immune.length?D.bg.immune.join("・"):"—"}`);
+  L.push(`  生活・習慣: ${D.bg.lifestyle.length?D.bg.lifestyle.join("・"):"—"}　仕事・環境・接触: ${D.bg.exposure.length?D.bg.exposure.join("・"):"—"}`);
+  L.push(`  既往・手術: ${D.bg.history||"—"}　アレルギー: ${D.bg.allergy||"—"}`);
   L.push("");
   L.push(`⑥ 既受診科: ${D.visited.length?D.visited.join("・"):"—"}`);
   L.push(`  受けた検査: ${D.tests||"—"}`);
@@ -848,6 +3847,7 @@ function fallbackCopy(txt,ok){
   document.body.removeChild(ta);
 }
 
+restoreState();
 render();
 </script>
 </body>
