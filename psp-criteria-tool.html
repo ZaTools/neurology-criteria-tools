@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PSP 診断基準整理支援ツール — MDS-PSP Criteria 2017</title>
 <!--
-  PSP 診断基準整理支援ツール v1.0
+  PSP 診断基準整理支援ツール v1.1
   ==============================
   対象基準: MDS-PSP Criteria (Höglinger GU et al., Movement Disorders 2017;32:853-864)
   参考: NINDS-SPSP基準 (Litvan I et al., Neurology 1996), 指定難病基準
@@ -662,6 +662,109 @@ body{
   .nav-buttons{flex-wrap:wrap}
   .app-header h1{font-size:14px}
 }
+
+/* ── 関連する臨床試験 情報カード（A1該当時のみ・弱いレコメンド） ── */
+.trial-info-card{
+  margin-top:18px;
+  border:1px solid var(--gu-orange-pale);
+  border-left:4px solid var(--gu-orange);
+  background:var(--gu-orange-tint);
+  border-radius:10px;
+  padding:16px 18px;
+}
+.trial-info-tag{
+  display:inline-block;
+  font-size:11px;font-weight:700;letter-spacing:.04em;
+  color:var(--gu-orange-dark);
+  background:var(--gu-orange-pale);
+  border-radius:999px;
+  padding:3px 10px;margin-bottom:10px;
+}
+.trial-info-title{
+  font-size:16px;font-weight:700;color:var(--gu-black);
+  margin-bottom:8px;line-height:1.4;
+}
+.trial-info-body{
+  font-size:13.5px;line-height:1.75;color:var(--text-sub);
+  margin-bottom:8px;
+}
+.trial-info-sites{
+  margin:4px 0 10px;padding-left:20px;
+  font-size:13.5px;line-height:1.9;color:var(--text-sub);
+}
+.trial-info-btn{
+  display:block;width:100%;box-sizing:border-box;
+  text-align:center;text-decoration:none;
+  background:var(--gu-orange);color:#fff;
+  font-size:14px;font-weight:700;
+  padding:13px 16px;border-radius:8px;
+  min-height:44px;line-height:1.3;
+  margin:4px 0 12px;
+  transition:background .15s ease;
+}
+.trial-info-btn:hover{background:var(--gu-orange-dark);}
+.trial-info-note{
+  font-size:11px;line-height:1.6;color:var(--text-muted);
+  background:rgba(255,255,255,.65);
+  border-radius:6px;padding:8px 12px;
+}
+@media (max-width:480px){
+  .trial-info-card{padding:14px;}
+  .trial-info-title{font-size:15px;}
+  .trial-info-body,.trial-info-sites{font-size:13px;}
+}
+
+/* ── 文字サイズ調整 ── */
+#app.fs-1{zoom:1;}
+#app.fs-2{zoom:1.15;}
+#app.fs-3{zoom:1.30;}
+.fontsize-ctrl{
+  display:flex;align-items:center;gap:6px;flex-shrink:0;
+}
+.fontsize-ctrl .fs-label{
+  font-size:11px;color:rgba(255,255,255,0.6);
+}
+.fs-btn{
+  border:1px solid rgba(255,255,255,0.35);
+  background:rgba(255,255,255,0.08);
+  color:#fff;border-radius:5px;cursor:pointer;
+  padding:3px 9px;line-height:1;
+  font-family:inherit;
+}
+.fs-btn:hover{background:rgba(255,255,255,0.2);}
+.fs-btn-active{
+  background:var(--gu-orange);border-color:var(--gu-orange);font-weight:700;
+}
+.fs-btn.fs-s{font-size:11px;}
+.fs-btn.fs-m{font-size:13px;}
+.fs-btn.fs-l{font-size:15px;}
+
+/* ── バージョン表記・更新履歴 ── */
+.version-line{cursor:pointer;user-select:none;}
+.version-line:hover{color:rgba(255,255,255,0.6);}
+.history-panel{
+  display:none;
+  background:#FFFDF8;
+  border:1px solid var(--gu-orange-pale);
+  border-radius:var(--radius-sm);
+  padding:14px 18px;margin-bottom:16px;
+  font-size:12.5px;color:var(--text-sub);line-height:1.7;
+}
+.history-panel.open{display:block;}
+.history-panel h4{font-size:13px;color:var(--gu-black);margin:0 0 6px;}
+.history-panel .hist-basis{
+  font-size:11.5px;color:var(--text-muted);
+  border-top:1px dashed var(--border-light);margin-top:10px;padding-top:8px;
+}
+.history-panel ul{margin:0 0 4px;padding-left:18px;}
+.history-panel .hist-ver{font-weight:700;color:var(--gu-orange-dark);}
+
+/* ── プライバシー注記 ── */
+.privacy-note{
+  max-width:900px;margin:0 auto;
+  padding:0 20px 8px;
+  font-size:11px;color:#9CA3AF;line-height:1.6;letter-spacing:0.02em;
+}
 </style>
 </head>
 <body>
@@ -674,10 +777,34 @@ body{
       <div class="app-header-body">
         <div class="app-header-top">
           <h1><span class="title-icon">PSP</span> 診断基準整理支援ツール</h1>
+          <div class="fontsize-ctrl">
+            <span class="fs-label">文字サイズ</span>
+            <button class="fs-btn fs-s" data-fs="1" onclick="setFontScale('1')">標準</button>
+            <button class="fs-btn fs-m" data-fs="2" onclick="setFontScale('2')">大</button>
+            <button class="fs-btn fs-l" data-fs="3" onclick="setFontScale('3')">特大</button>
+          </div>
         </div>
         <div class="subtitle">MDS-PSP Criteria (Höglinger et al., Movement Disorders 2017) に基づく臨床情報整理支援ツール</div>
-        <div class="version">v1.0 | AI予測なし・確率推定なし・診断基準への機械的マッピングのみ</div>
+        <div class="version version-line" onclick="toggleHistory()" title="クリックで更新履歴を表示">v1.1 | AI予測なし・確率推定なし・診断基準への機械的マッピングのみ ｜ 📖 更新履歴</div>
       </div>
+    </div>
+  </div>
+
+  <!-- 更新履歴パネル -->
+  <div class="history-panel" id="history-panel">
+    <h4>更新履歴</h4>
+    <p><span class="hist-ver">Ver 1.1</span></p>
+    <ul>
+      <li>A1（進行性すくみ足）該当時に「関連する臨床試験」の情報提供カードを表示する機能を追加．</li>
+      <li>文字サイズ調整機能（標準／大／特大）を追加．</li>
+      <li>更新履歴・プライバシーに関する注記を追加．</li>
+    </ul>
+    <p><span class="hist-ver">Ver 1.0</span></p>
+    <ul>
+      <li>初版公開．MDS-PSP Criteria 2017 に基づく臨床情報整理支援ツール．</li>
+    </ul>
+    <div class="hist-basis">
+      準拠基準：MDS-PSP Criteria 2017（Höglinger et al., Movement Disorders 2017）．診断基準の改訂が公表された場合，本ツールも改訂内容に追従して更新します．
     </div>
   </div>
 
@@ -1002,6 +1129,33 @@ function toggleQRef() {
 }
 
 // ============================================================
+// 更新履歴パネルトグル
+// ============================================================
+function toggleHistory() {
+  const panel = document.getElementById('history-panel');
+  if (panel) panel.classList.toggle('open');
+}
+
+// ============================================================
+// 文字サイズ調整（標準／大／特大）
+// ============================================================
+const FS_KEY = 'psp_fontscale';
+function setFontScale(level) {
+  const app = document.getElementById('app');
+  if (!app) return;
+  app.classList.remove('fs-1', 'fs-2', 'fs-3');
+  app.classList.add('fs-' + level);
+  document.querySelectorAll('.fs-btn').forEach(b =>
+    b.classList.toggle('fs-btn-active', b.dataset.fs === String(level)));
+  try { localStorage.setItem(FS_KEY, String(level)); } catch (e) {}
+}
+function applyFontScale() {
+  let level = '1';
+  try { level = localStorage.getItem(FS_KEY) || '1'; } catch (e) {}
+  setFontScale(level);
+}
+
+// ============================================================
 // ① 定義折りたたみトグル
 // ============================================================
 function toggleDef(id, btn) {
@@ -1070,6 +1224,7 @@ function coreItem(code) {
   <div class="def-body form-desc" id="def-${code}">
     ${item.definition}
     ${item.timeframe ? `<br><span class="timeframe-note">⏱ ${item.timeframe}</span>` : ''}
+    ${code === 'A1' ? `<br><span style="display:inline-block;margin-top:6px;font-size:11.5px;color:var(--gu-orange-dark)">🔗 本項目に該当する場合，PSPのすくみ足を対象とした関連治験があります（診断結果画面の最下部に情報を表示します）．</span>` : ''}
   </div>
   <div class="form-options" style="margin-top:8px">${radioGroup(code)}</div>
 </div>`;
@@ -1720,6 +1875,42 @@ function buildBasis(codes, conditions) {
 }
 
 // ============================================================
+// 関連する臨床試験 情報カード（A1該当時のみ・情報提供のみ）
+// ============================================================
+function renderA1TrialInfoCard() {
+  // A1（進行性の歩行すくみ）に「あり／該当」がついている場合のみ表示
+  if (state.data['A1'] !== 'yes') return '';
+
+  const sites = [
+    '岐阜大学医学部附属病院',
+    '国立病院機構 東名古屋病院',
+    '福岡大学病院',
+    '順天堂大学医学部附属順天堂医院',
+    '国立精神・神経医療研究センター病院',
+  ];
+  const siteList = sites.map(s => '<li>' + s + '</li>').join('');
+
+  return `
+  <div class="trial-info-card">
+    <div class="trial-info-tag">関連する臨床試験</div>
+    <div class="trial-info-title">関連する臨床試験があります</div>
+    <div class="trial-info-body">
+      A1（進行性すくみ足）に該当する方は，PSPのすくみ足を対象とした
+      アーテン（Trihexyphenidyl）医師主導治験の<strong>候補となる可能性があります</strong>．
+    </div>
+    <div class="trial-info-body">本試験は以下の施設で実施されています：</div>
+    <ul class="trial-info-sites">${siteList}</ul>
+    <div class="trial-info-body">参加には適格基準があります．詳細は下記をご覧ください．</div>
+    <a class="trial-info-btn" href="https://www.med.gifu-u.ac.jp/neurology/research/psp.html"
+       target="_blank" rel="noopener noreferrer">臨床試験の詳細を見る ↗</a>
+    <div class="trial-info-note">
+      ※ これは診断結果ではありません．本情報は治験への参加を勧めるものではなく，対象となる可能性のある方への情報提供を目的としています．最終的な適格性は治験実施医師が判断します．
+    </div>
+  </div>`;
+}
+
+
+// ============================================================
 // RESULT RENDERER
 // ============================================================
 function renderResults() {
@@ -1893,6 +2084,9 @@ function renderResults() {
       ${otherLabel}
     </div>`;
   })()}
+
+  <!-- 関連する臨床試験（A1該当時のみ・診断結果とは区別された情報提供） -->
+  ${renderA1TrialInfoCard()}
 
   <!-- SUBTYPE TABLE -->
   ${(() => {
@@ -2443,7 +2637,12 @@ function copyResult() {
 // ============================================================
 renderCurrentStep();
 loadFromLocalStorage(); // 前回データがあれば復元バナーを表示
+applyFontScale();       // 保存された文字サイズ設定を適用
 </script>
+
+<div class="privacy-note">
+  🔒 プライバシーについて：本ツールに入力された情報は，ご利用の端末内（ブラウザのローカルストレージ）にのみ保存されます．外部サーバーへの送信，アクセス解析（トラッキング），第三者への提供は一切行っていません．保存データは端末上に残るため，共有端末でご利用の場合は「🔄 リセット」で消去してください．
+</div>
 
 <div style="
   text-align:right;
