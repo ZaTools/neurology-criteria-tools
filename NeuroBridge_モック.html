@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- セキュリティ対策(CSP): このアプリは外部通信を一切行わない単一HTMLファイルのため、
+     既定を'none'にしたうえで必要な例外のみ許可しています。
+     script-src/style-styleに'unsafe-inline'が必要な理由: ビルド工程がなく、
+     onclick=""属性とインラインの<style>を多用しているため（nonce方式は使えない）。
+     ※ SAVE_ENDPOINT を設定して外部保存機能を使う場合は、下の connect-src に
+        その保存先のオリジンを追加してください（現状は空欄なので'none'）。
+     ※ frame-ancestors（他サイトのiframeに埋め込まれるのを防ぐ＝クリックジャッキング対策）は
+        <meta>では効かない仕様のため、実際にWeb公開する際はホスティング側の設定
+        （HTTPレスポンスヘッダーの Content-Security-Policy か X-Frame-Options: DENY）で
+        別途かけること。 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>NeuroBridge — 症状メモ（モック）</title>
 <script id="qrlib">//---------------------------------------------------------------------
 //
@@ -2449,6 +2460,14 @@ var qrcode = function() {
   .sheet{background:#fff;border:1px solid #c8d3e0;border-radius:10px;padding:18px;font-size:calc(13.5px * var(--fs));line-height:1.55}
   .sheet h3{margin:0 0 2px;font-size:calc(15px * var(--fs));color:var(--brand-d)}
   .sheet .meta{color:var(--sub);font-size:calc(11.5px * var(--fs));border-bottom:2px solid var(--line);padding-bottom:8px;margin-bottom:9px}
+  .sheet .topbox{background:#f5f9fd;border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin:6px 0 10px}
+  .sheet .topbox .cc{font-size:calc(15.5px * var(--fs));font-weight:800;color:var(--ink)}
+  .sheet .askbox{background:#fff8e8;border:1px solid #f0dfa8;color:#6b5410;border-radius:8px;padding:8px 11px;margin:8px 0;font-size:calc(12.5px*var(--fs))}
+  .sheet .patbox{background:#f3f7fb;border:1px solid #cfe0ee;border-radius:8px;padding:9px 12px;margin:8px 0}
+  .sheet .patbox .plab{font-weight:800;color:var(--brand-d);font-size:calc(12.5px*var(--fs));margin-bottom:5px}
+  .sheet .pat{margin:6px 0;padding-left:9px;border-left:3px solid var(--brand)}
+  .sheet .pat .pn{font-weight:800;font-size:calc(12.5px*var(--fs));color:var(--ink)}
+  .sheet .pat .pe,.sheet .pat .pa{font-size:calc(11.5px*var(--fs));color:var(--sub)}
   .sheet .sec{margin:10px 0}
   .sheet .lab{font-weight:800;color:var(--brand-d);font-size:calc(12.5px * var(--fs));border-left:4px solid var(--brand);padding-left:8px;margin-bottom:4px}
   .sheet .kv{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:calc(12.5px * var(--fs))}
@@ -2478,9 +2497,7 @@ var qrcode = function() {
     .btnrow{position:static;background:none;padding:8px 0 40px}
     .btnrow .inner{max-width:760px;justify-content:flex-end}
     .next{flex:0 0 auto;min-width:220px}
-    .outtabs{display:none}
-    .panels{grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-    .panel{display:block!important}.panel .card{margin-top:0}
+    .panel .card{margin-top:0}
   }
   @media (min-width:1180px){ .layout{max-width:1240px} .main{max-width:820px} }
 
@@ -2551,6 +2568,9 @@ var qrcode = function() {
     .sheet .foot{font-size:9px!important;margin-top:7px;padding-top:5px}
     .sheet svg{max-height:120px}
     .sheet .sec{page-break-inside:avoid;break-inside:avoid}
+    .sheet .patbox{page-break-inside:avoid;break-inside:avoid;padding:6px 9px}
+    .sheet .patbox .plab{font-size:10.5px!important}
+    .sheet .pat .pn{font-size:10px!important} .sheet .pat .pe,.sheet .pat .pa{font-size:9.5px!important}
     .tl{page-break-inside:avoid;break-inside:avoid}
   }
 </style>
@@ -2619,6 +2639,13 @@ const ONSET_OPTS=[["今日",0.03],["数日前",0.15],["1〜2週間前",0.4],["1�
   ["2〜3か月前",2.5],["半年前",6],["1年前",12],["2年以上前",30],["わからない",null]];
 const SEV_OPTS=["軽い","中くらい","重い"];
 const TREND_OPTS=["だんだん強くなる","出たり治ったり（波がある）","変わらない","軽くなってきた"];
+/* 悪くなった時の「できごと」の目印（病名・診断には触れない、機能的な出来事のみ） */
+const EVENT_TAGS=["転倒した","杖・歩行器を使い始めた","車椅子になった","入院した","急に強くなった","動けなくなった","一人でできなくなった","その他"];
+/* 症状ごとの色分け（カテゴリカル配色・固定順。色だけに頼らず凡例とラベルを併用） */
+const SYMPTOM_COLORS=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#4a3aa7","#e34948"];
+function symptomColor(s){const i=D.symptoms.indexOf(s);return (i>=0&&i<SYMPTOM_COLORS.length)?SYMPTOM_COLORS[i]:"#898781";}
+function eventMonths(e){const f=ONSET_OPTS.find(x=>x[0]===e.bucket);return f?f[1]:null;}
+let EVUI={}; /* 出来事フォームの一時状態（画面内メモリのみ・保存しない） */
 function sxMonths(s){const o=D.sx[s]&&D.sx[s].onset;const f=ONSET_OPTS.find(x=>x[0]===o);return f?f[1]:null;}
 /* 今回の受診理由（急に悪くなった時期）の月数。グラフに目印を出す */
 function visitMonths(){const f=ONSET_OPTS.find(x=>x[0]===D.common.visitBucket);return f?f[1]:null;}
@@ -2631,7 +2658,7 @@ const VISITED = ["かかりつけ医","脳神経外科","眼科","整形外科",
 /* ===== データ保存（任意・研究/改善用） =====
    SAVE_ENDPOINT に保存先URL（Google Apps Script など）を入れると、
    利用者が同意した場合のみ完了時に送信します。空のままなら保存機能はオフ。 */
-const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る
+const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る（※設定したら<head>のCSPのconnect-srcにもこのURLのオリジンを追加すること）
 const SESSION = { id:"NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000), start:Date.now() };
 let _saved=false;
 /* 保存対象は「選択式の回答」のみ。自由記述（free/familyChange/tests/medText/trouble/編集後文）は送信しない */
@@ -2732,29 +2759,33 @@ function dSel(g){return g.items.filter(it=>D.daily.includes(it.id));}      // �
 function dStatus(g){return dSel(g).length?"sel":(D.dailyNone[g.key]?"none":"unasked");}
 
 /* === 症候別モジュール（どこが・何ができないか） === */
+/* 各項目に cat（見出し用のグループ名）を付け、scrModule() で同じ cat が続く間はまとめて表示する。
+   質問・選択肢の数は増やさず、並びだけを整理。
+   内部的には LQQTSFA（部位=場所・まぶたの様子／性状=歩き方の様子・症状の性質／時間経過・状況=時間による変化／
+   因子=これまでの対処／随伴=転倒について）を意識して分類しているが、cat の表示文言そのものは
+   非医療者にも分かるよう、あえて平易な言葉だけにしている（「性状」「随伴」等の用語は画面には出さない）。 */
 const QM = {
  1:[
-  {k:"what",q:"歩くときに起きていることは？",sub:"あてはまるものすべて",multi:true,o:["ふらつく","足が出ない・すくむ","片足を引きずる","体が傾く","つまずきやすい","階段がこわい","立ち上がりにくい"]},
-  {k:"fall",q:"転んだことはありますか？",o:["なし","1〜2回","3回以上","数えきれない"]},
-  {k:"falldir",q:"転び方の傾向は？",o:["前のめり","後ろ向き","横向き","つまずいて","一定しない","わからない"]},
-  {k:"fallinj",q:"転んでケガ・骨折・頭を打ったことは？",sub:"あてはまるものすべて",multi:true,o:["頭を打った","骨折した","打撲・すり傷","出血した","ケガはない"]},
-  {k:"ortho",q:"整形外科の治療で良くなりましたか？",o:["受けて良くなった","受けたが変わらない","受けていない","わからない"]},
+  {k:"what",cat:"歩き方の様子",q:"歩くときに起きていることは？",sub:"あてはまるものすべて",multi:true,o:["ふらつく","足が出ない・すくむ","片足を引きずる","体が傾く","つまずきやすい","階段がこわい","立ち上がりにくい"]},
+  {k:"fall",cat:"転倒について",q:"転んだことはありますか？",o:["なし","1〜2回","3回以上","数えきれない"]},
+  {k:"falldir",cat:"転倒について",q:"転び方の傾向は？",o:["前のめり","後ろ向き","横向き","つまずいて","一定しない","わからない"]},
+  {k:"fallinj",cat:"転倒について",q:"転んでケガ・骨折・頭を打ったことは？",sub:"あてはまるものすべて",multi:true,o:["頭を打った","骨折した","打撲・すり傷","出血した","ケガはない"]},
  ],
  2:[
-  {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた","ぴくぴくとひきつる"]},
-  {k:"prox",q:"力が入りにくい・症状が強いのは？",sub:"からだのどのあたりか",o:["肩・股に近い側","手足の先","両方","わからない"]},
-  {k:"area",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:["顔","片腕","両腕","片脚","両脚","体幹","手足の先（手袋・くつ下のように）"]},
+  {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた","ぴくぴくとひきつる"]},
+  {k:"prox",cat:"場所",q:"力が入りにくい・症状が強いのは？",sub:"からだのどのあたりか",o:["肩や太ももに近い方","手足の先","両方","わからない"]},
+  {k:"area",cat:"場所",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:["顔","片腕","両腕","片脚","両脚","体幹","手足の先（手袋・くつ下のように）"]},
  ],
  3:[
-  {k:"main",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい"]},
-  {k:"double",q:"二重の見え方は？",o:["横並び","上下","ななめ","片目を閉じると消える","二重ではない"]},
-  {k:"diurnal",q:"朝と夕方で変わりますか？",sub:"とても大切な質問です",o:["朝は軽く夕方に悪化","使うと悪化・休むと改善","一日中同じ","わからない"]},
-  {k:"lid",q:"まぶたの様子は？",o:["片側が下がる","両側が下がる","変動する","下がらない"]},
+  {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい"]},
+  {k:"double",cat:"症状の性質",q:"二重の見え方は？",o:["横並び","上下","ななめ","片目を閉じると消える","二重ではない"]},
+  {k:"diurnal",cat:"時間による変化",q:"朝と夕方で変わりますか？",sub:"とても大切な質問です",o:["朝は軽く夕方に悪化","使うと悪化・休むと改善","一日中同じ","わからない"]},
+  {k:"lid",cat:"まぶたの様子",q:"まぶたの様子は？",o:["片側が下がる","両側が下がる","変動する","下がらない"]},
  ],
 };
 
 /* === 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍） === */
-const BG_RISK=["高血圧","糖尿病","コレステロール高め","不整脈・心房細動","脳卒中・心筋梗塞をしたことがある"];
+const BG_RISK=["高血圧","糖尿病","コレステロール高め","不整脈（脈が飛ぶ・乱れる、心房細動など）","脳卒中・心筋梗塞をしたことがある"];
 const BG_IMMUNE=["最近の発熱・感染","体重が減った","がんの治療歴・指摘あり","予防接種・手術のあとから"];
 const BG_LIFESTYLE=["お酒をよく飲む","たばこを吸う","サプリ・健康食品をとる","市販薬・その他の薬を使う"];
 const BG_EXPOSURE=["最近の旅行（国内・海外）","仕事で化学物質・金属などを扱う","身近に同じ症状の人がいる","動物・虫にかまれた"];
@@ -2788,7 +2819,7 @@ function unconfirmedItems(){
   if(A["物忘れ・性格や行動の変化"]==="y")
     out.push("物忘れ・行動の変化について、いつ頃からか・日常生活への影響を確認するとよいかもしれません");
   if(D.bg.autonomic&&D.bg.autonomic.length&&!D.common.tempo)
-    out.push("自律神経症状（尿・立ちくらみ・便秘）の経過・順序を確認するとよいかもしれません");
+    out.push("尿・立ちくらみ・便秘などの症状の経過・順序を確認するとよいかもしれません");
   // 複数領域に症状が及ぶ場合：過去の似たエピソードの有無（順序・時系列の手がかり）
   const dGroups=DAILY_GROUPS.filter(g=>dSel(g).length).length;
   if(dGroups>=2||D.symptoms.length>=3)
@@ -2823,7 +2854,7 @@ function render(){
   const screenChanged=(phase!==_lastPhase)||(phase==="module"&&modCursor!==_lastMod);
   const sy=window.scrollY;
   app.innerHTML=h; drawStepper(); updateNav();
-  if(phase==="sxtime")attachWaveHandlers();
+  if(phase==="sxtime"||phase==="output")attachWaveHandlers();
   applyOneQ(screenChanged);
   if(screenChanged)autoRead();
   window.scrollTo(0,screenChanged?0:sy);
@@ -2856,11 +2887,7 @@ function scrIntro(){return `<div class="card">
     ${infoRow("🧑‍💼","スタッフが聞き取って入力もできます")}
     ${infoRow("🔒","入力内容は保存されません")}
   </div>
-  <div class="grouplab" style="margin-top:18px">進め方をえらべます</div>
-  <button type="button" class="opt multi ${SLOW?'sel':''}" aria-pressed="${SLOW}" onclick="toggleSlow()" style="width:100%">
-    <span class="emo">🐢</span>ゆっくりモードで進める<br>
-    <span style="font-weight:500;font-size:calc(14px*var(--fs));color:var(--sub)">文字を大きく・質問を1つずつ・声で読み上げ</span></button>
-  <div class="mini" style="margin:8px 0 0">あとから画面上部のボタンでも変えられます。</div>
+  <div class="mini" style="margin:16px 0 0">文字の大きさ・読み上げ・1問ずつ表示は、画面上部のボタンでいつでも切り替えられます。</div>
   <div class="note">このツールは診断や治療を行うものではありません。病名は判断しません。診察を待つ間の準備としてお使いください。体調の変化など気がかりなことがあれば、受付・スタッフにお知らせください。</div>
 </div>`;}
 function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10px;font-size:calc(15px*var(--fs));
@@ -2925,11 +2952,11 @@ function scrCommon(){
   // 増悪因子（開かれた質問＋任意タグ）
   h+=qhead("＋","悪くなる・出やすいきっかけはありますか？","思い当たることを自由に。下から選んでも大丈夫（任意）");
   h+=`<div class="opts grid">`+AGGRAV_TAGS.map(o=>opt((D.common.aggravTags||[]).includes(o),o,`toggleCommonTag('aggravTags','${o.replace(/'/g,"")}')`,true)).join("")+`</div>`;
-  h+=`<textarea id="aggravtxt" placeholder="例：暑い日や湯上がりに見えにくさが強くなる／夕方になると声が出にくい" oninput="D.common.aggrav=this.value">${D.common.aggrav||""}</textarea>`;
+  h+=`<textarea id="aggravtxt" placeholder="例：暑い日や湯上がりに見えにくさが強くなる／夕方になると声が出にくい" oninput="D.common.aggrav=this.value">${esc(D.common.aggrav||"")}</textarea>`;
   // 軽減因子
   h+=qhead("＋","楽になる・良くなることはありますか？","（任意）");
   h+=`<div class="opts grid">`+RELIEF_TAGS.map(o=>opt((D.common.reliefTags||[]).includes(o),o,`toggleCommonTag('reliefTags','${o.replace(/'/g,"")}')`,true)).join("")+`</div>`;
-  h+=`<textarea id="relieftxt" placeholder="例：少し休むと戻る／朝はほとんど気にならない" oninput="D.common.relief=this.value">${D.common.relief||""}</textarea>`;
+  h+=`<textarea id="relieftxt" placeholder="例：少し休むと戻る／朝はほとんど気にならない" oninput="D.common.relief=this.value">${esc(D.common.relief||"")}</textarea>`;
   h+=qhead("＋","その後さらに悪くなった時期はありますか？","急に悪化した・段階的に進んだ時期がわかれば（任意）");
   h+=dateBlock("worsen","悪くなった時期");
   return card(h);}
@@ -2960,7 +2987,7 @@ function fmtWhen(key){const dd=D.common[key+"Date"],md=D.common[key+"Month"];
 /* === 人体図（部位・左右差をタップ）。module2（脱力・しびれ）の分布入力に使用 === */
 const BODY_REGIONS=[
  {id:"face", label:"顔",   shape:`<circle cx="100" cy="34" r="24"/>`},
- {id:"trunk",label:"体幹", shape:`<rect x="72" y="62" width="56" height="98" rx="12"/>`},
+ {id:"trunk",label:"体幹（おなか・背中）", shape:`<rect x="72" y="62" width="56" height="98" rx="12"/>`},
  {id:"armR", label:"右腕", shape:`<rect x="40" y="66" width="24" height="86" rx="11"/>`},
  {id:"armL", label:"左腕", shape:`<rect x="136" y="66" width="24" height="86" rx="11"/>`},
  {id:"handR",label:"右手先",shape:`<circle cx="52" cy="166" r="16"/>`},
@@ -2993,7 +3020,9 @@ function scrModule(){
   let h=proxyBanner()+`<div style="display:inline-block;background:var(--brand-l);color:var(--brand-d);font-weight:800;
     border-radius:20px;padding:5px 14px;font-size:calc(14px*var(--fs))">📍 ${MODS_PT[id]}　(${modCursor+1}/${D.mods.length})</div>
     <p class="lead" style="margin-top:8px">どこが・何ができなくなったかを教えてください</p>`;
+  let prevCat=null;
   QM[id].forEach((it,i)=>{
+    if(it.cat&&it.cat!==prevCat){h+=`<div class="grouplab">${it.cat}</div>`;prevCat=it.cat;}
     h+=qhead(i+1,it.q,it.sub);
     if(id===2&&it.k==="area"){
       h+=bodyMapSVG();
@@ -3025,6 +3054,7 @@ function scrAssoc(){
 function scrSxtime(){
   let h=proxyBanner()+`<div class="qhead"><span class="qnum">🕒</span><span class="qtext">選んだ症状は、それぞれいつ頃からですか？</span>${spkBtn("選んだ症状は、それぞれいつ頃からですか？だいたいで大丈夫です")}</div>
    <div class="hint">順番や時期がわかると、経過がグラフになります。だいたいで大丈夫です。</div>`;
+  h+=overviewChart();
   D.symptoms.forEach(s=>{
     const r=D.sx[s]||{};
     h+=`<div class="qunit" style="border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:12px 0;background:#fcfdff">
@@ -3035,6 +3065,7 @@ function scrSxtime(){
       <div class="opts grid">`+SEV_OPTS.map(o=>opt(r.sev===o,o,`setSx('${s.replace(/'/g,"")}','sev','${o}')`)).join("")+`</div>
       <div class="hint" style="margin:8px 0 4px">その後の変化</div>
       <div class="opts grid">`+TREND_OPTS.map(o=>opt(r.trend===o,o,`setSx('${s.replace(/'/g,"")}','trend','${o.replace(/'/g,"")}')`)).join("")+`</div>
+      ${eventBlock(s)}
     </div>`;
   });
   h+=qhead("📣","今回、受診しようと思うほど悪くなったのはいつ頃ですか？","（任意）グラフに赤い目印を付けます");
@@ -3045,9 +3076,45 @@ function scrSxtime(){
   return card(h);}
 function setSx(s,k,v){D.sx[s]=D.sx[s]||{};D.sx[s][k]=(D.sx[s][k]===v?null:v);render();}
 
+/* できごと（悪くなった時期の目印）：症状ごとに複数追加できる。病名・診断には触れない */
+function eventBlock(s){
+  const evs=(D.sx[s]&&D.sx[s].events)||[];
+  const ui=EVUI[s]||{};
+  let h=`<div class="hint" style="margin:10px 0 4px">📌 悪くなった時の出来事（あれば）</div>`;
+  if(evs.length){
+    h+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">`+evs.map((e,i)=>
+      `<span style="display:inline-flex;align-items:center;gap:5px;background:#fff;border:1.5px solid ${symptomColor(s)};color:${symptomColor(s)};border-radius:20px;padding:5px 10px;font-size:calc(13px*var(--fs));font-weight:700">${esc(e.bucket)}・${esc(e.tag)}${e.note?`（${esc(e.note)}）`:""}<button type="button" onclick="removeEvent('${s.replace(/'/g,"")}',${i})" aria-label="この出来事を削除" style="border:none;background:none;color:inherit;cursor:pointer;font-weight:800;min-width:30px;min-height:30px;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:calc(15px*var(--fs))">✕</button></span>`
+    ).join("")+`</div>`;
+  }
+  if(ui.open){
+    h+=`<div style="background:#fcfdff;border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:4px 0 10px">
+      <div class="hint" style="margin:0 0 4px">いつ頃</div>
+      <div class="opts grid">`+ONSET_OPTS.filter(o=>o[0]!=="わからない").map(([o])=>opt(ui.bucket===o,o,`setEvBucket('${s.replace(/'/g,"")}','${o.replace(/'/g,"")}')`)).join("")+`</div>
+      <div class="hint" style="margin:8px 0 4px">どんな出来事</div>
+      <div class="opts grid">`+EVENT_TAGS.map(o=>opt(ui.tag===o,o,`setEvTag('${s.replace(/'/g,"")}','${o.replace(/'/g,"")}')`)).join("")+`</div>`+
+      (ui.tag==="その他"?`<textarea placeholder="どんな出来事か、短く教えてください" oninput="setEvNote('${s.replace(/'/g,"")}',this.value)">${esc(ui.note||"")}</textarea>`:``)+
+      `<div style="text-align:right;margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" onclick="toggleEvUI('${s.replace(/'/g,"")}')" style="font-size:calc(13px*var(--fs));padding:8px 14px;border:1px solid var(--line);background:#fff;border-radius:9px;cursor:pointer;color:var(--sub)">キャンセル</button>
+        <button type="button" onclick="addEvent('${s.replace(/'/g,"")}')" ${(!ui.bucket||!ui.tag)?"disabled":""} style="font-size:calc(13px*var(--fs));padding:8px 14px;border:none;background:var(--brand);color:#fff;border-radius:9px;cursor:pointer;font-weight:700">＋ 追加する</button>
+      </div></div>`;
+  }else{
+    h+=`<button type="button" onclick="toggleEvUI('${s.replace(/'/g,"")}')" style="font-size:calc(13px*var(--fs));padding:8px 14px;border:1.5px dashed var(--line);background:#fff;border-radius:9px;cursor:pointer;color:var(--brand-d);font-weight:700">＋ 出来事を追加</button>`;
+  }
+  return h;
+}
+function toggleEvUI(s){EVUI[s]=EVUI[s]||{};EVUI[s].open=!EVUI[s].open;render();}
+function setEvBucket(s,b){EVUI[s]=EVUI[s]||{};EVUI[s].bucket=(EVUI[s].bucket===b?null:b);render();}
+function setEvTag(s,t){EVUI[s]=EVUI[s]||{};EVUI[s].tag=(EVUI[s].tag===t?null:t);render();}
+function setEvNote(s,v){EVUI[s]=EVUI[s]||{};EVUI[s].note=v;}
+function addEvent(s){const u=EVUI[s];if(!u||!u.bucket||!u.tag)return;
+  D.sx[s]=D.sx[s]||{};D.sx[s].events=D.sx[s].events||[];
+  D.sx[s].events.push({bucket:u.bucket,tag:u.tag,note:u.tag==="その他"?(u.note||""):""});
+  EVUI[s]={open:false};render();}
+function removeEvent(s,i){if(D.sx[s]&&D.sx[s].events)D.sx[s].events.splice(i,1);render();}
+
 /* 症状ごとの推移カーブ。問診の「程度・その後の変化」から初期の線をつくり、
    指で丸を上下に動かして各時期の「つらさ」の“ゆらぎ”を表現できる（自己完結SVG）。 */
-const WAVE_N=5;
+const WAVE_N=7;
 let WAVE_EDIT=false; /* ドラッグ編集は任意の上級機能（既定OFF。選択式回答から自動で線を生成） */
 function waveArr(s){
   const r=D.sx[s]||{};
@@ -3058,10 +3125,61 @@ function waveArr(s){
   for(let i=0;i<WAVE_N;i++){const t=i/(WAVE_N-1);let v;
     if(tr==="だんだん強くなる")v=0.3+0.6*t;
     else if(tr==="軽くなってきた")v=0.9-0.6*t;
-    else if(tr&&tr.indexOf("出たり")>=0)v=[0.35,0.8,0.4,0.85,base][i];
+    else if(tr&&tr.indexOf("出たり")>=0)v=base+0.3*Math.sin(t*Math.PI*2.4);
     else v=base;
     a.push(Math.max(0.12,Math.min(1,v)));}
   return a;
+}
+/* 俯瞰グラフ：選んだ全ての症状を1つの軸に重ねて色分け表示（比較用）。
+   症状が2つ以上あるときだけ意味があるので、1つ以下なら何も出さない。 */
+function overviewChart(){
+  const rows=D.symptoms.map(s=>({s,m:sxMonths(s)})).filter(r=>r.m!=null);
+  if(rows.length<2)return "";
+  rows.sort((a,b)=>b.m-a.m);
+  const maxM=Math.max(...rows.map(r=>r.m),0.4);
+  const W=560,padL=20,padR=20,padT=22,padB=34,H=230;
+  const x=m=>padL+(1-(m/maxM))*(W-padL-padR);
+  const yTop=padT+8,yBot=H-padB;
+  const now=x(0);
+  const yOf=v=>yBot-(yBot-yTop)*v;
+  const ticks=[maxM,maxM/2,0].map(m=>{const lb=m<0.05?"今":(m>=12?`${Math.round(m/12)}年前`:`${Math.round(m)}か月前`);
+    return `<line x1="${x(m)}" y1="${yTop-6}" x2="${x(m)}" y2="${yBot}" stroke="#eef2f7"/>
+      <text x="${x(m)}" y="${H-14}" text-anchor="middle" font-size="12" fill="#71828f">${lb}</text>`;}).join("");
+  const nowLine=`<line x1="${now}" y1="${yTop-6}" x2="${now}" y2="${yBot}" stroke="var(--warn)" stroke-dasharray="3 3"/>
+    <text x="${now}" y="${yTop-9}" text-anchor="middle" font-size="10" fill="var(--warn)">今</text>`;
+  const vm=visitMonths();
+  const visitLine=(vm!=null&&vm<=maxM+0.001)?`<line x1="${x(vm).toFixed(1)}" y1="${yTop-6}" x2="${x(vm).toFixed(1)}" y2="${yBot}" stroke="#c0392b" stroke-width="2"/>
+    <text x="${x(vm).toFixed(1)}" y="${yTop-9}" text-anchor="middle" font-size="10" fill="#c0392b" font-weight="700">受診理由</text>`:"";
+  let body="",legendHtml="";const evAll=[];
+  rows.forEach(r=>{
+    const col=symptomColor(r.s);
+    const x0=x(r.m);
+    const xs=[];for(let i=0;i<WAVE_N;i++)xs.push(x0+(now-x0)*(i/(WAVE_N-1)));
+    const wv=waveArr(r.s);
+    const pts=xs.map((xx,i)=>`${xx.toFixed(1)},${yOf(wv[i]).toFixed(1)}`).join(" ");
+    body+=`<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/>`;
+    body+=`<circle cx="${xs[xs.length-1].toFixed(1)}" cy="${yOf(wv[wv.length-1]).toFixed(1)}" r="4.5" fill="${col}"/>`;
+    legendHtml+=`<span style="display:inline-flex;align-items:center;gap:6px;font-size:calc(13px*var(--fs));color:var(--ink);margin-right:14px">
+      <span style="width:16px;height:4px;border-radius:2px;background:${col};display:inline-block"></span>${r.s}</span>`;
+    ((D.sx[r.s]&&D.sx[r.s].events)||[]).forEach(e=>{const em=eventMonths(e);if(em==null)return;
+      evAll.push({s:r.s,col,m:em,bucket:e.bucket,tag:e.tag,note:e.note});});
+  });
+  evAll.sort((a,b)=>b.m-a.m); /* 古い→新しい の順で番号を振る（レーン別詳細と同じ並び） */
+  let evBody="",evFoot="";
+  evAll.forEach((e,i)=>{if(e.m>maxM+0.001)return;const xe=x(e.m);const num=i+1;
+    evBody+=`<line x1="${xe.toFixed(1)}" y1="${yTop}" x2="${xe.toFixed(1)}" y2="${yBot}" stroke="${e.col}" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+      <circle cx="${xe.toFixed(1)}" cy="${(yTop+10).toFixed(1)}" r="8" fill="#fff" stroke="${e.col}" stroke-width="2"/>
+      <text x="${xe.toFixed(1)}" y="${(yTop+13.5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="800" fill="${e.col}">${num}</text>`;
+    evFoot+=`<div style="display:flex;gap:7px;align-items:baseline;margin:2px 0;font-size:calc(12.5px*var(--fs))">
+      <span style="flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid ${e.col};color:${e.col};font-weight:800;font-size:10px;display:inline-flex;align-items:center;justify-content:center">${num}</span>
+      <span><b style="color:${e.col}">${esc(e.s)}</b>：${esc(e.bucket)}・${esc(e.tag)}${e.note?`（${esc(e.note)}）`:""}</span></div>`;});
+  return `<div class="blk"><h4 style="color:var(--brand-d);margin:14px 0 4px">📊 症状の経過（全体の見え方・重ね合わせ）</h4>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-width:${W}px;background:#fff;border:1px solid var(--line);border-radius:12px">
+      ${ticks}${nowLine}${visitLine}${evBody}${body}</svg>
+    <div style="margin-top:6px">${legendHtml}</div>
+    <div style="font-size:calc(13px*var(--fs));color:var(--sub);margin-top:4px">縦＝つらさ（上ほど強い）／横＝時間（左が昔・右が今）。線の色は症状ごとです。</div>
+    ${evFoot?`<div style="margin-top:8px"><div class="hint" style="margin:0 0 4px">📌 経過の目印</div>${evFoot}</div>`:""}
+  </div>`;
 }
 function trajectoryChart(editable){
   const rows=D.symptoms.map(s=>({s,m:sxMonths(s)})).filter(r=>r.m!=null);
@@ -3074,10 +3192,11 @@ function trajectoryChart(editable){
   const ticks=[maxM,maxM/2,0].map(m=>{const lb=m<0.05?"今":(m>=12?`${Math.round(m/12)}年前`:`${Math.round(m)}か月前`);
     return `<line x1="${x(m)}" y1="${padT-2}" x2="${x(m)}" y2="${H-22}" stroke="#eef2f7"/>
       <text x="${x(m)}" y="${H-8}" text-anchor="middle" font-size="12" fill="#71828f">${lb}</text>`;}).join("");
-  const GEO=[];let body="";
+  const GEO=[];let body="";const laneEvts=[];
   rows.forEach((r,ri)=>{
     const top=padT+ri*laneH;
     const yHi=top+12, yLo=top+laneH-26;          // 上=つらい / 下=軽い
+    const col=symptomColor(r.s);
     const x0=x(r.m);
     const xs=[];for(let i=0;i<WAVE_N;i++)xs.push(x0+(now-x0)*(i/(WAVE_N-1)));
     const wv=waveArr(r.s);
@@ -3085,8 +3204,12 @@ function trajectoryChart(editable){
     const pts=xs.map((xx,i)=>`${xx.toFixed(1)},${yOf(wv[i]).toFixed(1)}`).join(" ");
     body+=`<line x1="${padL}" y1="${top+laneH-12}" x2="${now}" y2="${top+laneH-12}" stroke="#eef2f7"/>`;
     body+=`<text x="${padL-10}" y="${top+laneH/2+4}" text-anchor="end" font-size="13" fill="#16222e">${r.s.length>11?r.s.slice(0,10)+"…":r.s}</text>`;
-    body+=`<polyline id="wl${ri}" points="${pts}" fill="none" stroke="#2f7fc4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
-    if(editable&&WAVE_EDIT)xs.forEach((xx,i)=>{body+=`<circle class="wdot" data-r="${ri}" data-i="${i}" id="wd${ri}_${i}" cx="${xx.toFixed(1)}" cy="${yOf(wv[i]).toFixed(1)}" r="13" fill="#fff" stroke="#2f7fc4" stroke-width="3"/>`;});
+    body+=`<polyline id="wl${ri}" points="${pts}" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
+    ((D.sx[r.s]&&D.sx[r.s].events)||[]).forEach(e=>{
+      const em=eventMonths(e);if(em==null||em>maxM+0.001)return;
+      laneEvts.push({xe:x(em),yHi,yLo,col,s:r.s,bucket:e.bucket,tag:e.tag,note:e.note});
+    });
+    if(editable&&WAVE_EDIT)xs.forEach((xx,i)=>{body+=`<circle class="wdot" data-r="${ri}" data-i="${i}" id="wd${ri}_${i}" cx="${xx.toFixed(1)}" cy="${yOf(wv[i]).toFixed(1)}" r="13" fill="#fff" stroke="${col}" stroke-width="3"/>`;});
     GEO.push({s:r.s,yHi,yLo,xs});
   });
   window.__WAVE={geo:GEO};
@@ -3095,15 +3218,27 @@ function trajectoryChart(editable){
   const vm=visitMonths();
   const visitLine=(vm!=null&&vm<=maxM+0.001)?`<line x1="${x(vm).toFixed(1)}" y1="${padT-2}" x2="${x(vm).toFixed(1)}" y2="${H-22}" stroke="#c0392b" stroke-width="2"/>
     <text x="${x(vm).toFixed(1)}" y="${padT+9}" text-anchor="middle" font-size="10" fill="#c0392b" font-weight="700">受診理由</text>`:"";
+  const sortedEvts=[...laneEvts].sort((a,b)=>a.xe-b.xe);
+  let evBody="",evFoot="";
+  sortedEvts.forEach((e,i)=>{
+    const num=i+1;
+    evBody+=`<line x1="${e.xe.toFixed(1)}" y1="${(e.yHi+14).toFixed(1)}" x2="${e.xe.toFixed(1)}" y2="${e.yLo}" stroke="${e.col}" stroke-width="1" stroke-dasharray="2 3" opacity="0.55"/>
+      <circle cx="${e.xe.toFixed(1)}" cy="${(e.yHi+6).toFixed(1)}" r="7" fill="#fff" stroke="${e.col}" stroke-width="2"/>
+      <text x="${e.xe.toFixed(1)}" y="${(e.yHi+9).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="800" fill="${e.col}">${num}</text>`;
+    evFoot+=`<div style="display:flex;gap:7px;align-items:baseline;margin:2px 0;font-size:calc(12.5px*var(--fs))">
+      <span style="flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid ${e.col};color:${e.col};font-weight:800;font-size:10px;display:inline-flex;align-items:center;justify-content:center">${num}</span>
+      <span><b style="color:${e.col}">${esc(e.s)}</b>：${esc(e.bucket)}・${esc(e.tag)}${e.note?`（${esc(e.note)}）`:""}</span></div>`;
+  });
   const btn=(lab,fn)=>`<button type="button" onclick="${fn}" style="font-size:calc(14px*var(--fs));padding:10px 16px;border:1.5px solid var(--line);background:#fff;border-radius:9px;cursor:pointer;color:var(--sub);font-weight:700;font-family:inherit">${lab}</button>`;
   const controls=editable?(WAVE_EDIT
-    ?`<div class="hint" style="margin:8px 0 2px">👆 青い丸を<b>上下に</b>動かして、その時期の「つらさ」を線にできます（上＝つらい／下＝軽い）。だいたいで大丈夫です。</div>
+    ?`<div class="hint" style="margin:8px 0 2px">👆 丸を<b>上下に</b>動かして、その時期の「つらさ」を線にできます（上＝つらい／下＝軽い）。だいたいで大丈夫です。</div>
       <div style="text-align:right;margin-top:4px;display:flex;gap:8px;justify-content:flex-end">${btn("↺ 線を描き直す","resetWaves()")}${btn("✓ 調整をおわる","WAVE_EDIT=false;render()")}</div>`
     :`<div style="text-align:right;margin-top:4px">${btn("✏ 線を指で調整する（任意）","WAVE_EDIT=true;render()")}</div>`):"";
-  const legend=`<div style="font-size:calc(13px*var(--fs));color:var(--sub);margin-top:6px">縦＝つらさ（上ほど強い）／横＝時間（左が昔・右が今）。ご本人・ご家族の実感を表した線です。</div>`;
-  return `<div class="blk"><h4 style="color:var(--brand-d);margin:14px 0 4px">📈 症状の推移（ご本人・ご家族の実感）</h4>
-    <svg id="wsvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-width:${W}px;background:#fff;border:1px solid var(--line);border-radius:12px;touch-action:none">
-      ${ticks}${nowLine}${visitLine}${body}</svg>${controls}${legend}</div>`;}
+  const legend=`<div style="font-size:calc(13px*var(--fs));color:var(--sub);margin-top:6px">縦＝つらさ（上ほど強い）／横＝時間（左が昔・右が今）。ご本人・ご家族の実感を表した線です。線の色は症状ごとです。</div>`;
+  return `<div class="blk"><h4 style="color:var(--brand-d);margin:14px 0 4px">📈 症状の推移（症状ごとの詳細）</h4>
+    <svg id="${editable?'wsvg':'wsvg-ro'}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-width:${W}px;background:#fff;border:1px solid var(--line);border-radius:12px;touch-action:none">
+      ${ticks}${nowLine}${visitLine}${evBody}${body}</svg>${controls}${legend}
+    ${evFoot?`<div style="margin-top:8px">${evFoot}</div>`:""}</div>`;}
 /* ドラッグ操作の割り当て（sxtime画面の描画後に呼ぶ）。描画中はrender()しないので途中で失われない */
 function attachWaveHandlers(){
   const svg=document.getElementById("wsvg");if(!svg||!window.__WAVE)return;
@@ -3134,7 +3269,8 @@ function sxOnsetTable(){
   const rows=D.symptoms.filter(s=>D.sx[s]&&(D.sx[s].onset||D.sx[s].sev||D.sx[s].trend));
   if(!rows.length)return "";
   return `<div class="assoc" style="margin:2px 0 6px">`+rows.map(s=>{const r=D.sx[s];
-    return `<div><span class="g">${s}:</span> ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend].filter(Boolean).join(" / ")}</div>`;}).join("")+`</div>`;}
+    const evs=(r.events||[]).map(e=>`${esc(e.bucket)}${esc(e.tag)}${e.note?`(${esc(e.note)})`:""}`).join("、");
+    return `<div><span class="g">${s}:</span> ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend,evs&&("出来事:"+evs)].filter(Boolean).join(" / ")}</div>`;}).join("")+`</div>`;}
 
 function dailyLabel(it){return it.t+(it.sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${it.sub}</span>`:"");}
 function scrDaily(){
@@ -3162,7 +3298,7 @@ function visBlock(){
   return `<div style="background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 14px">
     <div class="hint" style="margin:0 0 6px"><b>👁 目の症状について、気づいたことを教えてください（任意）</b></div>
     <div class="opts grid">`+["片目だけ","両目","わからない"].map(o=>opt(D.vis.side===o,o,`setVis('side','${o}')`)).join("")+`</div>
-    <textarea id="visnote" placeholder="例：見えにくい範囲、色の見え方、目を動かしたときの感じ、いつからか など" oninput="D.vis.note=this.value" style="margin-top:8px">${D.vis.note||""}</textarea></div>`;}
+    <textarea id="visnote" placeholder="例：見えにくい範囲、色の見え方、目を動かしたときの感じ、いつからか など" oninput="D.vis.note=this.value" style="margin-top:8px">${esc(D.vis.note||"")}</textarea></div>`;}
 function setVis(k,v){D.vis[k]=(D.vis[k]===v?null:v);render();}
 
 function scrBg(){
@@ -3172,7 +3308,7 @@ function scrBg(){
   h+=qhead("薬","飲んでいるお薬はありますか？")+
     `<div class="opts grid">${["飲んでいる薬がある","最近始めた・変えた薬がある","飲んでいない","わからない"]
       .map(o=>opt(D.bg.med===o,o,`setBg('med','${o.replace(/'/g,"")}')`)).join("")}</div>
-    <textarea id="medt" placeholder="お薬の名前がわかれば（任意）" oninput="D.bg.medText=this.value">${D.bg.medText}</textarea>`;
+    <textarea id="medt" placeholder="お薬の名前がわかれば（任意）" oninput="D.bg.medText=this.value">${esc(D.bg.medText)}</textarea>`;
   h+=qhead("薬2","吐き気止め・胃薬・精神科の薬などを使っていますか？","スルピリド・メトクロプラミド・抗精神病薬など（手のふるえ・動作の遅さに関係することがあります）")+
     `<div class="opts grid">${BG_DOPADRUG.map(o=>opt(D.bg.dopaDrug===o,o,`setBg('dopaDrug','${o.replace(/'/g,"")}')`)).join("")}</div>`;
   h+=qhead("家","似た症状の家族はいますか？")+
@@ -3183,7 +3319,7 @@ function scrBg(){
     `<div class="opts grid">${["あった","ワクチン接種のあとから","なかった","わからない"].map(o=>opt(D.bg.preInfection===o,o,`setBg('preInfection','${o.replace(/'/g,"")}')`)).join("")}</div>`;
   h+=qhead("妊","妊娠中・授乳中ですか？","治療の選択に関わることがあります（任意）")+
     `<div class="opts grid">${["妊娠中","授乳中","どちらでもない","答えない"].map(o=>opt(D.bg.pregnancy===o,o,`setBg('pregnancy','${o.replace(/'/g,"")}')`)).join("")}</div>`;
-  h+=moreToggle("bgMore","そのほか（最近の出来事・生活・既往・受診歴など）を入力");
+  h+=moreToggle("bgMore","そのほか（最近の出来事・生活・これまでの病気・受診歴など）を入力");
   if(UI.bgMore){
     h+=`<div class="grouplab">最近あったこと</div>
       <div class="opts grid">${BG_IMMUNE.map(o=>opt(D.bg.immune.includes(o),o,`toggleBg('immune','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
@@ -3192,24 +3328,21 @@ function scrBg(){
     h+=`<div class="grouplab">仕事・環境・接触</div>
       <div class="opts grid">${BG_EXPOSURE.map(o=>opt(D.bg.exposure.includes(o),o,`toggleBg('exposure','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
     h+=qhead("既","これまでの大きな病気・手術があれば（任意）")+
-      `<textarea id="hist" placeholder="例：〇年に△△の手術、□□で通院中 など" oninput="D.bg.history=this.value">${D.bg.history}</textarea>`;
+      `<textarea id="hist" placeholder="例：〇年に△△の手術、□□で通院中 など" oninput="D.bg.history=this.value">${esc(D.bg.history)}</textarea>`;
     h+=qhead("ア","アレルギー（薬・食べ物など）があれば（任意）")+
-      `<textarea id="alle" placeholder="例：〇〇でじんましん など" oninput="D.bg.allergy=this.value">${D.bg.allergy}</textarea>`;
+      `<textarea id="alle" placeholder="例：〇〇でじんましん など" oninput="D.bg.allergy=this.value">${esc(D.bg.allergy)}</textarea>`;
     h+=qhead("科","これまでに受診した科はありますか？","あてはまるものすべて（任意）")+
       `<div class="opts grid">${VISITED.map(o=>opt(D.visited.includes(o),o,`toggleVisited('${o}')`,true)).join("")}</div>`;
     h+=qhead("査","受けた検査があれば（任意）","例：頭のMRI、血液検査、筋電図 など")+
-      `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${D.tests}</textarea>`;
+      `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${esc(D.tests)}</textarea>`;
   }
   return card(h);}
 
 function scrFree(){
   return card(`
-   <div class="qhead"><span class="qnum">1</span><span class="qtext">医師にいちばん伝えたいこと・困っていること<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("医師にいちばん伝えたいこと、困っていることはありますか？")}</div>
-   <div class="hint">短くて大丈夫です</div>
-   <textarea id="trouble" placeholder="例：転びそうで外出がこわい" oninput="D.common.trouble=this.value">${D.common.trouble||""}</textarea>
-   <div class="qhead" style="margin-top:24px"><span class="qnum">2</span><span class="qtext">${isProxy()?"ご本人の様子を自由にお話しください":"自由にお話しください"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("そのほか、症状の様子を自由にお話しください。ご家族から見て気づいた変化もどうぞ")}</div>
-   <div class="hint">話し言葉のままでOK。ご家族から見た変化（表情・声・動きなど）もここにどうぞ。マイクでも入力できます。</div>
-   <textarea id="free" placeholder="例：去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる。家族から見ると表情が乏しくなった" oninput="D.free=this.value">${D.free}</textarea>
+   <div class="qhead"><span class="qnum">1</span><span class="qtext">${isProxy()?"ご本人について、医師に伝えたいこと・困っていること":"医師に伝えたいこと・困っていること"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("医師に伝えたいこと、困っていることを自由にお話しください。ご家族から見て気づいた変化もどうぞ")}</div>
+   <div class="hint">短くても、話し言葉のままでも大丈夫です。ご家族から見た変化（表情・声・動きなど）もここにどうぞ。マイクでも入力できます。</div>
+   <textarea id="trouble" placeholder="例：転びそうで外出がこわい／去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる。家族から見ると表情が乏しくなった" oninput="D.common.trouble=this.value;D.free=this.value">${esc(D.common.trouble||"")}</textarea>
    <div><span class="voice" id="vbtn" onclick="toggleVoice()">🎤 声で入力する</span></div>
    <div class="mini" id="vstat" style="margin-top:6px"></div>`);}
 
@@ -3226,11 +3359,11 @@ function scrConfirm(){
   let body;
   if(edited){
     body=`<div class="hint">文章を直接編集できます。編集後の文がそのままシートに載ります。</div>
-     <textarea id="sumedit" style="min-height:160px" oninput="D.editedSummary=this.value">${buildSummary()}</textarea>`;
+     <textarea id="sumedit" style="min-height:160px" oninput="D.editedSummary=this.value">${esc(buildSummary())}</textarea>`;
   }else{
     const parts=buildSummaryParts();
     body=parts.length?`<div class="sumlist">`+parts.map(p=>
-      `<div class="sumrow"><span>${p.t}</span>
+      `<div class="sumrow"><span>${esc(p.t)}</span>
        <button type="button" class="fixbtn" onclick="jumpFix('${p.ph}',${p.mod!==undefined?p.mod:-1})">✎ 直す</button></div>`).join("")+`</div>
      <div style="text-align:right"><button type="button" class="fixbtn" style="margin-top:10px" onclick="EDIT_SUM=true;render()">✏ 文章を直接編集する</button></div>`
      :`<div class="note">まだ入力がありません。「戻る」で症状を選んでください。</div>`;
@@ -3246,7 +3379,7 @@ function scrConfirm(){
 function scrOutput(){
   return `<div class="card no-print" style="text-align:center">
      <h2 style="margin:.1em 0">✅ メモができました</h2>
-     <p class="lead" style="margin:0 0 12px">下のボタンで切り替え・印刷ができます（パソコンでは左右に並びます）</p>
+     <p class="lead" style="margin:0 0 12px">下のボタンで切り替え・印刷ができます</p>
      <div class="tabs outtabs">
        <button class="${OUT==='p'?'act':''}" onclick="OUT='p';render()">ご本人・家族向け</button>
        <button class="${OUT==='d'?'act':''}" onclick="OUT='d';render()">医療者向けシート</button>
@@ -3268,6 +3401,9 @@ function scrOutput(){
 /* ===== 部品 ===== */
 function card(inner){return `<div class="card">${inner}</div>`;}
 function escAttr(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+/* 自由記述をinnerHTMLへ差し込む前に必ず通すHTMLエスケープ（XSS対策）。escAttrと同じ実装だが、
+   「属性用」ではなく「本文用」であることを呼び出し側で読み取りやすくするための別名。 */
+function esc(s){return escAttr(s);}
 function spkBtn(text){return `<button class="spk no-print" data-say="${escAttr(text)}" onclick="speakEl(this)" aria-label="読み上げ">🔊</button>`;}
 function qhead(n,q,sub){const say=stripHtml(q)+(sub?"。"+stripHtml(sub):"");
   return `<div class="qhead"><span class="qnum">${n}</span>
@@ -3313,17 +3449,6 @@ function autoRead(){
   if(!TTS_ON)return;
   const first=document.querySelector("#app .spk");
   if(first)speak(first.getAttribute("data-say"));
-}
-
-/* ===== ゆっくりモード（大きな文字＋1問ずつ＋読み上げ） ===== */
-let SLOW=false;
-function toggleSlow(){
-  SLOW=!SLOW;
-  setFs(SLOW?'fs-xl':'fs-l');
-  ONE_Q=SLOW;ONEQ_IDX=0;
-  const ob=document.getElementById("oneqBtn");if(ob)ob.classList.toggle("on",ONE_Q);
-  if(SLOW!==TTS_ON)toggleTTS();
-  render();
 }
 
 /* ===== 1問ずつ表示（1画面1問） ===== */
@@ -3490,11 +3615,11 @@ function toggleVoice(){
   if(!SR){stat.textContent="※このブラウザは音声入力に未対応です。文字で入力してください。";return;}
   if(recOn){rec.stop();return;}
   rec=new SR();rec.lang="ja-JP";rec.interimResults=true;rec.continuous=true;
-  let base=D.free?D.free+" ":"";
+  let base=D.common.trouble?D.common.trouble+" ":"";
   rec.onstart=()=>{recOn=true;const b=document.getElementById("vbtn");
     b.classList.add("rec");b.textContent="● 録音中（タップで停止）";stat.textContent="お話しください…";};
   rec.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
-    D.free=base+t;const f=document.getElementById("free");if(f)f.value=D.free;};
+    D.common.trouble=base+t;D.free=D.common.trouble;const f=document.getElementById("trouble");if(f)f.value=D.common.trouble;};
   rec.onerror=e=>{stat.textContent="音声認識エラー: "+e.error;};
   rec.onend=()=>{recOn=false;const b=document.getElementById("vbtn");
     if(b){b.classList.remove("rec");b.textContent="🎤 声で入力する";}stat.textContent="（停止しました。文字での修正もできます）";};
@@ -3523,35 +3648,37 @@ function buildSummaryParts(){
   /* 再発・寛解 */
   if(c.relapse&&c.relapse!=="わからない"){
     let rl="";
-    if(c.relapse==="はじめて")rl="今回がはじめてのエピソード。";
-    else rl=`過去にも同様の症状が${c.relapse}`+(c.relapseRecover?`（前回は${c.relapseRecover}で軽快）`:"")+"。";
+    if(c.relapse==="はじめて")rl="今回がはじめてです。";
+    else rl=`過去にも同様の症状が${c.relapse}`+(c.relapseRecover?`（前回は${c.relapseRecover}で良くなった）`:"")+"。";
     parts.push({t:rl,ph:"common"});
   }
-  if(c.visitBucket)parts.push({t:`今回の受診理由（増悪）：${c.visitBucket}ごろ。`,ph:"sxtime"});
+  if(c.visitBucket)parts.push({t:`今回、受診しようと思うほど悪くなったのは${c.visitBucket}ごろ。`,ph:"sxtime"});
   /* 症状が出た順序（時系列） */
   const ordered=D.symptoms.map(s=>({s,m:sxMonths(s)})).filter(r=>r.m!=null).sort((a,b)=>b.m-a.m);
   if(ordered.length>=2)parts.push({t:"出現の順序："+ordered.map(r=>r.s).join(" → ")+"。",ph:"sxtime"});
+  const evtAll=[];D.symptoms.forEach(s=>{((D.sx[s]&&D.sx[s].events)||[]).forEach(e=>evtAll.push(Object.assign({s:s},e,{m:eventMonths(e)})));});
+  evtAll.sort((a,b)=>(b.m==null?-1:b.m)-(a.m==null?-1:a.m));
+  if(evtAll.length)parts.push({t:"経過の目印："+evtAll.map(e=>`${e.bucket}に${(e.tag==="その他"&&e.note)?e.note:e.tag}（${e.s}）`).join("、")+"。",ph:"sxtime"});
   if(c.severity)parts.push({t:`生活への支障：${c.severity}。`,ph:"common"});
   const aggr=[...(c.aggravTags||[])];if(c.aggrav)aggr.push(c.aggrav.trim());
-  if(aggr.length)parts.push({t:"悪化・誘発："+aggr.join("・")+"。",ph:"common"});
+  if(aggr.length)parts.push({t:"悪くなるきっかけ："+aggr.join("・")+"。",ph:"common"});
   const rel=[...(c.reliefTags||[])];if(c.relief)rel.push(c.relief.trim());
-  if(rel.length)parts.push({t:"軽減："+rel.join("・")+"。",ph:"common"});
+  if(rel.length)parts.push({t:"楽になること："+rel.join("・")+"。",ph:"common"});
   /* 局在の手がかり（モジュール） */
   D.mods.forEach(id=>{const m=D.m[id];let f="";
     if(id===1){const w=(m.what||[]).join("・");if(w)f+=`歩行に関して${w}。`;
       if(m.fall&&m.fall!=="なし")f+=`転倒は${m.fall}（${m.falldir||"方向不明"}）。`;
-      const inj=(m.fallinj||[]).filter(x=>x!=="ケガはない");if(inj.length)f+=`転倒による外傷：${inj.join("・")}。`;
-      if(m.ortho&&m.ortho.includes("変わらない"))f+="整形外科的治療で改善乏しい。";}
+      const inj=(m.fallinj||[]).filter(x=>x!=="ケガはない");if(inj.length)f+=`転倒による外傷：${inj.join("・")}。`;}
     else if(id===2){const w=(m.main||[]).join("・");const ar=(m.area||[]).join("・");
-      if(w)f+=`${w}を${ar?ar+"に":""}自覚。`;if(m.prox)f+=`分布は${m.prox}。`;}
-    else if(id===3){const w=(m.main||[]).join("・");if(w)f+=`${w}を自覚。`;
-      if(m.diurnal&&m.diurnal!=="わからない")f+=`日内変動「${m.diurnal}」。`;
+      if(w)f+=`${w}が${ar?ar+"に":""}ある。`;if(m.prox)f+=`症状が強いのは${m.prox}。`;}
+    else if(id===3){const w=(m.main||[]).join("・");if(w)f+=`${w}がある。`;
+      if(m.diurnal&&m.diurnal!=="わからない")f+=`朝と夕方の様子：${m.diurnal}。`;
       if(m.lid&&m.lid!=="下がらない")f+=`まぶたは${m.lid}。`;}
     if(f)parts.push({t:f,ph:"module",mod:id});});
   if(c.side&&!["左右差なし","わからない"].includes(c.side))parts.push({t:`左右差は${c.side}。`,ph:"common"});
   /* 一緒に出ている症状 */
   const pos=ASSOC.filter(k=>D.assoc[k]==="y");
-  if(pos.length)parts.push({t:"随伴症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("・")+"あり。",ph:"assoc"});
+  if(pos.length)parts.push({t:"一緒に出ている症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("・")+"あり。",ph:"assoc"});
   /* 機能 */
   if(D.func.length)parts.push({t:"生活面では"+D.func.join("・")+"に支障。",ph:"daily"});
   /* ふだんの困りごと（領域ごとにまとめる） */
@@ -3569,15 +3696,15 @@ function buildSummaryParts(){
   const bgp=[];
   if(D.bg.risk.length)bgp.push(D.bg.risk.join("・"));
   if(D.bg.med&&D.bg.med!=="飲んでいない"&&D.bg.med!=="わからない")bgp.push(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:""));
-  if(D.bg.dopaDrug&&(D.bg.dopaDrug.includes("飲")))bgp.push("パーキンソン症状に関係しうる薬："+D.bg.dopaDrug);
+  if(D.bg.dopaDrug&&(D.bg.dopaDrug.includes("飲")))bgp.push("動作の遅さ・ふるえに関係しうる薬："+D.bg.dopaDrug);
   if(D.bg.family==="いる")bgp.push("似た症状の家族あり");
-  if(D.bg.autonomic&&D.bg.autonomic.length)bgp.push("自律神経症状："+D.bg.autonomic.join("・"));
-  if(D.bg.preInfection&&["あった","ワクチン接種のあとから"].includes(D.bg.preInfection))bgp.push("先行："+D.bg.preInfection);
+  if(D.bg.autonomic&&D.bg.autonomic.length)bgp.push("尿・立ちくらみ・便秘などの症状："+D.bg.autonomic.join("・"));
+  if(D.bg.preInfection&&["あった","ワクチン接種のあとから"].includes(D.bg.preInfection))bgp.push("症状の前の感染・予防接種："+D.bg.preInfection);
   if(D.bg.pregnancy&&["妊娠中","授乳中"].includes(D.bg.pregnancy))bgp.push(D.bg.pregnancy);
   if(D.bg.immune.length)bgp.push(D.bg.immune.join("・"));
   if(D.bg.lifestyle.length)bgp.push(D.bg.lifestyle.join("・"));
   if(D.bg.exposure.length)bgp.push(D.bg.exposure.join("・"));
-  if(D.bg.history)bgp.push("既往："+D.bg.history.trim());
+  if(D.bg.history)bgp.push("これまでの病気・手術："+D.bg.history.trim());
   if(D.bg.allergy)bgp.push("アレルギー："+D.bg.allergy.trim());
   if(bgp.length)parts.push({t:"背景："+bgp.join("、")+"。",ph:"bg"});
   if(D.visited.length)parts.push({t:"既受診："+D.visited.join("・")+"。",ph:"bg"});
@@ -3609,8 +3736,8 @@ function patientView(){
    <div class="showbanner">📱 診察のとき、この画面をお医者さんに見せてください</div>
    <h3 style="color:var(--brand-d);margin:0 0 4px">あなたの症状のまとめ</h3>
    ${timelineHtml()?`<div class="blk"><h4>🕒 症状の経過</h4>${timelineHtml()}</div>`:""}
-   ${trajectoryChart()}
-   <div class="blk"><h4>📝 入力内容のまとめ</h4><div>${sum.replace(/\n/g,"<br>")}</div></div>
+   ${overviewChart()}${trajectoryChart(true)}
+   <div class="blk"><h4>📝 入力内容のまとめ</h4><div>${esc(sum).replace(/\n/g,"<br>")}</div></div>
    ${D.daily.length?`<div class="blk"><h4>＋ ふだんの困りごと</h4>
      ${DAILY_GROUPS.filter(g=>dSel(g).length).map(g=>
        `<div style="margin:4px 0"><b style="color:var(--brand-d)">${g.e} ${g.g}</b><ul>${dSel(g).map(it=>`<li>${it.t}${it.sub?`（${it.sub}）`:""}</li>`).join("")}</ul></div>`).join("")}
@@ -3668,10 +3795,141 @@ function posSummary(){
 /* kv行の共通化：値ありのみ表示し、未聴取は末尾に集約（「—」の曖昧さをなくす） */
 function kvSec(pairs){
   const have=pairs.filter(x=>x[1]);
-  const miss=pairs.filter(x=>!x[1]).map(x=>x[0]);
-  return `${have.length?`<div class="kv">${have.map(([k,v])=>`<div><b>${k}</b><br>${v}</div>`).join("")}</div>`:""}
-    ${miss.length?`<div class="mini" style="margin-top:3px">未聴取: ${miss.join("・")}</div>`:""}`;
+  const miss=pairs.filter(x=>!x[1]);
+  if(!have.length)return miss.length?'<span class="mini">未聴取</span>':"";
+  return `<div class="kv">${have.map(([k,v])=>`<div><b>${esc(k)}</b><br>${esc(String(v))}</div>`).join("")}</div>`;
 }
+/* ===== 入力から見える症候パターン（症候群・局在レベル） =====
+   絶対方針の範囲内で運用すること：病名・診断名・確率・治療方針は一切出さない。
+   ここで出すのは「入力された所見のまとまり（症候群・局在）」と
+   「診察で確認するとよい所見」だけ。判定の根拠になった患者・家族の回答を
+   必ず ev として併記し、医師がその場で妥当性を検証して棄却できるようにする
+   （自己申告のみの情報で医師の初診時の思考を固定しないためのアンカリング対策）。 */
+function syndromePatterns(){
+  const c=D.common,A=D.assoc,m1=D.m[1]||{},m2=D.m[2]||{},m3=D.m[3]||{},out=[];
+  const yes=n=>A[n]==="y",no=n=>A[n]==="n";
+  const inA=(a,v)=>Array.isArray(a)&&a.indexOf(v)>=0;
+  const sym=s=>D.symptoms.indexOf(s)>=0;
+  const dHas=id=>D.daily.indexOf(id)>=0;
+  const push=(name,core,ev,ask,min)=>{if(core&&ev.length>=(min||2))out.push({name:name,ev:ev,ask:ask});};
+
+  /* 神経筋接合部（日内変動・易疲労性） */
+  {const diu=m3.diurnal||c.diurnal;
+   const core=!!(diu&&(diu.indexOf("夕方")>=0||diu.indexOf("使うと悪化")>=0));const ev=[];
+   if(core)ev.push("日内変動："+diu);
+   if(m3.lid&&m3.lid!=="下がらない")ev.push("まぶた："+m3.lid);
+   if(inA(m3.main,"物が二重に見える")||sym("ものが二重に見える"))ev.push("複視");
+   if(sym("疲れると悪くなる・夕方につらい")||inA(m3.main,"疲れると見えにくい"))ev.push("疲れで悪化");
+   if(dHas("battery"))ev.push("使っていると電池切れのように動けなくなる");
+   push("神経筋接合部のパターン（日内変動・易疲労性）",core,ev,
+     "上方注視の維持による眼瞼下垂の増悪、反復動作での筋力低下、球症状の日内変動、頸部屈筋の易疲労");}
+
+  /* 動作緩慢・寡動を軸とするパターン */
+  {const core=yes("動作が遅い・小さくなった")||(yes("安静にしていても手がふるえる")&&yes("表情が乏しい・声が小さい"));
+   const ev=[];
+   if(yes("動作が遅い・小さくなった"))ev.push("動作が遅い・小さくなった");
+   if(yes("安静にしていても手がふるえる"))ev.push("安静時のふるえ");
+   if(yes("表情が乏しい・声が小さい"))ev.push("表情が乏しい・声が小さい");
+   if(inA(m1.what,"足が出ない・すくむ"))ev.push("足が出ない・すくむ");
+   if(yes("においが分かりにくい"))ev.push("においが分かりにくい");
+   if(yes("夢で大声・手足が動く（睡眠中）"))ev.push("睡眠中の大声・手足の動き");
+   if(D.bg.autonomic&&D.bg.autonomic.length)ev.push("自律神経症状："+D.bg.autonomic.join("・"));
+   if(c.tempo&&(c.tempo.indexOf("ゆっくり")>=0||c.tempo.indexOf("だんだん")>=0))ev.push("経過："+c.tempo);
+   const drug=D.bg.dopaDrug&&["飲んでいる／最近飲んだ","以前飲んでいた"].indexOf(D.bg.dopaDrug)>=0;
+   if(drug)ev.push("動作の遅さ・ふるえに関係しうる薬："+D.bg.dopaDrug);
+   push("動作緩慢・寡動を軸とするパターン",core,ev,
+     "左右差、固縮と姿勢反射、小刻み歩行やすくみ足の有無、症状の出現順序"+
+     (drug?"、薬剤の使用時期と症状出現の時間関係":""));}
+
+  /* 再発と寛解をくり返す経過（時間的多発） */
+  {const core=!!((c.relapse&&c.relapse.indexOf("回")>=0)||(c.tempo&&c.tempo.indexOf("出たり治ったり")>=0));
+   const ev=[];
+   if(c.relapse&&c.relapse.indexOf("回")>=0)ev.push("過去のエピソード："+c.relapse);
+   if(c.tempo&&c.tempo.indexOf("出たり治ったり")>=0)ev.push("経過："+c.tempo);
+   if(c.relapseRecover)ev.push("前回の回復："+c.relapseRecover);
+   if(yes("視力が落ちた・目が痛い")||sym("視力が落ちた・目が痛い"))ev.push("視力低下・眼痛");
+   if(yes("胴体・脚に帯のようなしめつけ感"))ev.push("帯のようなしめつけ感");
+   if(yes("しびれ・感覚の鈍さ"))ev.push("しびれ・感覚の鈍さ");
+   if(inA(c.aggravTags,"暑いとき・入浴後"))ev.push("暑いとき・入浴後に悪化");
+   push("再発と寛解をくり返す経過（時間的多発）",core,ev,
+     "過去のエピソードごとの部位・持続・回復の程度、暑さや入浴での一過性の増悪、頸部前屈での電撃様感覚");}
+
+  /* 筋萎縮・線維束性収縮を伴うパターン */
+  {const core=yes("筋肉がやせる・ぴくつく")||sym("手足がやせる・ぴくつく");
+   const ev=[];
+   if(core)ev.push("筋のやせ・ぴくつき");
+   if(c.course&&c.course.indexOf("悪くなって")>=0)ev.push("経過："+c.course);
+   if(yes("ろれつが回りにくい"))ev.push("ろれつが回りにくい");
+   if(yes("飲み込みにくさ・むせ"))ev.push("飲み込みにくさ・むせ");
+   if(yes("息苦しさ"))ev.push("息苦しさ");
+   if(no("しびれ・感覚の鈍さ"))ev.push("感覚の鈍さは陰性");
+   push("筋萎縮・線維束性収縮を伴うパターン",core,ev,
+     "上位・下位運動ニューロン徴候の併存、感覚障害の有無、呼吸機能、体重減少の有無");}
+
+  /* 脊髄レベルを示唆するパターン */
+  {const core=yes("胴体・脚に帯のようなしめつけ感");
+   const ev=[];
+   if(core)ev.push("胴体・脚の帯のようなしめつけ感");
+   if(inA(m2.area,"両脚"))ev.push("両脚の症状");
+   if(inA(D.bg.autonomic,"尿が近い・もれる・出にくい"))ev.push("排尿のトラブル");
+   if(inA(D.func,"トイレ（排尿・排便）"))ev.push("排尿・排便のADL支障");
+   push("脊髄レベルを示唆するパターン",core,ev,
+     "感覚レベルの有無、腱反射・病的反射、膀胱直腸機能、頸部・背部の疼痛");}
+
+  /* 遠位優位・左右対称の末梢神経パターン */
+  {const core=m2.prox==="手足の先"||inA(m2.area,"手足の先（手袋・くつ下のように）");
+   const ev=[];
+   if(core)ev.push("分布：手足の先（遠位優位）");
+   if(yes("しびれ・感覚の鈍さ"))ev.push("しびれ・感覚の鈍さ");
+   if(inA(D.bg.risk,"糖尿病"))ev.push("背景：糖尿病");
+   if(c.tempo&&(c.tempo.indexOf("ゆっくり")>=0||c.tempo.indexOf("だんだん")>=0))ev.push("経過："+c.tempo);
+   if(dHas("temp"))ev.push("お湯の温度が分かりにくい");
+   push("遠位優位・左右対称の末梢神経パターン",core,ev,
+     "遠位優位の感覚低下と腱反射の低下、左右対称性、背景（糖尿病・アルコール・薬剤・ビタミン）の確認");}
+
+  /* 近位筋優位の脱力パターン */
+  {const core=m2.prox==="肩や太ももに近い方";
+   const ev=[];
+   if(core)ev.push("分布：肩や太ももに近い方（近位優位）");
+   if(inA(m2.main,"力が入らない"))ev.push("力が入らない");
+   if(inA(D.func,"階段の上り下り"))ev.push("階段の上り下りに支障");
+   if(inA(m1.what,"立ち上がりにくい"))ev.push("立ち上がりにくい");
+   if(no("しびれ・感覚の鈍さ"))ev.push("感覚の鈍さは陰性");
+   push("近位筋優位の脱力パターン",core,ev,
+     "近位筋の徒手筋力、立ち上がり・階段動作、感覚障害の欠如、筋原性酵素");}
+
+  /* 突然発症・局所性のパターン */
+  {const core=!!(c.tempo&&c.tempo.indexOf("突然")>=0);
+   const ev=[];
+   if(core)ev.push("発症："+c.tempo);
+   if(c.side&&["右が強い","左が強い"].indexOf(c.side)>=0)ev.push("左右差："+c.side);
+   if(D.bg.risk&&D.bg.risk.length)ev.push("血管危険因子："+D.bg.risk.join("・"));
+   push("突然発症・局所性のパターン",core,ev,
+     "発症時刻の特定、症状の分布と左右差、血管危険因子・抗血栓薬の有無、発症時の状況");}
+
+  /* 先行感染・ワクチン後の急性〜亜急性経過 */
+  {const core=!!(D.bg.preInfection&&["あった","ワクチン接種のあとから"].indexOf(D.bg.preInfection)>=0);
+   const ev=[];
+   if(core)ev.push("症状の前の感染・予防接種："+D.bg.preInfection);
+   if(c.tempo&&c.tempo.indexOf("急に")>=0)ev.push("経過："+c.tempo);
+   if(inA(m2.main,"力が入らない")||sym("力が入らない"))ev.push("力が入らない");
+   if(yes("しびれ・感覚の鈍さ"))ev.push("しびれ・感覚の鈍さ");
+   push("先行感染・ワクチン後の急性〜亜急性経過",core,ev,
+     "症状の広がり方（上行性か）、腱反射の減弱・消失、呼吸筋・球症状、先行感染からの日数");}
+
+  /* 歩行障害・排尿・認知が揃うパターン */
+  {const core=sym("歩きにくい")||sym("転びやすい")||D.mods.indexOf(1)>=0;
+   const ev=[];
+   if(core)ev.push("歩行障害");
+   if(inA(D.bg.autonomic,"尿が近い・もれる・出にくい"))ev.push("排尿のトラブル");
+   if(yes("物忘れ・性格や行動の変化"))ev.push("物忘れ・性格や行動の変化");
+   push("歩行障害・排尿・認知が揃うパターン",core,ev,
+     "歩行様式（開脚・小刻み・すくみ）、3つの症状の出現順序と時間経過、認知機能の評価",3);}
+
+  /* 根拠の多い順に最大3つ。並べ過ぎるとかえって読む負担になるため絞る */
+  return out.sort((a,b)=>b.ev.length-a.ev.length).slice(0,3);
+}
+
 function doctorSheet(){
   const c=D.common;
   const rf=redFlags();
@@ -3683,6 +3941,15 @@ function doctorSheet(){
       if(v)rows+=`<div><b>${it.q.replace(/（.*?）/,"").replace(/？$/,"")}</b><br>${v}</div>`;});
     return rows?`<div style="margin:3px 0"><span class="g" style="color:var(--sub);font-weight:700">${MODS[id]}</span><div class="kv">${rows}</div></div>`:"";}).join("");
   const u=unconfirmedItems();
+  const pats=syndromePatterns();
+  const patBox=pats.length?`<div class="patbox">
+     <div class="plab">🧩 入力から見える症候パターン（所見のまとまり・診断ではありません）</div>
+     ${pats.map(p=>`<div class="pat">
+       <div class="pn">${esc(p.name)}</div>
+       <div class="pe"><b>根拠</b>：${p.ev.map(esc).join("／")}</div>
+       <div class="pa"><b>確認</b>：${esc(p.ask)}</div></div>`).join("")}
+     <div class="mini" style="margin-top:6px">※ 患者・家族の自己申告のみから所見の組み合わせを機械的に抽出したものです。診察所見・検査は含みません。病名の判断と除外は医師が行ってください。</div>
+   </div>`:"";
   const risks=[...D.bg.risk];
   let medline=D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"";
   const id4=SESSION.id;
@@ -3690,12 +3957,14 @@ function doctorSheet(){
    <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
    <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}</div>
 
-   <div class="sec"><div class="lab">主訴</div>${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}</div>
-   ${posSummary()?`<div class="sec"><div class="lab">陽性所見サマリ</div>${posSummary()}</div>`:""}
+   <div class="topbox">
+     <div class="cc">${c.trouble?esc(c.trouble):(D.symptoms.slice(0,3).join("・")||"—")}</div>
+     ${posSummary()?`<div style="margin-top:5px">${posSummary()}</div>`:""}
+   </div>
    ${rfBox}
    <div class="sec"><div class="lab">① 時間軸（発症・経過・順序）</div>
      ${timelineHtml()}
-     ${trajectoryChart()}
+     ${overviewChart()}${trajectoryChart()}
      ${sxOnsetTable()}
      ${(function(){
        const a=[...(c.aggravTags||[])];if(c.aggrav)a.push(c.aggrav);
@@ -3716,7 +3985,7 @@ function doctorSheet(){
 
    <div class="sec"><div class="lab">② 局在の手がかり（部位・分布・左右差）</div>
      <div class="kv"><div><b>左右差</b><br>${c.side||"未聴取"}</div></div>
-     ${modBlocks||'<span class="mini">未聴取</span>'}</div>
+     ${modBlocks}</div>
 
    <div class="sec"><div class="lab">③ 一緒に出ている症状（＋陽性 / −陰性 / ?未確認）</div>
      <div class="assoc">${assocGrouped()}</div></div>
@@ -3728,13 +3997,13 @@ function doctorSheet(){
      ${DAILY_GROUPS.map(g=>{const st=dStatus(g);
        const val=st==="sel"?dSel(g).map(it=>it.t).join("・"):st==="none"?'<span class="n">なし（申告）</span>':'<span class="u">未確認</span>';
        return `<div><span class="g">${g.g}:</span> ${val}</div>`;}).join("")}
-     ${(D.vis.side||D.vis.note)?`<div style="margin-top:3px"><span class="g">目の症状:</span> ${[D.vis.side&&D.vis.side!=="わからない"?D.vis.side:"",D.vis.note||""].filter(Boolean).join("／")}</div>`:""}</div>
+     ${(D.vis.side||D.vis.note)?`<div style="margin-top:3px"><span class="g">目の症状:</span> ${[D.vis.side&&D.vis.side!=="わからない"?D.vis.side:"",D.vis.note?esc(D.vis.note):""].filter(Boolean).join("／")}</div>`:""}</div>
 
    <div class="sec"><div class="lab">⑤ 背景（持病・薬剤・家族歴・免疫/感染・生活・環境・既往・アレルギー）</div>
      ${kvSec([
        ["血管リスク・持病",risks.length?risks.join("・"):null],
        ["薬剤",medline||null],
-       ["パーキンソニズム関連薬",D.bg.dopaDrug],
+       ["動作の遅さ・ふるえに関係しうる薬",D.bg.dopaDrug],
        ["自律神経症状",D.bg.autonomic&&D.bg.autonomic.length?D.bg.autonomic.join("・"):null],
        ["家族歴（似た症状）",D.bg.family],
        ["先行感染・ワクチン",D.bg.preInfection],
@@ -3750,12 +4019,14 @@ function doctorSheet(){
        ["既受診科",D.visited.length?D.visited.join("・"):null],
        ["受けた検査",D.tests||null]])}</div>
 
+   ${patBox}
+
    <div class="sec"><div class="lab">⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）</div>
-     ${u.length?("・"+u.join("<br>・")):'<span class="mini">特になし</span>'}</div>
+     ${u.length?`<div class="askbox">${"・"+u.join("<br>・")}</div>`:'<span class="mini">特になし</span>'}</div>
 
    <div class="sec"><div class="lab">⑧ 家族から見た変化 / 自由記載</div>
-     ${D.familyChange?`<div style="margin-bottom:5px">家族の観察：${D.familyChange}</div>`:""}
-     <div class="quote">${D.free||'<span class="mini">音声・自由記載なし</span>'}</div></div>
+     ${D.familyChange?`<div style="margin-bottom:5px">家族の観察：${esc(D.familyChange)}</div>`:""}
+     <div class="quote">${D.free?esc(D.free):'<span class="mini">音声・自由記載なし</span>'}</div></div>
 
    <div class="foot">本シートは患者・家族の自己申告を整理したものです。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。</div>
   </div>`;
@@ -3811,7 +4082,7 @@ function plainSheet(){
   L.push("");
   L.push("⑤ 背景");
   L.push(`  血管リスク・持病: ${D.bg.risk.length?D.bg.risk.join("・"):"—"}`);
-  L.push(`  薬剤: ${D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"—"}　パーキンソニズム関連薬: ${D.bg.dopaDrug||"—"}`);
+  L.push(`  薬剤: ${D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"—"}　動作の遅さ・ふるえに関係しうる薬: ${D.bg.dopaDrug||"—"}`);
   L.push(`  自律神経症状: ${D.bg.autonomic&&D.bg.autonomic.length?D.bg.autonomic.join("・"):"—"}`);
   L.push(`  先行感染・ワクチン: ${D.bg.preInfection||"—"}　妊娠・授乳: ${D.bg.pregnancy||"—"}`);
   L.push(`  家族歴（似た症状）: ${D.bg.family||"—"}　免疫/感染/腫瘍: ${D.bg.immune.length?D.bg.immune.join("・"):"—"}`);
@@ -3821,6 +4092,15 @@ function plainSheet(){
   L.push(`⑥ 既受診科: ${D.visited.length?D.visited.join("・"):"—"}`);
   L.push(`  受けた検査: ${D.tests||"—"}`);
   L.push("");
+  const pats=syndromePatterns();
+  if(pats.length){
+    L.push("◆ 入力から見える症候パターン（所見のまとまり・診断ではありません）");
+    pats.forEach(p=>{L.push(`  ・${p.name}`);
+      L.push(`      根拠: ${p.ev.join("／")}`);
+      L.push(`      確認: ${p.ask}`);});
+    L.push("  ※患者・家族の自己申告のみからの機械的な抽出です。診察所見・検査は含みません。");
+    L.push("");
+  }
   const u=unconfirmedItems();
   L.push("⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）");
   L.push(u.length?u.map(x=>"  ・"+x).join("\n"):"  特になし");
