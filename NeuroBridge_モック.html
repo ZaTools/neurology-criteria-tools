@@ -7,13 +7,15 @@
      既定を'none'にしたうえで必要な例外のみ許可しています。
      script-src/style-styleに'unsafe-inline'が必要な理由: ビルド工程がなく、
      onclick=""属性とインラインの<style>を多用しているため（nonce方式は使えない）。
-     ※ SAVE_ENDPOINT を設定して外部保存機能を使う場合は、下の connect-src に
-        その保存先のオリジンを追加してください（現状は空欄なので'none'）。
+     connect-src が 'self' なのは、自分自身を取り直して版を確認する（キャッシュで古い版が
+        表示され続けるのを防ぐ）ためです。外部への送信は引き続き遮断されています。
+     ※ SAVE_ENDPOINT を設定して外部保存機能を使う場合は、connect-src に
+        その保存先のオリジンを追加してください。
      ※ frame-ancestors（他サイトのiframeに埋め込まれるのを防ぐ＝クリックジャッキング対策）は
         <meta>では効かない仕様のため、実際にWeb公開する際はホスティング側の設定
         （HTTPレスポンスヘッダーの Content-Security-Policy か X-Frame-Options: DENY）で
         別途かけること。 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>NeuroBridge — 症状メモ（モック）</title>
 <script id="qrlib">//---------------------------------------------------------------------
 //
@@ -2369,6 +2371,7 @@ var qrcode = function() {
 
   .opts{display:grid;grid-template-columns:1fr;gap:10px}
   .opts.grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .opts.grid .wideopt{grid-column:1/-1}
   .opt{position:relative;border:2px solid var(--line);background:#fcfdff;border-radius:14px;
     padding:17px 16px 17px 52px;cursor:pointer;font-size:calc(17px * var(--fs));
     user-select:none;transition:.12s;min-height:62px;display:flex;align-items:center;gap:8px}
@@ -2720,6 +2723,11 @@ const VISITED = ["かかりつけ医","脳神経外科","眼科","整形外科",
    SAVE_ENDPOINT に保存先URL（Google Apps Script など）を入れると、
    利用者が同意した場合のみ完了時に送信します。空のままなら保存機能はオフ。 */
 const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る（※設定したら<head>のCSPのconnect-srcにもこのURLのオリジンを追加すること）
+/* ★デプロイのたびに必ず更新すること★
+   ブラウザのキャッシュで古い版が表示されていても気づけるように、
+   画面と医療者シートに版数を出し、下の checkForUpdate() で自動確認する。 */
+const APP_VERSION = "2026-08-31a";
+
 const SESSION = { id:"NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000), start:Date.now() };
 let _saved=false;
 /* 保存対象は「選択式の回答」のみ。自由記述（free/tests/medText/trouble/編集後文）は送信しない */
@@ -2785,7 +2793,7 @@ const SYMPTOMS = [
 const COMMON = [
   {k:"tempo",q:"どんなふうに始まりましたか？",sub:"いちばん近いもの（突然・徐々に・くり返す）",o:["突然（秒〜分で）","急に（時間〜数日で）","だんだん（週〜月で進む）","ゆっくり（年単位で進む）","出たり治ったりをくり返す","一度出て今は落ち着いた","わからない"]},
   {k:"course",q:"その後の変化は？",o:["悪くなってきている","変わらない","良くなったり悪くなったり","段階的に悪化","良くなってきた","わからない"]},
-  {k:"side",q:"左右の差はありますか？",sub:"どちら側が強いか",o:["右のほうが強い","左のほうが強い","左右で同じくらい","左右は関係ない（全身・真ん中）","わからない"]},
+  {k:"side",q:"左右の差はありますか？",sub:"体の右側と左側で、症状の強さに差があるか",o:["右のほうが強い","左のほうが強い","左右で同じくらい","体の左右は関係ない（めまい・のみこみなど）","わからない"]},
 ];
 
 /* === 一緒に出ている症状（局在の手がかり：部位ごとにグループ化） === */
@@ -2974,6 +2982,7 @@ function scrIntro(){return `<div class="card">
   </div>
   <div class="mini" style="margin:16px 0 0">文字の大きさ・読み上げ・1問ずつ表示は、画面上部のボタンでいつでも切り替えられます。</div>
   <div class="note">このツールは診断や治療を行うものではありません。病名は判断しません。診察を待つ間の準備としてお使いください。体調の変化など気がかりなことがあれば、受付・スタッフにお知らせください。</div>
+  <div class="mini" style="text-align:right;margin-top:8px;opacity:.7">版 ${APP_VERSION}</div>
 </div>`;}
 function infoRow(e,t){return `<div style="display:flex;align-items:center;gap:10px;font-size:calc(15px*var(--fs));
   background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:11px 13px">
@@ -3550,7 +3559,15 @@ function qhead(n,q,sub){const say=stripHtml(q)+(sub?"。"+stripHtml(sub):"");
   <span class="qtext">${q}${sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${sub}</span>`:""}</span>${spkBtn(say)}</div>`;}
 /* 文字列生成時にタグを除去（読み上げ用） */
 function stripHtml(h){return String(h).replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();}
-function opt(sel,label,onclick,multi){return `<button type="button" aria-pressed="${!!sel}" class="opt ${multi?'multi':''} ${sel?'sel':''}" onclick="${onclick}">${label}</button>`;}
+function opt(sel,label,onclick,multi){
+  /* 長い選択肢は2列に押し込むと数文字ずつ折り返されて読めなくなるので、
+     一定の長さを超えたものだけ横幅いっぱいを使わせる（全質問に共通で効く） */
+  const plain=String(label).replace(/<[^>]*>/g,"");
+  /* 幅412pxの2列表示では1行あたり約5文字しか入らない。
+     閾値を実測で比較したところ8文字が最適（折り返し65→46個に減り、
+     全幅1行のほうが2列で2〜3行に割れるより画面も短くなる）。 */
+  const wide=plain.length>=8?" wideopt":"";
+  return `<button type="button" aria-pressed="${!!sel}" class="opt ${multi?'multi':''} ${sel?'sel':''}${wide}" onclick="${onclick}">${label}</button>`;}
 
 function setCommon(k,v){D.common[k]=v;render();}
 function setM(id,k,v){D.m[id][k]=v;render();}
@@ -4020,7 +4037,7 @@ function buildSummaryParts(){
       if(m.diurnal&&m.diurnal!=="わからない")f+=`朝と夕方の様子：${m.diurnal}。`;
       if(m.lid&&m.lid!=="下がらない")f+=`まぶたは${m.lid}。`;}
     if(f)parts.push({t:f,ph:"module",mod:id});});
-  if(c.side&&!["左右は関係ない（全身・真ん中）","わからない"].includes(c.side))parts.push({t:`左右差は${c.side}。`,ph:"common"});
+  if(c.side&&!["体の左右は関係ない（めまい・のみこみなど）","わからない"].includes(c.side))parts.push({t:`左右差は${c.side}。`,ph:"common"});
   /* 一緒に出ている症状 */
   const pos=ASSOC.filter(k=>D.assoc[k]==="y");
   if(pos.length)parts.push({t:"一緒に出ている症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("・")+"あり。",ph:"assoc"});
@@ -4129,7 +4146,7 @@ function posSummary(){
   if(on)seg.push(on+"発症");
   if(c.tempo&&c.tempo!=="わからない")seg.push(c.tempo.replace(/（.*?）/,""));
   if(c.course&&c.course!=="わからない")seg.push(c.course);
-  if(c.side&&!["左右は関係ない（全身・真ん中）","わからない"].includes(c.side))seg.push(c.side);
+  if(c.side&&!["体の左右は関係ない（めまい・のみこみなど）","わからない"].includes(c.side))seg.push(c.side);
   if(D.mods.includes(1)&&D.m[1].fall&&D.m[1].fall!=="なし")seg.push("転倒"+D.m[1].fall);
   if(D.mods.includes(2)&&D.m[2].prox&&D.m[2].prox!=="わからない")seg.push("分布:"+D.m[2].prox);
   const diu=(D.m[3]&&D.m[3].diurnal);
@@ -4303,7 +4320,7 @@ function doctorSheet(){
   const id4=SESSION.id;
   return `<div class="sheet">
    <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
-   <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}</div>
+   <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}　版: ${APP_VERSION}</div>
 
    <div class="topbox">
      <div class="cc">${c.trouble?esc(c.trouble):(D.symptoms.slice(0,3).join("・")||"—")}</div>
@@ -4522,9 +4539,33 @@ window.addEventListener("beforeunload",e=>{
   e.preventDefault();e.returnValue="";
 });
 
+/* 自分自身をキャッシュ無効で取り直し、版が違えば再読み込みを促す。
+   file:// で開いたときや通信できないときは黙って何もしない（失敗しても実害なし）。 */
+function showUpdateBar(){
+  if(document.getElementById("updbar"))return;
+  const d=document.createElement("div");d.id="updbar";d.className="no-print";
+  d.setAttribute("style","position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--brand-d);color:#fff;"+
+    "padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:calc(14px*var(--fs))");
+  d.innerHTML=`<span>新しい版があります（表示中は古い版です）</span>
+    <button type="button" onclick="LEAVING=true;location.reload(true)" style="padding:8px 14px;border:none;border-radius:9px;background:#fff;color:var(--brand-d);font-weight:800;cursor:pointer;font-family:inherit">最新にする</button>`;
+  document.body.appendChild(d);
+}
+function checkForUpdate(){
+  try{
+    if(location.protocol==="file:")return;
+    fetch(location.pathname+"?_="+Date.now(),{cache:"no-store"})
+      .then(r=>r.ok?r.text():null)
+      .then(t=>{if(!t)return;
+        const m=t.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+        if(m&&m[1]!==APP_VERSION)showUpdateBar();})
+      .catch(()=>{});
+  }catch(e){}
+}
+
 restoreState().then(()=>{
   try{history.replaceState(histState(),"",location.href);}catch(e){}
   render();
+  checkForUpdate();
 });
 </script>
 </body>
