@@ -2699,6 +2699,9 @@ var qrcode = function() {
     .sheet .sec,.sheet .topbox,.sheet .patbox,.sheet .askbox,.sheet .blk,.sheet .pat{
       break-inside:avoid;page-break-inside:avoid}
     .sheet .kv{grid-template-columns:1fr}
+    /* 印刷では「項目：値」を1行に（2026-09-11 見出しを①〜⑨に組み直した分の紙面をここで吸収） */
+    .sheet .kv>div br{display:none}
+    .sheet .kv>div b::after{content:"："}
     .sheet .patbox{page-break-inside:avoid;break-inside:avoid;padding:6px 9px}
     .sheet .patbox .plab{font-size:10.5px!important}
     .sheet .pat .pn{font-size:10px!important} .sheet .pat .pe,.sheet .pat .pa{font-size:9.5px!important}
@@ -2762,31 +2765,35 @@ var qrcode = function() {
 
 <script>
 /* ===== 状態（画面内メモリのみ・保存しない） ===== */
-const D = { who:null, ageBand:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{},3:{}},
-            assoc:{}, func:[], daily:[], dailyNone:{}, vis:{}, sx:{},
-            bg:{risk:[],med:null,medText:"",family:null,immune:[],lifestyle:[],exposure:[],allergy:"",history:"",
+const D = { who:null, ageBand:null, symptoms:[], mods:[], primary:null, firstSx:null, common:{},
+            m:{1:{},2:{},3:{},4:{},5:{},6:{}},
+            assoc:{}, func:[], collateral:[], vis:{}, sx:{},
+            bg:{risk:[],medChange:null,medText:"",drugKinds:[],family:null,famPheno:[],famRel:[],
+                immune:[],lifestyle:[],history:"",prevDx:"",prevDxNone:false,
                 autonomic:[],dopaDrug:null,preInfection:null,pregnancy:null},
             visited:[], tests:"", free:"",
             /* コンサルトモード（医療者用）の入力。患者向けの項目とは混ぜない。
                モードそのものは D に持たない（下の MODE 変数）＝引き継ぎQRで
                患者側の端末にモードが移ってしまわないようにするため。 */
             consult:{from:{dept:null,doctor:"",place:null},ask:[],askOther:"",when:null,
-              sx:{sel:[],main:null},since:null,onset:null,course:null,dist:null,
+              sx:{sel:[],main:null},since:null,onset:null,course:null,dist:null,adl:null,
               exam:{},examNote:{},drugs:"",drugChange:null,history:"",tests:[],testNote:"",memo:""} };
 /* ============================================================================
    ▼▼▼ ここから【設定ブロック】：質問文と選択肢はすべてこの範囲にあります ▼▼▼
    文言の調整はここだけを見ればできます。中身の一覧：
      ONSET_OPTS(発症時期) / SEV_OPTS(つらさ) / TREND_OPTS(その後の変化)
      EVENT_TAGS(悪くなった時の出来事) / AGES(年代) / VISITED(受診した科)
-     WHO(入力者) / SYMPTOMS(気になる症状) / COMMON(全体の様子=時間軸)
-     ASSOC_GROUPS(一緒に出ている症状) / FUNC(機能への影響) / DAILY_GROUPS(ふだんの困りごと)
-     QM(症候別モジュール①②③) / BG_*(背景) / OPT_*(その他の単発の選択肢)
-     AGGRAV_TAGS・RELIEF_TAGS(悪化/軽減のきっかけ)
+     WHO(入力者) / SYMPTOMS(気になる症状) / COMMON(始まりの速さ・続き方・左右差)
+     ASSOC_GROUPS(一緒に出ている症状) / ASSOC_PLAN(主訴ごとに優先して聞く同時症状)
+     FUNC(生活への影響) / QM(症候別モジュール①〜⑥) / BG_*(背景) / OPT_*(その他の単発の選択肢)
+     QMETA(質問ごとの目的・分類。表示には使わない)
 
    ★編集するときの注意★
    ・選択肢の文言を変えると、その回答を使っている判定
-     （syndromePatterns / redFlags / unconfirmedItems / buildSummaryParts）も
+     （syndromePatterns / redFlags / unconfirmedItems / buildSummaryParts / SHOW_IF）も
      あわせて直す必要があります。文言が判定の目印を兼ねているためです。
+   ・どの質問を誰に出すかは、設定ブロックの直後の SHOW_IF に1か所で書いてあります。
+     「念のため全員に聞く」質問は足さないでください（2026-09-11 方針）。
    ・引き継ぎQRは選択肢の「並び順」を番号として使っています。順番を入れ替えたり
      途中に項目を足すと古いQRと意味がずれますが、SCHEMA_SIG が自動で変化して
      古いQRは「読み込めません」と安全に弾かれるので、番号の付け替えは不要です。
@@ -2795,7 +2802,10 @@ const D = { who:null, ageBand:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{
 const ONSET_OPTS=[["今日",0.03],["数日前",0.15],["1〜2週間前",0.4],["1か月前",1],
   ["2〜3か月前",2.5],["半年前",6],["1年前",12],["2年以上前",30],["わからない",null]];
 const SEV_OPTS=["軽い","中くらい","重い"];
-const TREND_OPTS=["だんだん強くなる","出たり治ったり（波がある）","変わらない","軽くなってきた"];
+/* その後の変化は「向き」だけを聞く。出たり消えたり（波・発作）は COMMON の pattern で聞く（重複をなくした） */
+const TREND_OPTS=["強くなっている","段階的に強くなった","変わらない","軽くなってきた","わからない"];
+/* 1か月以内に始まった症状（症状ごとに始まりの速さを聞く対象） */
+const RECENT_BUCKETS=["今日","数日前","1〜2週間前","1か月前"];
 /* 悪くなった時の「できごと」の目印（病名・診断には触れない、機能的な出来事のみ） */
 const EVENT_TAGS=["転倒した","杖・歩行器を使い始めた","車椅子になった","入院した","急に強くなった","動けなくなった","一人でできなくなった","その他"];
 /* 症状ごとの色分け（カテゴリカル配色・固定順。色だけに頼らず凡例とラベルを併用） */
@@ -2819,7 +2829,7 @@ const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る
 /* ★デプロイのたびに必ず更新すること★
    ブラウザのキャッシュで古い版が表示されていても気づけるように、
    画面と医療者シートに版数を出し、下の checkForUpdate() で自動確認する。 */
-const APP_VERSION = "2026-09-10c";
+const APP_VERSION = "2026-09-11a";
 
 const SESSION = { id:"NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000), start:Date.now() };
 let _saved=false;
@@ -2828,7 +2838,7 @@ let _saved=false;
    自由記述に使うキー名を機械的に落とす形で担保する（項目を足したときの取りこぼし防止）。
    同意文で「自由記述は保存されません」と約束しているので、ここが破れると約束が嘘になる。 */
 const PAYLOAD_TEXT_KEYS=["note","text","memo","free","trouble","aggrav","relief",
-  "medText","allergy","history","tests","editedSummary"];
+  "medText","allergy","history","prevDx","tests","editedSummary"];
 function stripText(v){
   if(Array.isArray(v))return v.map(stripText);
   if(v&&typeof v==="object"){
@@ -2845,21 +2855,21 @@ function buildPayload(){
     createdAt:new Date().toISOString(),
     durationSec:Math.round((Date.now()-SESSION.start)/1000),
     who:D.who, ageBand:D.ageBand,
-    symptoms:D.symptoms, mods:D.mods,
-    timeline:{onset:c.onset||null, onsetMonth:c.onsetMonth||null, onsetDate:c.onsetDate||null,
-      tempo:c.tempo||null, episodeDur:c.episodeDur||null, worsenMonth:c.worsenMonth||null, worsenDate:c.worsenDate||null,
-      course:c.course||null, side:c.side||null, diurnal:(D.m[3]&&D.m[3].diurnal)||null,
+    symptoms:D.symptoms, mods:D.mods, primary:primarySym(),
+    timeline:{onsetMonth:c.onsetMonth||null, onsetDate:c.onsetDate||null,
+      tempo:c.tempo||null, pattern:c.pattern||null, freq:c.freq||null, episodeDur:c.episodeDur||null,
+      course:mainCourse()||null, side:c.side||null, diurnal:(D.m[3]&&D.m[3].diurnal)||null,
       relapse:c.relapse||null, relapseRecover:c.relapseRecover||null, visitBucket:c.visitBucket||null},
     modules:stripText(D.m), // 各モジュールの選択肢
     sx:stripText(D.sx),     // 症状ごとの発症時期・程度・変化（出来事の自由記述は落とす）
     assoc:D.assoc,          // はい/いいえ/未確認
     func:D.func,
-    daily:D.daily,          // ふだんの困りごと（選択式・id）
-    dailyNone:D.dailyNone,  // 領域ごとの「該当なし」
-    vis:{side:(D.vis&&D.vis.side)||null},  // 片眼/両眼のみ（自由記述は送らない）
-    bg:{risk:D.bg.risk, med:D.bg.med, family:D.bg.family, immune:D.bg.immune,
-        lifestyle:D.bg.lifestyle, exposure:D.bg.exposure,
-        autonomic:D.bg.autonomic, dopaDrug:D.bg.dopaDrug, preInfection:D.bg.preInfection, pregnancy:D.bg.pregnancy}, // 自由記述(薬名/アレルギー/既往)は除外
+    collateral:D.collateral,
+    vis:{side:(D.vis&&D.vis.side)||null},  // 片目/両目のみ（自由記述は送らない）
+    bg:{risk:D.bg.risk, medChange:D.bg.medChange, drugKinds:D.bg.drugKinds, family:D.bg.family,
+        famPheno:D.bg.famPheno, famRel:D.bg.famRel, immune:D.bg.immune, lifestyle:D.bg.lifestyle,
+        autonomic:D.bg.autonomic, dopaDrug:D.bg.dopaDrug, preInfection:D.bg.preInfection, pregnancy:D.bg.pregnancy,
+        prevDxAnswered:!!(D.bg.prevDx||D.bg.prevDxNone)}, // 自由記述(薬名/既往/言われた病名)は除外
     visited:D.visited,      // tests(検査自由記述)は除外
     hand:D.hand||null,
     docFeedback:D.docFeedback||null,   // 医師の1タップ評価（有用性の検証用）
@@ -2876,11 +2886,12 @@ function saveSubmission(){
     _saved=true;
   }catch(e){/* 失敗してもメモ作成は続行 */}
 }
-const MODS = {1:"歩行障害・転倒", 2:"脱力・しびれ", 3:"複視・眼瞼下垂・易疲労性"};
+const MODS = {1:"歩行障害・転倒", 2:"脱力・しびれ", 3:"複視・眼瞼下垂・易疲労性", 4:"めまい", 5:"頭痛", 6:"振戦"};
 /* 患者・家族向けのやさしい呼び名（医療語はシート側のみで使用） */
-const MODS_PT = {1:"歩きにくい・転びやすい", 2:"力が入らない・しびれる", 3:"目・まぶた・疲れやすさ"};
+const MODS_PT = {1:"歩きにくい・転びやすい", 2:"力が入らない・しびれる", 3:"目・まぶた・疲れやすさ",
+  4:"めまい・ふらつき", 5:"頭痛", 6:"ふるえ"};
 /* 任意項目の折りたたみ状態 */
-const UI={bgMore:false,commonMore:false};
+const UI={bgMore:false,assocMore:false};
 function toggleUI(k){UI[k]=!UI[k];render();}
 function moreToggle(k,label){return `<div style="text-align:center;margin:14px 0 4px">
   <button class="no-print" onclick="toggleUI('${k}')" style="border:1.5px solid var(--brand);background:${UI[k]?'var(--brand-l)':'#fff'};color:var(--brand-d);border-radius:30px;padding:10px 20px;font-size:calc(14px*var(--fs));font-weight:800;cursor:pointer">${UI[k]?'▲ とじる':'＋ '+label}</button></div>`;}
@@ -2888,29 +2899,56 @@ function moreToggle(k,label){return `<div style="text-align:center;margin:14px 0
 const WHO = [["self","本人","🙂"],["family","家族","👪"],["care","介護者","🤝"],
              ["staff","受付・スタッフ","🧑‍💼"],["med","医療者","🩺"],["rehab","リハビリ職","💪"],["other","その他","✏️"]];
 
+/* [症状名, モジュール番号(0=なし), 絵文字]。
+   意識消失・けいれんなど明らかな救急案件は用途外なので入口を作らない（2026-09-11 ユーザー判断）。
+   もの忘れのモジュールは作らない（同）。 */
 const SYMPTOMS = [
   ["歩きにくい",1,"🚶"],["転びやすい",1,"⚠️"],["力が入らない",2,"💪"],["しびれる・感覚が鈍い",2,"✋"],
-  ["手足がやせる・ぴくつく",2,"〰️"],["飲み込みにくい・むせる",0,"🍵"],["ろれつが回らない",0,"💬"],
+  ["手足がやせる・ぴくつく",2,"〰️"],["手足がふるえる",6,"📳"],["飲み込みにくい・むせる",0,"🍵"],["ろれつが回らない",0,"💬"],
   ["ものが二重に見える",3,"👀"],["まぶたが下がる",3,"😴"],["視力が落ちた・目が痛い",0,"👁"],
-  ["めまい・ふらつき",0,"🌀"],["疲れると悪くなる・夕方につらい",3,"🔋"],
+  ["めまい・ふらつき",4,"🌀"],["頭が痛い",5,"🤕"],["疲れると悪くなる・夕方につらい",3,"🔋"],
   ["家族から見て動き・表情が変わった",0,"🔎"],["その他",0,"➕"],
 ];
 
-/* === 時間軸（いつから・突然か進行性か発作性か・経過） === */
+/* === 時間軸：始まりの速さ（tempo）と続き方（pattern）を分けて聞く ===
+   tempo は「いちばん困っている症状」について聞く（画面で症状名を差し込む）。
+   境目は病因の軸に合わせた：数時間／数日（血管性の進行か炎症か）、数週／数か月（亜急性か慢性か）。
+   経過のパターン（ずっと・出たり消えたり・治まった）は速さとは別の軸なので pattern に分けた。
+   全体の「その後の変化」（course）は症状ごとの trend と重複していたので削除（mainCourse() で導く）。 */
 const COMMON = [
-  {k:"tempo",q:"どんなふうに始まりましたか？",sub:"いちばん近いもの（突然・徐々に・くり返す）",o:["突然（秒〜分で）","急に（時間〜数日で）","だんだん（週〜月で進む）","ゆっくり（年単位で進む）","出たり治ったりをくり返す","一度出て今は落ち着いた","わからない"]},
-  {k:"course",q:"その後の変化は？",o:["悪くなってきている","変わらない","良くなったり悪くなったり","段階的に悪化","良くなってきた","わからない"]},
+  {k:"tempo",q:"どれくらいの速さで始まりましたか？",sub:"始まってから、今の強さ（治まった方は、いちばん強かったとき）になるまでの時間",
+   o:["数秒〜数分で","数時間で","数日で","数週間で","数か月かけて","年単位でゆっくり","わからない"]},
+  {k:"pattern",q:"その症状は、ずっと続いていますか？",
+   o:["ずっと続いている","出たり消えたりする（発作のように・波がある）","一度出て、今は治まっている","わからない"]},
   {k:"side",q:"左右の差はありますか？",sub:"体の右側と左側で、症状の強さに差があるか",o:["右のほうが強い","左のほうが強い","左右で同じくらい","体の左右は関係ない（めまい・のみこみなど）","わからない"]},
 ];
+const TEMPO_ACUTE=["数秒〜数分で","数時間で"], TEMPO_SUB=["数日で","数週間で"], TEMPO_CHRONIC=["数か月かけて","年単位でゆっくり"];
 
 /* === 一緒に出ている症状（局在の手がかり：部位ごとにグループ化） === */
 const ASSOC_GROUPS = [
-  {g:"目・顔のうごき", items:["目が上下に動きにくい","顔がゆがむ・動きにくい","視力が落ちた・目が痛い"]},
-  {g:"話す・飲み込む・息", items:["ろれつが回りにくい","飲み込みにくさ・むせ","息苦しさ"]},
+  {g:"目・顔のうごき", items:["ものが二重に見える","見える範囲が欠ける（片側が見えない）","顔がゆがむ・動きにくい","視力が落ちた・目が痛い"]},
+  {g:"話す・飲み込む・息", items:["ろれつが回りにくい","言葉が出ない・言い間違える","飲み込みにくさ・むせ","息苦しさ"]},
   {g:"動き・ふるえ", items:["安静にしていても手がふるえる","動作が遅い・小さくなった","表情が乏しい・声が小さい","筋肉がやせる・ぴくつく"]},
-  {g:"感覚", items:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感"]},
+  {g:"感覚・痛み", items:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感","首・腰・背中の痛み（手足に響く）","頭痛"]},
   {g:"頭のはたらき・睡眠・その他", items:["物忘れ・性格や行動の変化","夢で大声・手足が動く（睡眠中）","においが分かりにくい","吐き気・しゃっくりが続く"]},
 ];
+/* 主訴ごとに「優先して聞く同時症状」。ここに無い項目は「ほかの症状も確認する（任意）」に畳む。
+   局在を絞るのに効く項目だけを先に聞き、全員に16〜20項目を並べない（2026-09-11）。
+   acute は「数秒〜数分／数時間で」始まったとき、sub は「数日／数週間」、chronic は「数か月／年単位」。 */
+const ASSOC_PLAN = {
+  focalAcute:["顔がゆがむ・動きにくい","ろれつが回りにくい","言葉が出ない・言い間違える","見える範囲が欠ける（片側が見えない）","ものが二重に見える","しびれ・感覚の鈍さ","頭痛"],
+  nmSub:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感","飲み込みにくさ・むせ","息苦しさ","顔がゆがむ・動きにくい","ものが二重に見える","首・腰・背中の痛み（手足に響く）"],
+  weakChronic:["ろれつが回りにくい","飲み込みにくさ・むせ","息苦しさ","筋肉がやせる・ぴくつく","しびれ・感覚の鈍さ","首・腰・背中の痛み（手足に響く）"],
+  numbChronic:["筋肉がやせる・ぴくつく","胴体・脚に帯のようなしめつけ感","首・腰・背中の痛み（手足に響く）"],
+  gait:["動作が遅い・小さくなった","安静にしていても手がふるえる","物忘れ・性格や行動の変化","しびれ・感覚の鈍さ","夢で大声・手足が動く（睡眠中）","飲み込みにくさ・むせ","ろれつが回りにくい"],
+  bulbar:["息苦しさ","飲み込みにくさ・むせ","ろれつが回りにくい","顔がゆがむ・動きにくい"],
+  dizzy:["ろれつが回りにくい","ものが二重に見える","しびれ・感覚の鈍さ","頭痛"],
+  vision:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感","吐き気・しゃっくりが続く","頭痛"],
+  move:["動作が遅い・小さくなった","表情が乏しい・声が小さい","安静にしていても手がふるえる","物忘れ・性格や行動の変化","夢で大声・手足が動く（睡眠中）"],
+  tremor:["動作が遅い・小さくなった","表情が乏しい・声が小さい","においが分かりにくい","夢で大声・手足が動く（睡眠中）"],
+  headache:["見える範囲が欠ける（片側が見えない）","ものが二重に見える","しびれ・感覚の鈍さ","言葉が出ない・言い間違える"],
+  generic:["しびれ・感覚の鈍さ","ろれつが回りにくい","飲み込みにくさ・むせ","ものが二重に見える","物忘れ・性格や行動の変化","頭痛"]
+};
 const ASSOC = ASSOC_GROUPS.flatMap(g=>g.items);
 
 /* 同じ症状の表現を対応付け、最初の選択を後続の問診・出力でも再利用する。
@@ -2920,16 +2958,21 @@ const SYMPTOM_ASSOC = {
   "ろれつが回らない":"ろれつが回りにくい",
   "しびれる・感覚が鈍い":"しびれ・感覚の鈍さ",
   "手足がやせる・ぴくつく":"筋肉がやせる・ぴくつく",
-  "視力が落ちた・目が痛い":"視力が落ちた・目が痛い"
+  "視力が落ちた・目が痛い":"視力が落ちた・目が痛い",
+  "ものが二重に見える":"ものが二重に見える",
+  "頭が痛い":"頭痛"
 };
-/* 詳細・生活の質問にある同義の回答も、訂正後に取り残さない。 */
-const MODULE_ASSOC = {"しびれ・感覚の鈍さ":["しびれ・鈍さ"],"筋肉がやせる・ぴくつく":["筋肉がやせてきた","ぴくぴくとひきつる"]};
-const DAILY_ASSOC = {"しびれ・感覚の鈍さ":["numb"]};
+/* くわしく（モジュール）の同義の回答も、訂正後に取り残さない。[モジュール番号, main の値] */
+const MODULE_ASSOC = {"しびれ・感覚の鈍さ":[[2,"しびれ・鈍さ"]],
+  "筋肉がやせる・ぴくつく":[[2,"筋肉がやせてきた"],[2,"ぴくぴくとひきつる"]],
+  "ものが二重に見える":[[3,"物が二重に見える"]]};
+/* 症状を選んだら、そのモジュールの「主な症状」にも反映する（同じことを2回聞かない） */
+const SYMPTOM_MODMAIN = {"力が入らない":[2,"力が入らない"],"しびれる・感覚が鈍い":[2,"しびれ・鈍さ"],
+  "ものが二重に見える":[3,"物が二重に見える"],"まぶたが下がる":[3,"まぶたが下がる"]};
 function linkedSymptoms(nm){return D.symptoms.filter(s=>SYMPTOM_ASSOC[s]===nm);}
 function otherLinkedAnswers(nm){
   const out=[];
-  if(D.mods.includes(2))(MODULE_ASSOC[nm]||[]).forEach(v=>{if((D.m[2].main||[]).includes(v))out.push("くわしく："+v);});
-  (DAILY_ASSOC[nm]||[]).forEach(id=>{if(D.daily.includes(id))out.push("生活と困りごと："+dItem(id).t);});
+  (MODULE_ASSOC[nm]||[]).forEach(([m,v])=>{if(D.mods.includes(m)&&((D.m[m]||{}).main||[]).includes(v))out.push("くわしく："+v);});
   return out;
 }
 function hasLinkedAnswer(nm){return linkedSymptoms(nm).length>0||otherLinkedAnswers(nm).length>0;}
@@ -2956,78 +2999,112 @@ function conflictNotice(){
 }
 let ASSOC_EDIT=null;
 
-/* === 機能への影響（歩行・嚥下・排尿・認知・ADL） === */
+/* === 生活への影響（歩行・嚥下・排尿・認知・ADL） ===
+   「ふだんの困りごと」（感覚・気分・疲れやすさの9項目）は、きりがなくなるので外した（2026-09-11 ユーザー判断）。
+   「電池切れのように動けなくなる」だけモジュール③の主な症状へ移した。 */
 const FUNC = ["一人で歩く","外出・買い物","階段の上り下り","食事・飲み込み",
   "トイレ（排尿・排便）","入浴・着替え","字を書く・ボタン・はし","会話","仕事・家事","物事の段取り・記憶"];
+/* 見た人・動画（ふるえ・睡眠中の動き・発作のような様子・転倒は、本人の説明だけでは足りない） */
+const OPT_COLLATERAL=["見た人が今日一緒に来ている","見た人はいるが、今日は来ていない","動画がある","見た人はいない"];
 
-/* === ふだんの困りごと（感覚・気分・疲労・排尿・認知の複数領域。短い見出し＋補足） ===
-   各項目は id で管理（文言を変えても判定が壊れないように）。t=見出し / sub=補足 */
-const DAILY_GROUPS = [
-  {g:"感覚の不調", e:"✋", key:"sensory", items:[
-    {id:"numb", t:"手足がしびれる"},
-    {id:"vis",  t:"画面や文字が見えにくい", sub:"パソコンの画面、文字などが見えにくくなった"},
-    {id:"temp", t:"お湯の温度が分かりにくい", sub:"シャワーやお風呂の湯の温度が分かりにくい"}]},
-  {g:"気分の不調", e:"😔", key:"mood", items:[
-    {id:"anx",   t:"漠然とした不安がある"},
-    {id:"misun", t:"やる気がないと誤解される"},
-    {id:"start", t:"日常の活動に取りかかれない", sub:"出勤、通学、買いものなど"},
-    {id:"down",  t:"気が滅入って行く気が起こらない", sub:"仕事や学校に行く気が起こらない"}]},
-  {g:"疲れやすさ", e:"🔋", key:"fatigue", items:[
-    {id:"battery",   t:"使っていると電池が切れたように動けなくなる", sub:"休むと少し戻る"},
-    {id:"getup",     t:"疲れると起き上がるのも難しい"}]},
+/* === 人体図（部位・左右差をタップ）。モジュール②の「場所」に使う ===
+   ラベルはそのまま QM[2].area の選択肢（＝引き継ぎの辞書）になる。 */
+const BODY_REGIONS=[
+ {id:"face", label:"顔",   shape:`<circle cx="100" cy="34" r="24"/>`},
+ {id:"trunk",label:"体幹（おなか・背中）", shape:`<rect x="72" y="62" width="56" height="98" rx="12"/>`},
+ {id:"armR", label:"右腕", shape:`<rect x="40" y="66" width="24" height="86" rx="11"/>`},
+ {id:"armL", label:"左腕", shape:`<rect x="136" y="66" width="24" height="86" rx="11"/>`},
+ {id:"handR",label:"右手先",shape:`<circle cx="52" cy="166" r="16"/>`},
+ {id:"handL",label:"左手先",shape:`<circle cx="148" cy="166" r="16"/>`},
+ {id:"legR", label:"右脚", shape:`<rect x="74" y="164" width="24" height="120" rx="11"/>`},
+ {id:"legL", label:"左脚", shape:`<rect x="102" y="164" width="24" height="120" rx="11"/>`},
+ {id:"footR",label:"右足先",shape:`<ellipse cx="84" cy="296" rx="16" ry="13"/>`},
+ {id:"footL",label:"左足先",shape:`<ellipse cx="116" cy="296" rx="16" ry="13"/>`},
 ];
-const DAILY_ITEMS = DAILY_GROUPS.flatMap(g=>g.items.map(it=>({...it,key:g.key,gname:g.g})));
-function dItem(id){return DAILY_ITEMS.find(x=>x.id===id);}
-function dSel(g){return g.items.filter(it=>D.daily.includes(it.id));}      // 選択された項目
-function dStatus(g){return dSel(g).length?"sel":(D.dailyNone[g.key]?"none":"unasked");}
-
-/* === 症候別モジュール（どこが・何ができないか） === */
-/* 各項目に cat（見出し用のグループ名）を付け、scrModule() で同じ cat が続く間はまとめて表示する。
-   質問・選択肢の数は増やさず、並びだけを整理。
-   内部的には LQQTSFA（部位=場所・まぶたの様子／性状=歩き方の様子・症状の性質／時間経過・状況=時間による変化／
-   因子=これまでの対処／随伴=転倒について）を意識して分類しているが、cat の表示文言そのものは
-   非医療者にも分かるよう、あえて平易な言葉だけにしている（「性状」「随伴」等の用語は画面には出さない）。 */
+const AREA_GLOVE="手足の先（手袋・くつ下のように）";
+const BODY_AREA_LABELS=BODY_REGIONS.map(r=>r.label).concat([AREA_GLOVE]);
+/* 近い方／先の方は「やりにくい動作」から導く（抽象的な問いは答えにくいため 2026-09-11 に置き換え） */
+const ACTS_PROX=["腕を上げる・髪を洗う","しゃがんで立つ・階段を上る"];
+const ACTS_DIST=["ペットボトルのふた・ボタン・箸","字を書く","つま先が引っかかる・スリッパが脱げる"];
+/* === 症候別モジュール（どこが・何ができないか） ===
+   cat＝見出し。sec:"adl" は医療者シートの「ADLへの影響」、sec:"trig" は「増悪・軽快因子」に出す。
+   表示の条件は SHOW_IF（"m番号.キー"）。 */
 const QM = {
  1:[
-  {k:"what",cat:"歩き方の様子",q:"歩くときに起きていることは？",sub:"あてはまるものすべて",multi:true,o:["ふらつく","足が出ない・すくむ","片足を引きずる","体が傾く","つまずきやすい","階段がこわい","立ち上がりにくい"]},
+  {k:"what",cat:"歩き方の様子",q:"歩くときに起きていることは？",sub:"あてはまるものすべて",multi:true,
+   o:["ふらつく","足が出ない・すくむ","片足を引きずる","体が傾く","つまずきやすい","階段がこわい","立ち上がりにくい",
+      "暗い所・目を閉じるとふらつく","歩くと足がしびれ・痛み、休むと治まる","膝・腰などの痛みで歩きにくい"]},
+  {k:"aid",cat:"歩き方の様子",sec:"adl",q:"いまの歩き方に近いものは？",
+   o:["普通に歩ける","長い距離は難しい","手すり・つかまりが必要","杖を使う","歩行器・シルバーカーを使う","車いすを使う","介助がないと歩けない"]},
   {k:"fall",cat:"転倒について",q:"転んだことはありますか？",o:["なし","1〜2回","3回以上","数えきれない"]},
   {k:"falldir",cat:"転倒について",q:"転び方の傾向は？",o:["前のめり","後ろ向き","横向き","つまずいて","一定しない","わからない"]},
   {k:"fallinj",cat:"転倒について",q:"転んでケガ・骨折・頭を打ったことは？",sub:"あてはまるものすべて",multi:true,o:["頭を打った","骨折した","打撲・すり傷","出血した","ケガはない"]},
  ],
  2:[
-  {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた","ぴくぴくとひきつる"]},
-  {k:"prox",cat:"場所",q:"力が入りにくい・症状が強いのは？",sub:"からだのどのあたりか",o:["肩や太ももに近い方","手足の先","両方","わからない"]},
-  {k:"area",cat:"場所",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:["顔","片腕","両腕","片脚","両脚","体幹","手足の先（手袋・くつ下のように）"]},
+  {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて（最初に選んだ症状は反映済みです）",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた","ぴくぴくとひきつる"]},
+  {k:"area",cat:"場所",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:BODY_AREA_LABELS},
+  {k:"spread",cat:"場所",q:"最初の場所から広がっていますか？",o:["広がっていない","足先から上へ","手から足へ（足から手へ）","片側から反対側へ","わからない"]},
+  {k:"acts",cat:"やりにくくなった動作",sec:"adl",q:"やりにくくなった動作は？",sub:"あてはまるものすべて",multi:true,
+   o:ACTS_PROX.concat(ACTS_DIST,["あてはまらない"])},
+  {k:"trig",cat:"強くなるきっかけ",sec:"trig",q:"症状が出る・強くなるきっかけは？",sub:"あてはまるものすべて",multi:true,
+   o:["首を動かすと手に響く","歩くと出て、休むと治まる","暑さ・入浴で強くなる","あてはまらない"]},
  ],
  3:[
-  {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて",multi:true,o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい"]},
+  {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて（最初に選んだ症状は反映済みです）",multi:true,
+   o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい","使っていると電池が切れたように動けなくなる"]},
   {k:"double",cat:"症状の性質",q:"二重の見え方は？",o:["横並び","上下","ななめ","片目を閉じると消える","二重ではない"]},
   {k:"diurnal",cat:"時間による変化",q:"朝と夕方で変わりますか？",sub:"とても大切な質問です",o:["朝は軽く夕方に悪化","使うと悪化・休むと改善","一日中同じ","わからない"]},
   {k:"lid",cat:"まぶたの様子",q:"まぶたの様子は？",o:["片側が下がる","両側が下がる","変動する","下がらない"]},
  ],
+ 4:[
+  {k:"feel",cat:"めまいの感じ",q:"どんなめまいですか？",o:["ぐるぐる回る","ふわふわする・体が揺れる","気が遠くなる・目の前が暗くなる","歩くときだけふらつく","わからない"]},
+  {k:"dur",cat:"時間",q:"1回のめまいは、どれくらい続きますか？",o:["数秒〜1分","数分〜数時間","1日以上続く","ずっと続いている","わからない"]},
+  {k:"freq",cat:"時間",q:"どれくらいの頻度で起きますか？",o:["毎日","週に数回","月に数回","これまでに1〜2回","わからない"]},
+  {k:"trig",cat:"きっかけ",sec:"trig",q:"めまいが起きるきっかけは？",sub:"あてはまるものすべて",multi:true,
+   o:["寝返り・頭の向きを変えると","立ち上がると","じっとしていても起きる","人混み・ストレスで","あてはまらない"]},
+  {k:"ear",cat:"耳の症状",q:"聞こえにくい・耳鳴り・耳がつまる感じはありますか？",o:["右の耳にある","左の耳にある","両方の耳にある","耳の症状はない","わからない"]},
+ ],
+ 5:[
+  {k:"hx",cat:"頭痛の経過",q:"今回の頭痛は？",o:["初めての頭痛","以前からある頭痛と同じ","以前からあるが、いつもと違う","わからない"]},
+  {k:"where",cat:"場所と時間",q:"痛む場所は？",o:["右側","左側","左右が入れかわる","両側・頭全体","後頭部・首","わからない"]},
+  {k:"dur",cat:"場所と時間",q:"1回の頭痛は、どれくらい続きますか？",o:["1時間以内","数時間","1日以上","ずっと続いている","わからない"]},
+  {k:"freq",cat:"場所と時間",q:"どれくらいの頻度で起きますか？",o:["毎日","週に数回","月に数回","それより少ない","わからない"]},
+  {k:"with",cat:"一緒に出ること",q:"頭痛のときに一緒に出ることは？",sub:"あてはまるものすべて",multi:true,
+   o:["吐き気","光や音がつらい","ギザギザした光など、見え方の異常が先に出る","熱が出る","あてはまらない"]},
+  {k:"trig",cat:"強くなるきっかけ",sec:"trig",q:"頭痛が強くなるきっかけは？",sub:"あてはまるものすべて",multi:true,
+   o:["咳・いきむと強くなる","起き上がると強くなり、横になると楽","体を動かすと強くなる","あてはまらない"]},
+ ],
+ 6:[
+  {k:"when",cat:"ふるえの様子",q:"どんなときに、ふるえが強いですか？",o:["じっとしているとき","手を伸ばしたとき・字を書くとき・コップを持つとき","どちらでも","わからない"]},
+  {k:"where",cat:"ふるえの様子",q:"ふるえる場所は？",sub:"あてはまるものすべて",multi:true,o:["右手","左手","足","頭・首","声"]},
+  {k:"alc",cat:"ふるえの様子",q:"お酒を飲むと、ふるえは？",o:["軽くなる","変わらない","お酒は飲まない","わからない"]},
+ ],
 };
 
-/* === 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍） === */
+/* === 背景（血管リスク・薬剤・家族歴・免疫/感染/腫瘍） ===
+   アレルギー・旅行や化学物質などの環境・喫煙・サプリ・市販薬は、初診前の判断を変えにくいので外した。
+   薬の名前はお薬手帳で分かるので、患者さんにしか分からない「症状の前後の変更」だけを聞く。 */
 const BG_RISK=["高血圧","糖尿病","コレステロール高め","不整脈（脈が飛ぶ・乱れる、心房細動など）","脳卒中・心筋梗塞をしたことがある"];
 const BG_IMMUNE=["最近の発熱・感染","体重が減った","がんの治療歴・指摘あり","予防接種・手術のあとから"];
-const BG_LIFESTYLE=["お酒をよく飲む","たばこを吸う","サプリ・健康食品をとる","市販薬・その他の薬を使う"];
-const BG_EXPOSURE=["最近の旅行（国内・海外）","仕事で化学物質・金属などを扱う","身近に同じ症状の人がいる","動物・虫にかまれた"];
-/* 自律神経（MSA/PD の手がかり：起立性低血圧・排尿・便秘・発汗） */
-const BG_AUTONOMIC=["立ってすぐの強いめまい・立ちくらみ・失神","尿が近い・もれる・出にくい","ひどい便秘が続く","汗が異常に多い／ほとんど出ない"];
+const BG_LIFESTYLE=["お酒をよく飲む"];
+/* 自律神経（起立性低血圧・排尿・便秘・発汗）。「あてはまらない」で未回答と区別する */
+const BG_AUTONOMIC=["立ってすぐの強いめまい・立ちくらみ・失神","尿が近い・もれる・出にくい","ひどい便秘が続く","汗が異常に多い／ほとんど出ない","あてはまらない"];
 /* パーキンソン様症状を起こしうる薬（薬剤性の鑑別。可逆性を見逃さない） */
 const BG_DOPADRUG=["飲んでいる／最近飲んだ","以前飲んでいた","飲んでいない","わからない"];
-
-/* 悪くなる／楽になるきっかけのタグ（自由記述と併用） */
-const AGGRAV_TAGS=["疲れたとき","夕方・夜","暑いとき・入浴後","体を動かすと","朝","同じ姿勢が続くと","ストレス"];
-const RELIEF_TAGS=["休むと","朝はよい","涼しくすると","薬をのむと","特にない"];
+/* 症状に関係しうる薬の種類（歩行・脱力・しびれのときだけ聞く） */
+const BG_DRUGKINDS=["血液をさらさらにする薬","コレステロールの薬","がんの治療薬・免疫の治療（点滴を含む）",
+  "吐き気止め・胃薬・精神科の薬（スルピリド・メトクロプラミド・抗精神病薬など）","あてはまらない"];
+/* 家族歴を phenotype で聞く（「いる」のとき、または若年×ゆっくり進む・左右対称の手足の先のとき） */
+const FAM_PHENO=["若い頃から歩きにくかった・杖や車いすになった","足の形が特徴的・足が細い","手足がふるえる",
+  "若くして物忘れ","若くして脳卒中","けいれん","原因の分からない突然死","同じような症状"];
+const FAM_REL=["親","きょうだい","子","祖父母・おじ・おば"];
 
 /* 単発の選択肢（もとは画面を作る関数の中に直書きされていたものを集約） */
 const OPT_RELAPSE=["はじめて","1回あった","2回以上くり返している","わからない"];
 const OPT_RELAPSE_RECOVER=["数日","数週間","数か月","完全には治っていない","わからない"];
 const OPT_FREQ=["ずっと続いている","ほぼ毎日","週に数回","月に数回","ときどき（不定期）","わからない"];
 const OPT_EPISODE_DUR=["数分〜数時間","半日〜1日","数日続く","数週間続く","ずっと続く","わからない"];
-const OPT_SEVERITY=["少し支障がある","かなり支障がある","生活に大きく支障"];
-const OPT_MED=["飲んでいる薬がある","最近始めた・変えた薬がある","飲んでいない","わからない"];
+const OPT_MEDCHANGE=["ある","ない","わからない"];
 const OPT_FAMILY=["いる","いない","わからない"];
 const OPT_PREINFECTION=["あった","ワクチン接種のあとから","なかった","わからない"];
 const OPT_PREGNANCY=["妊娠中","授乳中","どちらでもない","答えない"];
@@ -3074,6 +3151,8 @@ const CONSULT_SINCE=ONSET_OPTS.map(x=>x[0]);
 const CONSULT_ONSET=["急性（分〜時間）","亜急性（日〜週）","慢性（月〜年）","発作性","変動性","わからない"];
 const CONSULT_COURSE=["進行性","階段状","再発寛解","単相性","変動性","改善傾向","わからない"];
 const CONSULT_DIST=["片側性","両側性・左右対称","近位優位","遠位優位","限局（1か所）","体の高さで境がある","全身","わからない"];
+/* いまの歩行・ADL（機能への影響を1問だけ） */
+const CONSULT_ADL=["独歩","杖・歩行器","車いす","臥床（ベッド上）","わからない"];
 /* 共通コア5所見（症候によらず必ず出す）。症候別セットは第2段で足す。
    3値の既定は「未実施」。空欄を「正常」と読ませないことが、この機能の設計の中心。
    他科の先生が神経診察に慣れている前提を置かないので、取り方を1行だけ添える。 */
@@ -3087,55 +3166,204 @@ const CONSULT_EXAM_V=[["ab","異常"],["nl","正常"],["nd","未実施"]];
 const CONSULT_DRUGCHANGE=["あり（下に記入）","なし","わからない"];
 /* 検査は「実施の有無」だけを持つ。結果値はカルテにあるので二重に持たない */
 const CONSULT_TESTS=["採血","頭部CT","頭部MRI","脊髄MRI","脳波","神経伝導・筋電図","髄液検査","心電図"];
+/* === 質問ごとの目的と分類（QMETA）===
+   表示・判定・引き継ぎには使わない（SCHEMA_SIG にも入らない）。レビューと質問数テストの記録用。
+   tier：1＝初診前に必須／2＝あると有用／3＝診察室で聞けばよい（ここには置かない）
+   purpose：emergency / phenotype / chronology / localization / etiology / severity / functionalImpact / collateral
+   loc：cortex / subcortical / brainstem / cerebellum / spinal / root / plexus / nerve / nmj / muscle / autonomic / nonneuro */
+const QMETA={
+ "who.who":{tier:1,purpose:["collateral"]},
+ "who.ageBand":{tier:2,purpose:["etiology"]},
+ "symptoms.trouble":{tier:1,purpose:["phenotype"],note:"本人の言葉。選択肢を見る前に聞く"},
+ "symptoms.symptoms":{tier:1,purpose:["phenotype"]},
+ "symptoms.primary":{tier:1,purpose:["phenotype"],note:"tempo・同時症状・主訴欄をこの症状に合わせる"},
+ "sx.onset":{tier:1,purpose:["chronology"]},
+ "sx.sev":{tier:2,purpose:["severity"],note:"再診の前回比較の基準"},
+ "sx.trend":{tier:1,purpose:["chronology"]},
+ "sx.tempo":{tier:1,purpose:["chronology","etiology"],note:"主訴以外で1か月以内に始まった症状だけ"},
+ "sx.vis":{tier:1,purpose:["localization"],loc:["nerve","cortex"],note:"片目か両目か"},
+ "sx.events":{tier:2,purpose:["functionalImpact","chronology"]},
+ "sxtime.firstSx":{tier:2,purpose:["chronology","localization"]},
+ "sxtime.visitBucket":{tier:2,purpose:["chronology"]},
+ "common.tempo":{tier:1,purpose:["chronology","etiology"]},
+ "common.pattern":{tier:1,purpose:["chronology","phenotype"]},
+ "common.freq":{tier:1,purpose:["chronology"],note:"出たり消えたりのときだけ"},
+ "common.episodeDur":{tier:1,purpose:["chronology"],note:"同上"},
+ "common.side":{tier:1,purpose:["localization"],loc:["cortex","subcortical","brainstem","spinal","root","nerve"]},
+ "common.hand":{tier:2,purpose:["localization"],loc:["cortex"]},
+ "common.relapse":{tier:2,purpose:["etiology","chronology"]},
+ "common.relapseRecover":{tier:2,purpose:["etiology"]},
+ "m1.what":{tier:1,purpose:["phenotype","localization"],loc:["subcortical","cerebellum","spinal","nerve","nonneuro"]},
+ "m1.aid":{tier:1,purpose:["functionalImpact","severity"]},
+ "m1.fall":{tier:1,purpose:["severity"]},
+ "m1.falldir":{tier:2,purpose:["localization"],loc:["subcortical","nerve"]},
+ "m1.fallinj":{tier:2,purpose:["emergency"]},
+ "m2.main":{tier:1,purpose:["phenotype"]},
+ "m2.area":{tier:1,purpose:["localization"],loc:["cortex","spinal","root","plexus","nerve"]},
+ "m2.spread":{tier:1,purpose:["localization","chronology"],loc:["nerve","spinal"]},
+ "m2.acts":{tier:1,purpose:["localization","functionalImpact"],loc:["muscle","nmj","nerve","root"]},
+ "m2.trig":{tier:2,purpose:["localization"],loc:["root","spinal"]},
+ "m3.main":{tier:1,purpose:["phenotype"]},
+ "m3.double":{tier:1,purpose:["localization"],loc:["brainstem","nmj","nonneuro"]},
+ "m3.diurnal":{tier:1,purpose:["localization","etiology"],loc:["nmj"]},
+ "m3.lid":{tier:2,purpose:["localization"],loc:["nmj","brainstem"]},
+ "m4.feel":{tier:1,purpose:["phenotype","localization"],loc:["brainstem","cerebellum","nonneuro","autonomic"]},
+ "m4.dur":{tier:1,purpose:["chronology","phenotype"]},
+ "m4.freq":{tier:2,purpose:["chronology"]},
+ "m4.trig":{tier:1,purpose:["phenotype","localization"],loc:["nonneuro","autonomic"]},
+ "m4.ear":{tier:1,purpose:["localization"],loc:["nonneuro","brainstem"]},
+ "m5.hx":{tier:1,purpose:["chronology","etiology"]},
+ "m5.where":{tier:2,purpose:["phenotype"]},
+ "m5.dur":{tier:1,purpose:["phenotype"]},
+ "m5.freq":{tier:1,purpose:["phenotype","severity"]},
+ "m5.with":{tier:1,purpose:["phenotype","etiology"]},
+ "m5.trig":{tier:2,purpose:["etiology"]},
+ "m6.when":{tier:1,purpose:["phenotype","localization"],loc:["subcortical","cerebellum"]},
+ "m6.where":{tier:1,purpose:["localization"]},
+ "m6.alc":{tier:2,purpose:["phenotype"]},
+ "assoc.*":{tier:1,purpose:["localization"],note:"主訴×始まりの速さで優先表示（ASSOC_PLAN）。残りは任意で畳む"},
+ "daily.func":{tier:1,purpose:["functionalImpact"]},
+ "daily.collateral":{tier:1,purpose:["collateral"]},
+ "bg.risk":{tier:1,purpose:["etiology"]},
+ "bg.medChange":{tier:1,purpose:["etiology"],note:"薬の名前はお薬手帳で分かるので、症状の前後の変更だけ"},
+ "bg.drugKinds":{tier:2,purpose:["etiology"],note:"歩行・脱力・しびれ・動作/ふるえのときだけ。吐き気止め等（薬剤性パーキンソニズム）もここに統合"},
+ "bg.dopaDrug":{tier:1,purpose:["etiology"],note:"吐き気止め等を選んだときだけ、使っていた時期を聞く"},
+ "bg.family":{tier:2,purpose:["etiology"]},
+ "bg.famPheno":{tier:2,purpose:["etiology"],note:"病名ではなく phenotype で"},
+ "bg.autonomic":{tier:2,purpose:["localization","etiology"],loc:["autonomic","spinal"]},
+ "bg.preInfection":{tier:1,purpose:["etiology"],note:"数時間〜数週で始まったときだけ"},
+ "bg.immune":{tier:2,purpose:["etiology"]},
+ "bg.alcohol":{tier:2,purpose:["etiology"]},
+ "bg.pregnancy":{tier:2,purpose:["etiology"]},
+ "bg.prevDx":{tier:2,purpose:["etiology"],note:"今回の症状と分けて持ち、主訴欄・症候パターンには使わない"}
+};
 /* ▲▲▲ ここまで【設定ブロック】 ▲▲▲ */
 
-/* 選択肢の文言（「飲んでいる薬がある」）をそのまま文に埋めると読みにくいので、
-   まとめ・シートでは短い言い方に置き換える。判定には元の値を使う。 */
-function medLabel(v){
-  if(!v)return "";
-  if(v.includes("最近"))return "最近始めた・変えた薬あり";
-  if(v.includes("ある"))return "服薬あり";
-  return v;
-}
+/* ===== 表示の条件（どの質問を誰に出すか）=====
+   画面の生成・質問数のテスト・医療者シートが同じ条件を見る。ここに無い質問は全員に出る。
+   「答えても判断が変わらない人には聞かない」ための一覧（2026-09-11）。 */
+const NONLATERAL_SX=["めまい・ふらつき","頭が痛い","飲み込みにくい・むせる","ろれつが回らない","疲れると悪くなる・夕方につらい"];
+function primarySym(){return (D.primary&&D.symptoms.includes(D.primary))?D.primary:(D.symptoms[0]||null);}
+function tempoIs(kind){const t=D.common.tempo;return !!t&&({acute:TEMPO_ACUTE,sub:TEMPO_SUB,chronic:TEMPO_CHRONIC}[kind]||[]).includes(t);}
+function isEpisodic(){return String(D.common.pattern||"").indexOf("出たり消えたり")===0;}
+/* 経過の向き＝いちばん困っている症状の「その後の変化」（全体の course は廃止） */
+function mainCourse(){const p=primarySym();const t=p&&D.sx[p]&&D.sx[p].trend;return t&&t!=="わからない"?t:null;}
+function isWorsening(){const t=mainCourse();return t==="強くなっている"||t==="段階的に強くなった";}
+function autoPos(){return (D.bg.autonomic||[]).filter(x=>x!=="あてはまらない");}
+function fell(){const f=D.m[1]&&D.m[1].fall;return !!f&&f!=="なし";}
+function hasMod(...ids){return ids.some(i=>D.mods.includes(i));}
+/* いちばん古い時期の区分に症状が2つ以上あるときだけ「どれが最初か」を聞く */
+function firstSxCandidates(){const g=onsetGroups().filter(x=>x.m!=null);if(!g.length||g[0].symptoms.length<2)return [];
+  /* 同じモジュールの症状どうし（例：歩きにくい・転びやすい）の順番は局在を変えないので聞かない */
+  const sys=x=>{const f=SYMPTOMS.find(y=>y[0]===x);return f&&f[1]?"m"+f[1]:"s:"+x;};
+  return new Set(g[0].symptoms.map(sys)).size>1?g[0].symptoms:[];}
+/* 「以前にも」（再発・寛解）を聞いても判断が変わりにくい主訴 */
+const NORELAPSE_SX=["手足がふるえる","頭が痛い","家族から見て動き・表情が変わった"];
+/* 吐き気止めなどの薬（薬剤性パーキンソニズム）を聞く文脈 */
+function dopaContext(){return hasMod(1,6)||D.symptoms.includes("家族から見て動き・表情が変わった")||
+  assocValue("動作が遅い・小さくなった")==="y"||assocValue("安静にしていても手がふるえる")==="y";}
+const DOPA_CHIP="吐き気止め・胃薬・精神科の薬（スルピリド・メトクロプラミド・抗精神病薬など）";
+const SHOW_IF={
+  "symptoms.primary":()=>D.symptoms.length>1,
+  "sxtime.firstSx":()=>firstSxCandidates().length>1,
+  "sx.tempo":s=>s!==primarySym()&&RECENT_BUCKETS.includes((D.sx[s]||{}).onset),
+  "sx.vis":s=>s==="視力が落ちた・目が痛い",
+  "common.side":()=>!(D.symptoms.length&&D.symptoms.every(s=>NONLATERAL_SX.includes(s))),
+  "common.hand":()=>["右のほうが強い","左のほうが強い"].includes(D.common.side)||hasMod(6),
+  "common.freq":()=>isEpisodic()&&!hasMod(4,5),
+  "common.episodeDur":()=>isEpisodic()&&!hasMod(4,5),
+  "common.relapse":()=>!isEpisodic()&&!(D.symptoms.length&&D.symptoms.every(s=>NORELAPSE_SX.includes(s))),
+  "common.relapseRecover":()=>showQ("common.relapse")&&/回/.test(D.common.relapse||""),
+  "m1.falldir":()=>fell(),
+  "m1.fallinj":()=>fell(),
+  "m2.trig":()=>D.symptoms.includes("しびれる・感覚が鈍い")||((D.m[2]||{}).main||[]).some(x=>["しびれ・鈍さ","痛みを伴う","ピリピリする"].includes(x)),
+  "m3.double":()=>D.symptoms.includes("ものが二重に見える")||((D.m[3]||{}).main||[]).includes("物が二重に見える"),
+  "daily.collateral":()=>assocValue("夢で大声・手足が動く（睡眠中）")==="y"||hasMod(6)||
+     (isEpisodic()&&!D.symptoms.every(s=>s==="頭が痛い")),
+  "bg.autonomic":()=>hasMod(1,4,6)||D.symptoms.includes("しびれる・感覚が鈍い")||D.symptoms.includes("家族から見て動き・表情が変わった"),
+  "bg.drugKinds":()=>hasMod(1,2)||dopaContext(),
+  /* 吐き気止めなどを選んだときだけ、飲んでいる時期を聞く（症状との時間関係＝可逆性の手がかり） */
+  "bg.dopaDrug":()=>(D.bg.drugKinds||[]).includes(DOPA_CHIP),
+  "bg.alcohol":()=>hasMod(1,2),
+  "bg.famPheno":()=>D.bg.family==="いる"||(["〜39","40代","50代"].includes(D.ageBand)&&tempoIs("chronic"))||
+     (D.common.side==="左右で同じくらい"&&((D.m[2]||{}).prox==="手足の先"||((D.m[2]||{}).area||[]).includes(AREA_GLOVE))),
+  "bg.preInfection":()=>["数時間で","数日で","数週間で"].includes(D.common.tempo),
+  "bg.immuneMain":()=>tempoIs("sub")||assocValue("筋肉がやせる・ぴくつく")==="y",
+  "bg.pregnancy":()=>!D.ageBand||["〜39","40代"].includes(D.ageBand),
+};
+function showQ(key,...a){const f=SHOW_IF[key];return !f||!!f(...a);}
+function modQShown(id,it){return showQ("m"+id+"."+it.k);}
+/* 近い方／先の方を「やりにくい動作」から導く（判定・シートは従来どおり prox を読む） */
+function deriveProx(){const m=D.m[2]=D.m[2]||{};const a=m.acts||[];
+  const p=a.some(x=>ACTS_PROX.includes(x)),d=a.some(x=>ACTS_DIST.includes(x));
+  const v=p&&d?"両方":p?"肩や太ももに近い方":d?"手足の先":null;
+  if(v)m.prox=v;else delete m.prox;}
+/* 人体図の選択（bodyparts）から area のラベルを作る。引き継ぎのあとも同じ関数で作り直す */
+function areaFromParts(){const m=D.m[2]=D.m[2]||{};const a=m.bodyparts||[];
+  const labs=BODY_REGIONS.filter(r=>a.includes(r.id)).map(r=>r.label);
+  if(["handL","handR","footL","footR"].every(x=>a.includes(x)))labs.push(AREA_GLOVE);
+  m.area=labs;}
+
+/* 薬の行（まとめ・シート共通）。薬の名前はお薬手帳で分かるので、症状の前後の変更を先に書く */
+function medLine(){const b=D.bg,p=[];
+  if(b.medChange==="ある")p.push("症状の前後に始めた・やめた・変えた薬あり");
+  else if(b.medChange==="ない")p.push("症状の前後の薬の変更なし");
+  if(b.medText)p.push(String(b.medText).trim());
+  return p.join("／");}
 function unconfirmedItems(){
   const out=assocConflicts().map(assocConflictText);const A=assocAnswers();const miss=n=>!A[n]||A[n]==="u"||A[n]==="conflict";
-  if(D.mods.includes(3)||D.symptoms.includes("ものが二重に見える")||D.symptoms.includes("まぶたが下がる")){
-    if(miss("飲み込みにくさ・むせ")||miss("ろれつが回りにくい")||miss("息苦しさ"))
-      out.push("飲み込みにくさ・ろれつ・息苦しさの有無");
-  }
-  if(D.mods.includes(1)){
-    if(!D.m[1].falldir||!D.common.tempo)
-      out.push("転び方・進み方・尿のトラブルの有無");
-  }
-  if(D.mods.includes(2)){
-    if(!D.m[2].prox||!D.common.side||miss("飲み込みにくさ・むせ")||miss("ろれつが回りにくい")||miss("息苦しさ"))
-      out.push("力の入る場所・左右差・飲み込み/ろれつ/息苦しさ");
-  }
-  if(D.mods.includes(3)){
-    if(!D.m[3].diurnal||D.m[3].diurnal==="わからない")
-      out.push("症状の朝夕の変動・疲れによる悪化の有無");
-  }
-  if(D.common.tempo&&D.common.tempo.includes("くり返す")){
-    if(!D.common.course)
-      out.push("症状が出る頻度・持続時間・きっかけ");
-  }
+  const c=D.common,m1=D.m[1]||{},m2=D.m[2]||{},m3=D.m[3]||{},m4=D.m[4]||{},m5=D.m[5]||{},m6=D.m[6]||{};
+  const bulbarMiss=miss("飲み込みにくさ・むせ")||miss("ろれつが回りにくい")||miss("息苦しさ");
+  /* 症候ごとの項目を先に入れる（最大5件なので、主訴に固有のものを優先） */
+  const eyeBulbar=(hasMod(3)||D.symptoms.includes("ものが二重に見える")||D.symptoms.includes("まぶたが下がる"))&&bulbarMiss;
+  if(eyeBulbar)out.push("飲み込みにくさ・ろれつ・息苦しさの有無");
+  if(hasMod(1)){const r=[];
+    if(fell()&&!m1.falldir)r.push("転び方");
+    if(!m1.aid)r.push("歩行の段階（杖・歩行器など）");
+    if(showQ("bg.autonomic")&&!(D.bg.autonomic||[]).length)r.push("尿のトラブル");
+    if(r.length)out.push(r.join("・"));}
+  if(hasMod(2)){const r=[];
+    if(!(m2.area||[]).length)r.push("症状のある場所");
+    if(!(m2.acts||[]).length)r.push("やりにくい動作（近い方か先の方か）");
+    if(!m2.spread)r.push("広がり方");
+    if(showQ("common.side")&&!c.side)r.push("左右差");
+    if(bulbarMiss&&!eyeBulbar)r.push("飲み込み/ろれつ/息苦しさ");
+    if(r.length)out.push(r.join("・"));}
+  if(hasMod(3)&&(!m3.diurnal||m3.diurnal==="わからない"))
+    out.push("症状の朝夕の変動・疲れによる悪化の有無");
+  if(hasMod(4)){const r=[];
+    if(!m4.feel||m4.feel==="わからない")r.push("感じ方（回る・ふわふわ・気が遠くなる）");
+    if(!m4.dur)r.push("1回の持続");
+    if(!(m4.trig||[]).length)r.push("きっかけ（頭の向き・立ち上がり）");
+    if(!m4.ear)r.push("耳の症状");
+    if(r.length)out.push("めまいの"+r.join("・"));}
+  if(hasMod(5)){const r=[];
+    if(!m5.hx)r.push("初めてか・いつもと違うか");
+    if(!m5.dur)r.push("1回の持続");
+    if(!(m5.with||[]).length)r.push("一緒に出る症状");
+    if(r.length)out.push("頭痛の"+r.join("・"));}
+  if(hasMod(6)&&(!m6.when||m6.when==="わからない"))
+    out.push("ふるえが安静時に強いか、動作・姿勢で強いか");
+  if(showQ("common.freq")&&(!c.freq||!c.episodeDur))
+    out.push("症状が出る頻度・1回の持続時間・きっかけ");
   if(A["物忘れ・性格や行動の変化"]==="y")
     out.push("物忘れ・行動の変化について、いつ頃からか・日常生活への影響");
-  if(D.bg.autonomic&&D.bg.autonomic.length&&!D.common.tempo)
-    out.push("尿・立ちくらみ・便秘などの症状の経過・順序");
-  // 複数領域に症状が及ぶ場合：過去の似たエピソードの有無（順序・時系列の手がかり）
-  const dGroups=DAILY_GROUPS.filter(g=>dSel(g).length).length;
-  if(dGroups>=2||D.symptoms.length>=3)
+  if(D.symptoms.includes("視力が落ちた・目が痛い")&&!D.vis.side)
+    out.push("目の症状について、片目か両目か・見え方の変化");
+  /* 始まりの速さごとに、次に確認する価値が高いこと（回答済みのものは出さない） */
+  if(c.tempo==="数秒〜数分で")
+    out.push("症状が始まったときの状況（何をしていたか）と、そのあとの経過");
+  if(tempoIs("sub")&&!(D.bg.immune||[]).length)
+    out.push("発熱・体重減少・がんや免疫の治療の有無");
+  if(tempoIs("chronic")){
+    if(firstSxCandidates().length>1&&!D.firstSx)out.push("症状が出た順番");
+    if(!D.bg.family)out.push("家族に似た症状の人がいるか");
+  }
+  /* 同じことを聞く「以前にも」に答えていれば出さない（2026-09-11 修正） */
+  if(showQ("common.relapse")&&D.symptoms.length>=3&&!c.relapse)
     out.push("以前にも似た症状が出て自然に良くなったこと（出たり治ったり）の有無");
-  const aggrGiven=(D.common.aggravTags&&D.common.aggravTags.length)||D.common.aggrav;
-  if(!aggrGiven)
-    out.push("悪くなる・楽になるきっかけ（疲れ・時間帯・暑さ・入浴・姿勢など）");
-  if((D.daily.includes("vis")||D.symptoms.includes("視力が落ちた・目が痛い"))&&!D.vis.note&&!D.vis.side)
-    out.push("目の症状について、片目か両目か・いつからか・見え方の変化");
-  if(D.common.tempo&&(D.common.tempo.includes("くり返す")||D.common.tempo.includes("落ち着いた"))&&!D.common.episodeDur)
-    out.push("症状が1回どれくらい続くか（持続時間）");
-  if(!D.common.tempo) out.push("発症が突然か・徐々にか・くり返すか");
-  if(!overallOnset()&&!D.common.onsetMonth&&!D.common.onsetDate)
+  if(!c.tempo) out.push("始まりの速さ（数分・数時間・数日・数週・数か月・年単位）");
+  if(!overallOnset()&&!c.onsetMonth&&!c.onsetDate)
     out.push("それぞれの症状がいつから始まったか（おおよその時期・順序）");
   /* 仕様§5: 提示は最大5件（症候特異的ルールを優先。配列前方＝症候別が先に入る構成） */
   return out.slice(0,5);
@@ -3149,16 +3377,44 @@ let MODE="patient";
 function isConsult(){return MODE==="consult";}
 function detectMode(){try{const h=String(location.hash||"");
   if(/[#&](consult|c)(&|$)/.test(h)||/[#&]mode=c(&|$)/.test(h))MODE="consult";}catch(e){}}
-const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["sxtime","症状の経過"],["common","全体の様子"],
-  ["module","くわしく"],["assoc","一緒の症状"],["daily","生活と困りごと"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
+const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["sxtime","症状の経過"],["common","始まり方"],
+  ["module","くわしく"],["assoc","一緒の症状"],["daily","生活への影響"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
 /* コンサルトモードの進み方（患者向けの STEPS とは別） */
 const CSTEPS=[["cask","答えてほしいこと"],["csx","症候"],["ccourse","経過"],["cexam","神経所見"],["cdata","既存の情報"]];
 function steps(){return isConsult()?CSTEPS:STEPS;}
 const app=document.getElementById("app");
 
+/* 条件で出さなくなった質問の答えは消す。シートに「聞いていないのに答えがある」状態を作らない */
+const PRUNE={
+  "common.side":()=>{delete D.common.side;},
+  "common.hand":()=>{delete D.hand;},
+  "common.freq":()=>{delete D.common.freq;},
+  "common.episodeDur":()=>{delete D.common.episodeDur;},
+  "common.relapse":()=>{delete D.common.relapse;delete D.common.relapseRecover;},
+  "common.relapseRecover":()=>{delete D.common.relapseRecover;},
+  "m1.falldir":()=>{if(D.m[1])delete D.m[1].falldir;},
+  "m1.fallinj":()=>{if(D.m[1])delete D.m[1].fallinj;},
+  "m3.double":()=>{if(D.m[3])delete D.m[3].double;},
+  "sxtime.firstSx":()=>{D.firstSx=null;},
+  "daily.collateral":()=>{D.collateral=[];},
+  "bg.autonomic":()=>{D.bg.autonomic=[];},
+  "bg.dopaDrug":()=>{D.bg.dopaDrug=null;},
+  "bg.drugKinds":()=>{D.bg.drugKinds=[];},
+  "bg.alcohol":()=>{D.bg.lifestyle=[];},
+  "bg.famPheno":()=>{D.bg.famPheno=[];D.bg.famRel=[];},
+  "bg.preInfection":()=>{D.bg.preInfection=null;},
+  "bg.pregnancy":()=>{D.bg.pregnancy=null;},
+};
+function pruneHidden(){
+  if(isConsult()&&!(D.symptoms&&D.symptoms.length))return;
+  Object.keys(PRUNE).forEach(k=>{if(!showQ(k))PRUNE[k]();});
+  D.symptoms.forEach(s=>{if(D.sx[s]&&D.sx[s].tempo&&!showQ("sx.tempo",s))delete D.sx[s].tempo;});
+  if(D.vis&&D.vis.side&&!D.symptoms.includes("視力が落ちた・目が痛い"))delete D.vis.side;
+  if(D.m[2]&&!(D.m[2].acts||[]).length&&D.m[2].prox)deriveProx();
+}
 let _lastPhase=null,_lastMod=null;
 function render(){
-  let h="";
+  let h="";pruneHidden();
   const fn={intro:(isConsult()?scrCIntro:scrIntro),who:scrWho,symptoms:scrSymptoms,sxtime:scrSxtime,common:scrCommon,module:scrModule,
     assoc:scrAssoc,daily:scrDaily,bg:scrBg,free:scrFree,confirm:scrConfirm,output:(isConsult()?scrCOut:scrOutput),
     cask:scrCAsk,csx:scrCSx,ccourse:scrCCourse,cexam:scrCExam,cdata:scrCData}[phase];
@@ -3224,9 +3480,7 @@ function scrWho(){return card(`
   <div class="hint">ご家族・介護者のほか、受付スタッフが患者さんに聞きながら入力することもできます</div>
   <div class="opts grid">${WHO.map(([v,l,e])=>opt(v===D.who,`<span class="emo">${e}</span>${l}`,`setWho('${v}')`)).join("")}</div>
   ${qhead("年","ご本人の年代を教えてください","任意。年齢の幅だけで大丈夫です")}
-  <div class="opts grid">${AGES.map(a=>opt(D.ageBand===a,a,`setAge('${a}')`)).join("")}</div>
-  ${qhead("手","利き手はどちらですか？","任意。左右の症状を読み取るのに役立ちます")}
-  <div class="opts grid">${OPT_HAND.map(a=>opt(D.hand===a,a,`setHand('${a}')`)).join("")}</div>`);}
+  <div class="opts grid">${AGES.map(a=>opt(D.ageBand===a,a,`setAge('${a}')`)).join("")}</div>`);}
 function setHand(v){D.hand=(D.hand===v?null:v);render();}
 function setWho(v){D.who=v;render();}
 function setAge(a){D.ageBand=(D.ageBand===a?null:a);render();}
@@ -3239,54 +3493,46 @@ function proxyBanner(){
 function scrSymptoms(){
   const items=SYMPTOMS.map(([nm,,e])=>opt(D.symptoms.includes(nm),`<span class="emo">${e}</span>${nm}`,
     `toggleSym('${nm.replace(/'/g,"")}')`,true)).join("");
+  /* 患者さん自身の言葉は、選択肢を見る前に聞く（医学用語に寄せられる前の言い方を残すため・2026-09-11） */
   return card(`
    ${proxyBanner()}
-   <div class="qhead"><span class="qnum">?</span><span class="qtext">${isProxy()?"ご本人の気になる症状を選んでください":"気になる症状を選んでください"}</span>${spkBtn("気になる症状を選んでください。いくつでも選べます")}</div>
+   <div class="qhead"><span class="qnum">1</span><span class="qtext">${isProxy()?"ご本人は、どんなことで困っていますか？":"どんなことで困っていますか？"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("どんなことで困っていますか？ひとことで、話し言葉のままで大丈夫です")}</div>
+   <div class="hint">ひとことで、話し言葉のままで大丈夫です。このあと選択肢で整理します。</div>
+   <textarea id="trouble" placeholder="例：歩くとき足がもつれる／右手に力が入らず箸が使いにくい" oninput="D.common.trouble=this.value">${esc(D.common.trouble||"")}</textarea>
+   <div><span class="voice" id="vbtn" onclick="toggleVoice('trouble')">🎤 声で入力する</span></div>
+   <div class="mini" id="vstat" style="margin-top:6px"></div>
+   <div class="qhead" style="margin-top:22px"><span class="qnum">2</span><span class="qtext">${isProxy()?"ご本人の気になる症状を選んでください":"気になる症状を選んでください"}</span>${spkBtn("気になる症状を選んでください。いくつでも選べます")}</div>
    <div class="hint">病名がわからなくて大丈夫。いくつでも選べます。</div>
    <div class="opts grid">${items}</div>
+   ${showQ("symptoms.primary")?qhead("3","いちばん困っている症状はどれですか？","ひとつ選んでください。この症状を中心にお聞きします")+
+     `<div class="opts grid">${D.symptoms.map(x=>opt(D.primary===x,esc(x),`setPrimary('${x.replace(/'/g,"")}')`)).join("")}</div>`:""}
    ${D.mods.length?`<div class="note">📋 選んだ内容に合わせて質問します：<b>${D.mods.map(i=>MODS_PT[i]).join("、")}</b></div>`:''}`);}
+function setPrimary(x){D.primary=(D.primary===x?null:x);render();}
 
 function scrCommon(){
-  let h=proxyBanner()+`<p class="lead">🕒 <b>全体の様子</b>を教えてください（症状ごとの時期はさきほどの通りでOK）</p>`;
-  COMMON.forEach((it,i)=>{
-    h+=qhead(i+1,it.q,it.sub)+
-      `<div class="opts grid">`+it.o.map(o=>opt(D.common[it.k]===o,o,`setCommon('${it.k}','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
-  });
-  // 再発・寛解（過去に出て自然に治ったエピソード：MS/NMOSDなどの手がかり）
-  h+=qhead("＋","以前にも同じような症状が出て、自然に治まったことはありますか？","「出て、治って、また出た」があるかは、とても大切な手がかりです");
-  h+=`<div class="opts grid">`+OPT_RELAPSE
-    .map(o=>opt(D.common.relapse===o,o,`setCommon('relapse','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
-  if(D.common.relapse&&D.common.relapse.includes("回")){
-    h+=`<div class="hint" style="margin:6px 0 2px">前回はどれくらいで治まりましたか？（任意）</div>`;
-    h+=`<div class="opts grid">`+OPT_RELAPSE_RECOVER
-      .map(o=>opt(D.common.relapseRecover===o,o,`setCommon('relapseRecover','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
+  const p=primarySym(),many=D.symptoms.length>1;
+  const T=COMMON.find(x=>x.k==="tempo"),P=COMMON.find(x=>x.k==="pattern"),S=COMMON.find(x=>x.k==="side");
+  const row=(k,o)=>opt(D.common[k]===o,o,`setCommon('${k}','${o.replace(/'/g,"")}')`);
+  let h=proxyBanner()+`<p class="lead">🕒 <b>始まり方</b>を教えてください${p&&many?`（いちばん困っている「${esc(p)}」について）`:""}</p>`;
+  h+=qhead(1,p?`「${esc(p)}」は、${T.q}`:T.q,T.sub)+`<div class="opts grid">${T.o.map(o=>row("tempo",o)).join("")}</div>`;
+  h+=qhead(2,P.q)+`<div class="opts grid">${P.o.map(o=>row("pattern",o)).join("")}</div>`;
+  if(showQ("common.freq")){
+    h+=qhead("＋","どれくらいの頻度で起きますか？")+`<div class="opts grid">${OPT_FREQ.map(o=>row("freq",o)).join("")}</div>`;
+    h+=qhead("＋","1回の症状は、どれくらい続きますか？")+`<div class="opts grid">${OPT_EPISODE_DUR.map(o=>row("episodeDur",o)).join("")}</div>`;
   }
-  h+=moreToggle("commonMore","くわしく（頻度・きっかけ・悪化した時期など）を入力");
-  if(!UI.commonMore)return card(h);
-  h+=`<div class="note" style="background:#f5f9fd;border-color:var(--line);color:var(--sub)">ここから下はすべて任意です。わかる範囲でどうぞ。</div>`;
-  // 頻度・持続（どれくらいの頻度で・1回どれくらい続くか）
-  h+=qhead("＋","どれくらいの頻度で起きますか？","（任意）",);
-  h+=`<div class="opts grid">`+OPT_FREQ
-    .map(o=>opt(D.common.freq===o,o,`setCommon('freq','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
-  h+=qhead("＋","1回の症状はどれくらい続きますか？","出たり治ったりする場合など（任意）");
-  h+=`<div class="opts grid">`+OPT_EPISODE_DUR
-    .map(o=>opt(D.common.episodeDur===o,o,`setCommon('episodeDur','${o.replace(/'/g,"")}')`)).join("")+`</div>`;
-  // 生活への支障（重症度）
-  h+=qhead("＋","生活にどのくらい支障がありますか？","（任意）");
-  h+=`<div class="opts grid">`+OPT_SEVERITY
-    .map(o=>opt(D.common.severity===o,o,`setCommon('severity','${o}')`)).join("")+`</div>`;
-  // 増悪因子（開かれた質問＋任意タグ）
-  h+=qhead("＋","悪くなる・出やすいきっかけはありますか？","思い当たることを自由に。下から選んでも大丈夫（任意）");
-  h+=`<div class="opts grid">`+AGGRAV_TAGS.map(o=>opt((D.common.aggravTags||[]).includes(o),o,`toggleCommonTag('aggravTags','${o.replace(/'/g,"")}')`,true)).join("")+`</div>`;
-  h+=`<textarea id="aggravtxt" placeholder="例：暑い日や湯上がりに見えにくさが強くなる／夕方になると声が出にくい" oninput="D.common.aggrav=this.value">${esc(D.common.aggrav||"")}</textarea>`;
-  // 軽減因子
-  h+=qhead("＋","楽になる・良くなることはありますか？","（任意）");
-  h+=`<div class="opts grid">`+RELIEF_TAGS.map(o=>opt((D.common.reliefTags||[]).includes(o),o,`toggleCommonTag('reliefTags','${o.replace(/'/g,"")}')`,true)).join("")+`</div>`;
-  h+=`<textarea id="relieftxt" placeholder="例：少し休むと戻る／朝はほとんど気にならない" oninput="D.common.relief=this.value">${esc(D.common.relief||"")}</textarea>`;
-  h+=qhead("＋","その後さらに悪くなった時期はありますか？","急に悪化した・段階的に進んだ時期がわかれば（任意）");
-  h+=dateBlock("worsen","悪くなった時期");
+  if(showQ("common.side"))h+=qhead(3,S.q,S.sub)+`<div class="opts grid">${S.o.map(o=>row("side",o)).join("")}</div>`;
+  if(showQ("common.hand"))h+=qhead("手","利き手はどちらですか？","任意。左右の症状を読み取るのに役立ちます")+
+    `<div class="opts grid">${OPT_HAND.map(a=>opt(D.hand===a,a,`setHand('${a}')`)).join("")}</div>`;
+  if(showQ("common.relapse")){
+    /* 再発・寛解（過去に出て自然に治ったエピソード）。発作のように出たり消えたりする人には聞かない */
+    h+=qhead("＋","以前にも同じような症状が出て、自然に治まったことはありますか？","「出て、治って、また出た」があるかは、とても大切な手がかりです");
+    h+=`<div class="opts grid">${OPT_RELAPSE.map(o=>row("relapse",o)).join("")}</div>`;
+    if(showQ("common.relapseRecover")){
+      h+=`<div class="hint" style="margin:6px 0 2px">前回はどれくらいで治まりましたか？（任意）</div>`;
+      h+=`<div class="opts grid">${OPT_RELAPSE_RECOVER.map(o=>row("relapseRecover",o)).join("")}</div>`;
+    }
+  }
   return card(h);}
-function toggleCommonTag(key,val){D.common[key]=D.common[key]||[];const a=D.common[key];const i=a.indexOf(val);if(i>=0)a.splice(i,1);else a.push(val);render();}
 
 /* 日付ブロック：だいたいの年月 と 正確な日付 のどちらでも入力可 */
 function dateBlock(key,label){
@@ -3310,19 +3556,6 @@ function fmtWhen(key){const dd=D.common[key+"Date"],md=D.common[key+"Month"];
   if(md){const[y,m]=md.split("-");return `${y}年${+m}月ごろ`;}
   return null;}
 
-/* === 人体図（部位・左右差をタップ）。module2（脱力・しびれ）の分布入力に使用 === */
-const BODY_REGIONS=[
- {id:"face", label:"顔",   shape:`<circle cx="100" cy="34" r="24"/>`},
- {id:"trunk",label:"体幹（おなか・背中）", shape:`<rect x="72" y="62" width="56" height="98" rx="12"/>`},
- {id:"armR", label:"右腕", shape:`<rect x="40" y="66" width="24" height="86" rx="11"/>`},
- {id:"armL", label:"左腕", shape:`<rect x="136" y="66" width="24" height="86" rx="11"/>`},
- {id:"handR",label:"右手先",shape:`<circle cx="52" cy="166" r="16"/>`},
- {id:"handL",label:"左手先",shape:`<circle cx="148" cy="166" r="16"/>`},
- {id:"legR", label:"右脚", shape:`<rect x="74" y="164" width="24" height="120" rx="11"/>`},
- {id:"legL", label:"左脚", shape:`<rect x="102" y="164" width="24" height="120" rx="11"/>`},
- {id:"footR",label:"右足先",shape:`<ellipse cx="84" cy="296" rx="16" ry="13"/>`},
- {id:"footL",label:"左足先",shape:`<ellipse cx="116" cy="296" rx="16" ry="13"/>`},
-];
 function bodyMapSVG(){
   const sel=(D.m[2]&&D.m[2].bodyparts)||[];
   const el=BODY_REGIONS.map(r=>r.shape.replace(/^<(\w+)/,`<$1 class="reg ${sel.includes(r.id)?"sel":""}" onclick="toggleBody('${r.id}')"`)).join("");
@@ -3337,19 +3570,19 @@ function bodyMapSVG(){
 function toggleBody(id){
   D.m[2]=D.m[2]||{};const a=D.m[2].bodyparts=D.m[2].bodyparts||[];
   const i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);
-  const labs=BODY_REGIONS.filter(r=>a.includes(r.id)).map(r=>r.label);
-  if(["handL","handR","footL","footR"].every(x=>a.includes(x)))labs.push("手足の先（手袋・くつ下のように）");
-  D.m[2].area=labs;render();
+  areaFromParts();render();
 }
+const MOD_LEAD={1:"歩き方と転倒について",2:"どこが・何ができなくなったか",3:"目・まぶたの様子",4:"めまいの様子",5:"頭痛の様子",6:"ふるえの様子"};
 function scrModule(){
   const id=D.mods[modCursor];
   let h=proxyBanner()+`<div style="display:inline-block;background:var(--brand-l);color:var(--brand-d);font-weight:800;
     border-radius:20px;padding:5px 14px;font-size:calc(14px*var(--fs))">📍 ${MODS_PT[id]}　(${modCursor+1}/${D.mods.length})</div>
-    <p class="lead" style="margin-top:8px">どこが・何ができなくなったかを教えてください</p>`;
-  let prevCat=null;
-  QM[id].forEach((it,i)=>{
+    <p class="lead" style="margin-top:8px">${MOD_LEAD[id]||"くわしく"}を教えてください</p>`;
+  let prevCat=null,n=0;
+  QM[id].forEach(it=>{
+    if(!modQShown(id,it))return;
     if(it.cat&&it.cat!==prevCat){h+=`<div class="grouplab">${it.cat}</div>`;prevCat=it.cat;}
-    h+=qhead(i+1,it.q,it.sub);
+    h+=qhead(++n,it.q,it.sub);
     if(id===2&&it.k==="area"){
       h+=bodyMapSVG();
     }else if(it.multi){
@@ -3364,40 +3597,81 @@ function scrModule(){
 
 /* 任意の画面であることを明示する共通の一文 */
 function skipNote(){return `<div class="mini" style="background:#f5f9fd;border:1px solid var(--line);border-radius:10px;padding:8px 11px;margin:0 0 12px">この画面は<b>すべて任意</b>です。わからない項目はとばして「次へ」で大丈夫です。</div>`;}
+/* 主訴のまとまりを ASSOC_PLAN のキーに変換する（始まりの速さで分かれるものがある） */
+function assocPlanKey(s){
+  const acute=tempoIs("acute")&&!isEpisodic(),sub=tempoIs("sub");
+  if(acute&&["力が入らない","しびれる・感覚が鈍い","ろれつが回らない","視力が落ちた・目が痛い","ものが二重に見える","めまい・ふらつき"].includes(s))return "focalAcute";
+  if(sub&&["力が入らない","しびれる・感覚が鈍い","手足がやせる・ぴくつく"].includes(s))return "nmSub";
+  if(s==="力が入らない"||s==="手足がやせる・ぴくつく")return "weakChronic";
+  if(s==="しびれる・感覚が鈍い")return "numbChronic";
+  if(s==="歩きにくい"||s==="転びやすい")return "gait";
+  if(["ものが二重に見える","まぶたが下がる","疲れると悪くなる・夕方につらい","飲み込みにくい・むせる","ろれつが回らない"].includes(s))return "bulbar";
+  if(s==="めまい・ふらつき")return "dizzy";
+  if(s==="視力が落ちた・目が痛い")return "vision";
+  if(s==="家族から見て動き・表情が変わった")return "move";
+  if(s==="手足がふるえる")return "tremor";
+  if(s==="頭が痛い")return "headache";
+  return "generic";
+}
+/* 優先して聞く項目（pri）と、畳んでおく残り（rest）。
+   症状の選択などから反映済みの項目は、訂正できるよう pri に見せるが、上限（未回答8項目）には数えない。 */
+const ASSOC_PRI_MAX=8;
+function assocPlan(){
+  const p=primarySym(),order=[p,...D.symptoms.filter(x=>x!==p)].filter(Boolean);
+  const want=[];order.forEach(x=>(ASSOC_PLAN[assocPlanKey(x)]||[]).forEach(nm=>{if(!want.includes(nm))want.push(nm);}));
+  ASSOC.forEach(nm=>{if(hasLinkedAnswer(nm)&&!want.includes(nm))want.push(nm);});
+  const pri=[];let open=0;
+  want.forEach(nm=>{if(hasLinkedAnswer(nm)){pri.push(nm);return;}if(open<ASSOC_PRI_MAX){pri.push(nm);open++;}});
+  return {pri:pri,rest:ASSOC.filter(nm=>!pri.includes(nm))};
+}
+/* いま画面に出ている項目（まとめて「いいえ」は、見えている項目にしか効かせない） */
+function assocVisible(){const p=assocPlan();return (UI.assocMore||!p.pri.length)?ASSOC.slice():p.pri.slice();}
+function assocRow(nm){
+  const v=assocValue(nm),linked=linkedSymptoms(nm);
+  const pend=ASSOC_EDIT&&ASSOC_EDIT.nm===nm?ASSOC_EDIT.value:null;
+  const cls=(val,on)=>`${v===val?on:""}${pend===val?" pend":""}`;
+  let h=`<div class="tri"><span class="nm">${nm}${hasLinkedAnswer(nm)&&v==="y"?`<small class="answer-source">${linked.length?"症状の選択":"ほかの回答"}から反映済み</small>`:""}${isBulkNo(nm)?`<small class="answer-source">まとめて「いいえ」</small>`:""}</span><span class="grp" role="group" aria-label="${nm}">
+        <button type="button" aria-pressed="${v==='y'}" class="${cls('y','on-y')}" onclick="setTri('${nm}','y')">はい</button>
+        <button type="button" aria-pressed="${v==='n'}" class="${cls('n','on-n')}" onclick="setTri('${nm}','n')">いいえ</button>
+        <button type="button" aria-pressed="${v==='u'}" class="${cls('u','on-u')}" onclick="setTri('${nm}','u')" aria-label="わからない・未確認">？</button></span></div>`;
+  /* 確認・訂正の吹き出しは、必ずタップした行の直下に出す（下にまとめると押せたか分からない） */
+  if(v==="conflict")h+=`<div class="answer-conflict">${esc(assocConflictText(nm))}。上の選択肢で回答を確認してください。</div>`;
+  if(pend)h+=`<div class="answer-conflict" role="status"><b>「${esc(nm)}」を「${pend==="n"?"いいえ":"わからない"}」にしますか？</b><br>「${esc([...linkedSymptoms(nm),...otherLinkedAnswers(nm)].join("／"))}」の選択も外れます。
+        <div class="answer-actions"><button type="button" class="fixbtn" onclick="confirmAssocEdit()">はい、訂正する</button><button type="button" class="fixbtn" onclick="ASSOC_EDIT=null;render()">やめる</button></div></div>`;
+  return h;
+}
 function scrAssoc(){
-  let h=proxyBanner()+skipNote()+`<div class="qhead"><span class="qnum">➕</span><span class="qtext">一緒に出ている症状はありますか？</span>${spkBtn("一緒に出ている症状はありますか？わかる範囲で、はい・いいえ・？で選んでください")}</div>
-    <div class="hint">最初に選んだ同じ症状は「はい」に反映済みです。気づいていない項目は下のボタンでまとめて「いいえ」にできます。ボタンを押さないかぎり、未回答が「なし」になることはありません。</div>`;
-  /* 気づいていない項目をまとめて「いいえ」にする導線。反映済みの項目は対象外なので、
-     主症状で「あり」と答えた症状が陰性になることはない（出所はシートに残す）。 */
+  const plan=assocPlan(),all=UI.assocMore||!plan.pri.length;
+  /* 急に始まった人には「始まったときに同時に起きたこと」として聞く（局在の手がかり） */
+  const title=(tempoIs("acute")&&!isEpisodic())?"症状が始まったとき、同時に起きたことはありますか？":"一緒に出ている症状はありますか？";
+  let h=proxyBanner()+skipNote()+`<div class="qhead"><span class="qnum">➕</span><span class="qtext">${title}</span>${spkBtn(title+"わかる範囲で、はい・いいえ・？で選んでください")}</div>
+    <div class="hint">選んだ症状に合わせて、確かめたい項目だけを並べています。最初に選んだ同じ症状は「はい」に反映済みです。ボタンを押さないかぎり、未回答が「なし」になることはありません。</div>`;
+  /* 気づいていない項目をまとめて「いいえ」にする導線。見えている項目だけが対象（畳んだ項目は未確認のまま） */
   {const t=assocBulkTargets().length,b=ASSOC.filter(isBulkNo).length;
    if(t)h+=`<div style="margin:6px 0 10px"><button type="button" onclick="assocAllNo()" style="width:100%;padding:12px;border:1.5px solid var(--brand);background:var(--brand-l);color:var(--brand-d);border-radius:12px;font-weight:800;font-size:calc(15px*var(--fs));cursor:pointer;font-family:inherit">気づいていない${t}項目を、まとめて「いいえ」にする</button>
      <div class="mini" style="margin-top:4px">そのあと、当てはまるものだけ「はい」に変えてください。こちらが早いです。すでに反映済みの項目は変わりません。</div></div>`;
    if(b)h+=`<div class="mini" style="margin:0 0 10px">まとめて「いいえ」にした${b}項目があります。<button type="button" class="fixbtn" onclick="assocUndoBulk()">まとめた回答をもどす</button></div>`;}
-  ASSOC_GROUPS.forEach(grp=>{
-    h+=`<div class="grouplab">${grp.g}</div><div class="triwrap">`;
-    grp.items.forEach(nm=>{const v=assocValue(nm),linked=linkedSymptoms(nm);
-      const pend=ASSOC_EDIT&&ASSOC_EDIT.nm===nm?ASSOC_EDIT.value:null;
-      const cls=(val,on)=>`${v===val?on:""}${pend===val?" pend":""}`;
-      h+=`<div class="tri"><span class="nm">${nm}${hasLinkedAnswer(nm)&&v==="y"?`<small class="answer-source">${linked.length?"症状の選択":"ほかの回答"}から反映済み</small>`:""}${isBulkNo(nm)?`<small class="answer-source">まとめて「いいえ」</small>`:""}</span><span class="grp" role="group" aria-label="${nm}">
-        <button type="button" aria-pressed="${v==='y'}" class="${cls('y','on-y')}" onclick="setTri('${nm}','y')">はい</button>
-        <button type="button" aria-pressed="${v==='n'}" class="${cls('n','on-n')}" onclick="setTri('${nm}','n')">いいえ</button>
-        <button type="button" aria-pressed="${v==='u'}" class="${cls('u','on-u')}" onclick="setTri('${nm}','u')" aria-label="わからない・未確認">？</button></span></div>`;
-      /* 確認・訂正の吹き出しは、必ずタップした行の直下に出す（下にまとめると押せたか分からない） */
-      if(assocValue(nm)==="conflict")h+=`<div class="answer-conflict">${esc(assocConflictText(nm))}。上の選択肢で回答を確認してください。</div>`;
-      if(pend)h+=`<div class="answer-conflict" role="status"><b>「${esc(nm)}」を「${pend==="n"?"いいえ":"わからない"}」にしますか？</b><br>「${esc([...linkedSymptoms(nm),...otherLinkedAnswers(nm)].join("／"))}」の選択も外れます。
-        <div class="answer-actions"><button type="button" class="fixbtn" onclick="confirmAssocEdit()">はい、訂正する</button><button type="button" class="fixbtn" onclick="ASSOC_EDIT=null;render()">やめる</button></div></div>`;
-    });
-    h+=`</div>`;
-  });
+  if(plan.pri.length)h+=`<div class="triwrap">${plan.pri.map(assocRow).join("")}</div>`;
+  if(plan.rest.length){
+    if(!all){
+      h+=`<div style="text-align:center;margin:14px 0 4px"><button type="button" class="no-print" onclick="toggleUI('assocMore')" style="border:1.5px solid var(--brand);background:#fff;color:var(--brand-d);border-radius:30px;padding:10px 20px;font-size:calc(14px*var(--fs));font-weight:800;cursor:pointer;font-family:inherit">＋ ほかの症状も確認する（任意・${plan.rest.length}項目）</button></div>`;
+    }else{
+      h+=`<div class="note" style="background:#f5f9fd;border-color:var(--line);color:var(--sub);margin-top:14px">ここから下は任意です。気になるものがあれば答えてください。</div>`;
+      ASSOC_GROUPS.forEach(grp=>{const items=grp.items.filter(nm=>plan.rest.includes(nm));if(!items.length)return;
+        h+=`<div class="grouplab">${grp.g}</div><div class="triwrap">${items.map(assocRow).join("")}</div>`;});
+      if(plan.pri.length)h+=`<div style="text-align:center;margin:10px 0 4px"><button type="button" class="no-print" onclick="toggleUI('assocMore')" style="border:1.5px solid var(--brand);background:var(--brand-l);color:var(--brand-d);border-radius:30px;padding:10px 20px;font-size:calc(14px*var(--fs));font-weight:800;cursor:pointer;font-family:inherit">▲ とじる</button></div>`;
+    }
+  }
   return card(h);}
 
 /* === 症状ごとの経過（時系列）：選んだ症状それぞれの「いつから・程度・変化」 === */
 let SX_OPEN=null;   /* いま開いている症状。null なら「最初の未入力」を自動で開く */
-function sxDone(s){const r=D.sx[s]||{};return !!(r.onset&&r.sev&&r.trend);}
+function sxDone(s){const r=D.sx[s]||{};
+  return !!(r.onset&&r.sev&&r.trend&&(!showQ("sx.tempo",s)||r.tempo)&&(!showQ("sx.vis",s)||D.vis.side));}
 function firstOpenSx(){return D.symptoms.find(x=>!sxDone(x))||D.symptoms[0]||null;}
 function toggleSxOpen(s){SX_OPEN=(SX_OPEN===s?"__none__":s);render();}
 function sxSummaryLine(s){const r=D.sx[s]||{};
-  const parts=[r.onset,r.sev&&("つらさ"+r.sev),r.trend].filter(Boolean);
+  const parts=[r.onset,r.sev&&("つらさ"+r.sev),r.trend,r.tempo&&("始まり："+r.tempo),showQ("sx.vis",s)&&D.vis.side].filter(Boolean);
   return parts.length?parts.join(" / "):"まだ入力していません";}
 function noteBanner(){return RESTORE_NOTE?`<div class="note" style="background:var(--brand-l);border-color:var(--brand);color:var(--brand-d)">🔁 ${RESTORE_NOTE}</div>`:"";}
 function scrSxtime(){
@@ -3430,15 +3704,27 @@ function scrSxtime(){
       <div class="opts grid">`+SEV_OPTS.map(o=>opt(r.sev===o,o,`setSx('${esq}','sev','${o}')`)).join("")+`</div>
       <div class="hint" style="margin:8px 0 4px">その後の変化</div>
       <div class="opts grid">`+TREND_OPTS.map(o=>opt(r.trend===o,o,`setSx('${esq}','trend','${o.replace(/'/g,"")}')`)).join("")+`</div>
+      ${showQ("sx.tempo",s)?`<div class="hint" style="margin:8px 0 4px">どれくらいの速さで始まりましたか（今の強さになるまで）</div>
+      <div class="opts grid">`+commonOpts("tempo").map(o=>opt(r.tempo===o,o,`setSx('${esq}','tempo','${o}')`)).join("")+`</div>`:""}
+      ${showQ("sx.vis",s)?`<div class="hint" style="margin:8px 0 4px">片目ですか、両目ですか</div>
+      <div class="opts grid">`+OPT_VIS_SIDE.map(o=>opt(D.vis.side===o,o,`setVisSx('${esq}','${o}')`)).join("")+`</div>`:""}
       ${eventBlock(s)}
     </div>`;
   });
+  if(showQ("sxtime.firstSx")){const cand=firstSxCandidates();
+    h+=qhead("⏱","同じ頃に始まった症状のうち、最初に気づいたのはどれですか？","（任意）わからなければ飛ばしてください");
+    h+=`<div class="opts grid">`+cand.map(x=>opt(D.firstSx===x,esc(x),`setFirstSx('${x.replace(/'/g,"")}')`)).join("")+`</div>`;}
   h+=qhead("📣","今回、受診しようと思うほど悪くなったのはいつ頃ですか？","（任意）グラフに目印を付けます");
   h+=`<div class="opts grid">`+ONSET_OPTS.filter(o=>o[0]!=="わからない").map(([o])=>opt(D.common.visitBucket===o,o,`setVisit('${o.replace(/'/g,"")}')`)).join("")+`</div>`;
   h+=`<div class="hint" style="margin-top:6px">📅 最初の症状の正確な日付がわかれば（任意）</div>`;
   h+=dateBlock("onset","最初に何か症状が出た時期");
   h+=trajectoryChart();
   return card(h);}
+function setFirstSx(x){D.firstSx=(D.firstSx===x?null:x);render();}
+/* 視力の症状の欄で片目/両目を聞く（以前は「ふだんの困りごと」経由でしか出なかった） */
+function setVisSx(s,v){D.vis.side=(D.vis.side===v?null:v);
+  if(sxDone(s)&&(SX_OPEN===s||SX_OPEN===null)){const nx=D.symptoms.find(x=>!sxDone(x));SX_OPEN=nx||"__none__";}
+  render();}
 function setSx(s,k,v){D.sx[s]=D.sx[s]||{};D.sx[s][k]=(D.sx[s][k]===v?null:v);
   /* 3つ答え終わったら次の未入力へ自動で送る（送り忘れを防ぐ） */
   if(sxDone(s)&&(SX_OPEN===s||SX_OPEN===null)){const nx=D.symptoms.find(x=>!sxDone(x));SX_OPEN=nx||"__none__";}
@@ -3508,7 +3794,13 @@ function onsetGroups(){
    症状どうしの区切りは「、」、時期のまとまりの区切りは「／」に分けている。 */
 function onsetSummary(){
   return onsetGroups().map(g=>`${g.symptoms.join("、")}：${g.label}`+
-    (g.symptoms.length>1?"（前後関係は未確認）":"")).join(" ／ ");
+    (g.symptoms.length>1?tieNote(g):"")).join(" ／ ");
+}
+/* 同じ区分の症状の前後関係。最初に気づいた症状を答えていればそれだけ書き、ほかは決めつけない */
+function tieNote(g){
+  if(D.firstSx&&g.symptoms.includes(D.firstSx))
+    return g.symptoms.length>2?`（最初に気づいたのは${D.firstSx}、ほかの前後関係は未確認）`:`（最初に気づいたのは${D.firstSx}）`;
+  return "（前後関係は未確認）";
 }
 /* 出来事の短い呼び方。図の中に長い語は入らないが、番号や凡例に逃がすと視線が往復するので略語にする */
 const EVENT_SHORT={"転倒した":"転倒","杖・歩行器を使い始めた":"杖","車椅子になった":"車椅子","入院した":"入院",
@@ -3568,7 +3860,7 @@ function trajectoryChart(){
   return `<div class="blk history-chart"><h4>症状の経過（回答した時期・出来事）</h4>
     ${axis}${body}
     <p class="history-caption">● 発症 ／ ◆ 出来事${evAll.length?"（"+uniqArr(rows.flatMap(r=>r.events.map(e=>(EVENT_SHORT[e.tag]||e.tag)+"＝"+e.tag))).join("、")+"）":""} ／ ▼ 受診のきっかけ。線は発症から現在まで続いていることを示します（強さの推移ではありません）。
-    ${ties.length?"<br>"+ties.map(g=>`${esc(g.label)}の${esc(g.symptoms.join("、"))}は前後関係が未確認です。`).join(""):""}
+    ${ties.length?"<br>"+ties.map(g=>`${esc(g.label)}の${esc(g.symptoms.join("、"))}：${esc(tieNote(g).replace(/[（）]/g,""))}。`).join(""):""}
     ${rows.some(r=>r.bucket==="2年以上前")?"<br>← は2年以上前（上限なし）です。":""}</p>
   </div>`;
 }
@@ -3582,80 +3874,72 @@ function sxOnsetTable(){
     const evs=(r.events||[]).map(e=>`${esc(e.bucket)}${esc(e.tag)}${e.note?`(${esc(e.note)})`:""}`).join("、");
     return `<div><span class="g">${s}:</span> ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend,evs&&("出来事:"+evs)].filter(Boolean).join(" / ")}</div>`;}).join("")+`</div>`;}
 
-function dailyLabel(it){return it.t+(it.sub?`<br><span style="font-weight:500;font-size:calc(13px*var(--fs));color:var(--sub)">${it.sub}</span>`:"");}
 function scrDaily(){
   let h=`<div class="qhead"><span class="qnum">📍</span><span class="qtext">${isProxy()?"ご本人が、できなくなった・やりにくくなったことは？":"できなくなった・やりにくくなったことは？"}</span>${spkBtn("できなくなった・やりにくくなったことはありますか？あてはまるものを選んでください")}</div>
    <div class="hint">日常生活で困っていることを選んでください（複数可・なければ次へ）</div>
    <div class="opts grid">${FUNC.map(o=>opt(D.func.includes(o),o,`toggleFunc('${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
-  h+=`<div class="qhead" style="margin-top:26px"><span class="qnum">＋</span><span class="qtext">${isProxy()?"ご本人にこんな困りごとはありませんか？":"こんな困りごとはありませんか？"}</span>${spkBtn("こんな困りごとはありませんか？あてはまるものを選んでください")}</div>
-   <div class="hint">気づきにくい変化もあります。あてはまるものを選んでください（複数可）。なければ各項目の「あてはまるものはない」を選べます。</div>`;
-  DAILY_GROUPS.forEach(grp=>{
-    h+=`<div class="grouplab">${grp.e?grp.e+" ":""}${grp.g}</div><div class="opts grid">`;
-    h+=grp.items.map(it=>opt(D.daily.includes(it.id),dailyLabel(it),`toggleDaily('${it.id}')`,true)).join("");
-    h+=opt(!!D.dailyNone[grp.key],`<span class="emo">—</span>あてはまるものはない`,`setDailyNone('${grp.key}')`,true);
-    h+=`</div>`;
-    if(grp.key==="sensory"&&D.daily.includes("vis"))h+=visBlock();
-  });
-  h+=`<div class="note" style="background:#f5f9fd;border-color:var(--line);color:var(--sub)">これは症状を<b>整理</b>するためのチェックです。チェックの数が多くても重症度を表すものではありません。これらの困りごとは他の原因でも起こります。</div>`;
+  if(showQ("daily.collateral"))
+    h+=qhead("👀",`${collateralLabel()}を、実際に見た人や動画はありますか？`,"あてはまるものすべて（任意）。ご本人の説明だけでは分かりにくいことがあるためです")+
+      `<div class="opts grid">${OPT_COLLATERAL.map(o=>opt(D.collateral.includes(o),o,`toggleCollateral('${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
   return card(h);}
-function toggleDaily(id){const i=D.daily.indexOf(id);if(i>=0)D.daily.splice(i,1);else{D.daily.push(id);const g=dItem(id);if(g)delete D.dailyNone[g.key];
-  Object.keys(DAILY_ASSOC).forEach(nm=>{if(DAILY_ASSOC[nm].includes(id)&&D.assoc[nm]!=="y")delete D.assoc[nm];});
-}render();}
-function setDailyNone(key){
-  if(D.dailyNone[key])delete D.dailyNone[key];
-  else{D.dailyNone[key]=true;D.daily=D.daily.filter(id=>{const it=dItem(id);return!it||it.key!==key;});}
-  render();}
-/* 見えにくさについて、開かれた質問で。片目/両目だけ選択式、あとは自由記述 */
-function visBlock(){
-  return `<div style="background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 14px">
-    <div class="hint" style="margin:0 0 6px"><b>👁 目の症状について、気づいたことを教えてください（任意）</b></div>
-    <div class="opts grid">`+OPT_VIS_SIDE.map(o=>opt(D.vis.side===o,o,`setVis('side','${o}')`)).join("")+`</div>
-    <textarea id="visnote" placeholder="例：見えにくい範囲、色の見え方、目を動かしたときの感じ、いつからか など" oninput="D.vis.note=this.value" style="margin-top:8px">${esc(D.vis.note||"")}</textarea></div>`;}
+function collateralLabel(){const w=[];
+  if(hasMod(6))w.push("ふるえ");
+  if(assocValue("夢で大声・手足が動く（睡眠中）")==="y")w.push("睡眠中の動き");
+  if(isEpisodic())w.push("症状が出ているときの様子");
+  return w.length?w.join("・"):"症状の様子";}
+function toggleCollateral(o){toggleIn(D.collateral,o);render();}
 function setVis(k,v){D.vis[k]=(D.vis[k]===v?null:v);render();}
 
 function scrBg(){
+  const b=D.bg,chip=(f,o)=>opt(b[f].includes(o),o,`toggleBg('${f}','${o.replace(/'/g,"")}')`,true),
+    one=(f,o)=>opt(b[f]===o,o,`setBg('${f}','${o.replace(/'/g,"")}')`);
   let h=proxyBanner()+`<p class="lead">🩺 持病やお薬など、<b>背景</b>を教えてください（任意）</p>`;
-  h+=`<div class="grouplab">持病・体質</div>
-    <div class="opts grid">${BG_RISK.map(o=>opt(D.bg.risk.includes(o),o,`toggleBg('risk','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
-  h+=qhead("薬","飲んでいるお薬はありますか？")+
-    `<div class="opts grid">${OPT_MED
-      .map(o=>opt(D.bg.med===o,o,`setBg('med','${o.replace(/'/g,"")}')`)).join("")}</div>
-    <textarea id="medt" placeholder="お薬の名前がわかれば（任意）" oninput="D.bg.medText=this.value">${esc(D.bg.medText)}</textarea>`;
-  h+=qhead("薬2","吐き気止め・胃薬・精神科の薬などを使っていますか？","スルピリド・メトクロプラミド・抗精神病薬など（手のふるえ・動作の遅さに関係することがあります）")+
-    `<div class="opts grid">${BG_DOPADRUG.map(o=>opt(D.bg.dopaDrug===o,o,`setBg('dopaDrug','${o.replace(/'/g,"")}')`)).join("")}</div>`;
-  h+=qhead("家","似た症状の家族はいますか？")+
-    `<div class="opts grid">${OPT_FAMILY.map(o=>opt(D.bg.family===o,o,`setBg('family','${o}')`)).join("")}</div>`;
-  h+=`<div class="grouplab">自律神経の症状（あてはまるものすべて）</div>
-    <div class="opts grid">${BG_AUTONOMIC.map(o=>opt(D.bg.autonomic.includes(o),o,`toggleBg('autonomic','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
-  h+=qhead("感","症状が出る前に、発熱・かぜ・下痢などの感染がありましたか？","発症の1〜4週間前（任意）")+
-    `<div class="opts grid">${OPT_PREINFECTION.map(o=>opt(D.bg.preInfection===o,o,`setBg('preInfection','${o.replace(/'/g,"")}')`)).join("")}</div>`;
-  h+=qhead("妊","妊娠中・授乳中ですか？","治療の選択に関わることがあります（任意）")+
-    `<div class="opts grid">${OPT_PREGNANCY.map(o=>opt(D.bg.pregnancy===o,o,`setBg('pregnancy','${o.replace(/'/g,"")}')`)).join("")}</div>`;
-  h+=moreToggle("bgMore","そのほか（最近の出来事・生活・これまでの病気・受診歴など）を入力");
+  /* これまでに言われた病名は、今回の症状の記録と分けて持つ（主訴欄・症候パターンには使わない） */
+  h+=qhead("病","この症状について、ほかの医療機関で言われたこと（病名や説明）はありますか？","わかる範囲で。病名をご存じでなくても大丈夫です")+
+    `<textarea id="prevdx" placeholder="例：〇〇病院で「首の骨の問題かもしれない」と言われた" oninput="setPrevDx(this.value)">${esc(b.prevDx||"")}</textarea>
+     <div class="opts grid">${opt(!!b.prevDxNone,"特に言われていない","togglePrevDxNone()",true)}</div>`;
+  h+=`<div class="grouplab">持病・体質${showQ("bg.alcohol")?"・生活":""}</div><div class="opts grid">${BG_RISK.map(o=>chip("risk",o)).join("")}${showQ("bg.alcohol")?BG_LIFESTYLE.map(o=>chip("lifestyle",o)).join(""):""}</div>`;
+  h+=qhead("薬","症状が出る前後に、始めた・やめた・量を変えた薬はありますか？","お薬手帳や薬の説明書をお持ちなら、診察のときに医師に見せてください")+
+    `<div class="opts grid">${OPT_MEDCHANGE.map(o=>one("medChange",o)).join("")}</div>
+    <textarea id="medt" placeholder="その薬の名前と時期がわかれば（任意）" oninput="D.bg.medText=this.value">${esc(b.medText||"")}</textarea>`;
+  if(showQ("bg.drugKinds"))h+=qhead("薬2","次の薬を使っている、または使っていたことはありますか？","あてはまるものすべて（任意）")+
+    `<div class="opts grid">${BG_DRUGKINDS.map(o=>chip("drugKinds",o)).join("")}</div>`;
+  if(showQ("bg.dopaDrug"))h+=`<div class="hint" style="margin:6px 0 2px">吐き気止め・胃薬・精神科の薬は、いつ使っていましたか？（手のふるえ・動作の遅さに関係することがあります）</div>`+
+    `<div class="opts grid">${BG_DOPADRUG.filter(o=>o!=="飲んでいない").map(o=>one("dopaDrug",o)).join("")}</div>`;
+  h+=qhead("家","似た症状の家族はいますか？")+`<div class="opts grid">${OPT_FAMILY.map(o=>one("family",o)).join("")}</div>`;
+  if(showQ("bg.famPheno")){
+    h+=qhead("家2","ご家族・血縁の方に、次のような人はいますか？","あてはまるものすべて（任意）")+
+      `<div class="opts grid">${FAM_PHENO.map(o=>chip("famPheno",o)).join("")}</div>`;
+    if(b.famPheno.length)h+=`<div class="hint" style="margin:6px 0 2px">どなたですか？（任意）</div><div class="opts grid">${FAM_REL.map(o=>chip("famRel",o)).join("")}</div>`;
+  }
+  if(showQ("bg.autonomic"))h+=`<div class="grouplab">自律神経の症状（あてはまるものすべて）</div>
+    <div class="opts grid">${BG_AUTONOMIC.map(o=>chip("autonomic",o)).join("")}</div>`;
+  if(showQ("bg.preInfection"))h+=qhead("感","症状が出る前に、発熱・かぜ・下痢などの感染がありましたか？","発症の1〜4週間前（任意）")+
+    `<div class="opts grid">${OPT_PREINFECTION.map(o=>one("preInfection",o)).join("")}</div>`;
+  const immune=`<div class="grouplab">最近あったこと</div><div class="opts grid">${BG_IMMUNE.map(o=>chip("immune",o)).join("")}</div>`;
+  if(showQ("bg.immuneMain"))h+=immune;
+  if(showQ("bg.pregnancy"))h+=qhead("妊","妊娠中・授乳中ですか？","治療の選択に関わることがあります（任意）")+
+    `<div class="opts grid">${OPT_PREGNANCY.map(o=>one("pregnancy",o)).join("")}</div>`;
+  h+=moreToggle("bgMore","そのほか（これまでの病気・受診歴など）を入力");
   if(UI.bgMore){
-    h+=`<div class="grouplab">最近あったこと</div>
-      <div class="opts grid">${BG_IMMUNE.map(o=>opt(D.bg.immune.includes(o),o,`toggleBg('immune','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
-    h+=`<div class="grouplab">生活・習慣</div>
-      <div class="opts grid">${BG_LIFESTYLE.map(o=>opt(D.bg.lifestyle.includes(o),o,`toggleBg('lifestyle','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
-    h+=`<div class="grouplab">仕事・環境・接触</div>
-      <div class="opts grid">${BG_EXPOSURE.map(o=>opt(D.bg.exposure.includes(o),o,`toggleBg('exposure','${o.replace(/'/g,"")}')`,true)).join("")}</div>`;
+    if(!showQ("bg.immuneMain"))h+=immune;
     h+=qhead("既","これまでの大きな病気・手術があれば（任意）")+
-      `<textarea id="hist" placeholder="例：〇年に△△の手術、□□で通院中 など" oninput="D.bg.history=this.value">${esc(D.bg.history)}</textarea>`;
-    h+=qhead("ア","アレルギー（薬・食べ物など）があれば（任意）")+
-      `<textarea id="alle" placeholder="例：〇〇でじんましん など" oninput="D.bg.allergy=this.value">${esc(D.bg.allergy)}</textarea>`;
+      `<textarea id="hist" placeholder="例：〇年に△△の手術、□□で通院中 など" oninput="D.bg.history=this.value">${esc(b.history||"")}</textarea>`;
     h+=qhead("科","これまでに受診した科はありますか？","あてはまるものすべて（任意）")+
       `<div class="opts grid">${VISITED.map(o=>opt(D.visited.includes(o),o,`toggleVisited('${o}')`,true)).join("")}</div>`;
     h+=qhead("査","受けた検査があれば（任意）","例：頭のMRI、血液検査、筋電図 など")+
-      `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${esc(D.tests)}</textarea>`;
+      `<textarea id="tests" placeholder="検査の名前・時期・結果でわかること（任意）" oninput="D.tests=this.value">${esc(D.tests||"")}</textarea>`;
   }
   return card(h);}
+function setPrevDx(v){D.bg.prevDx=v;if(v&&D.bg.prevDxNone){D.bg.prevDxNone=false;}}
+function togglePrevDxNone(){D.bg.prevDxNone=!D.bg.prevDxNone;if(D.bg.prevDxNone)D.bg.prevDx="";render();}
 
 function scrFree(){
   return card(`
-   <div class="qhead"><span class="qnum">1</span><span class="qtext">${isProxy()?"ご本人について、医師に伝えたいこと・困っていること":"医師に伝えたいこと・困っていること"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("医師に伝えたいこと、困っていることを自由にお話しください。ご家族から見て気づいた変化もどうぞ")}</div>
+   <div class="qhead"><span class="qnum">1</span><span class="qtext">${isProxy()?"ほかに、ご本人について医師に伝えたいこと":"ほかに、医師に伝えたいこと"}<span style="font-weight:500;color:var(--sub)">（任意）</span></span>${spkBtn("ほかに医師に伝えたいことがあれば、自由にお話しください。ご家族から見て気づいた変化もどうぞ")}</div>
    <div class="hint">短くても、話し言葉のままでも大丈夫です。ご家族から見た変化（表情・声・動きなど）もここにどうぞ。マイクでも入力できます。</div>
-   <textarea id="trouble" placeholder="例：転びそうで外出がこわい／去年くらいから歩き方が変で、最近よく転ぶ。食事でむせる。家族から見ると表情が乏しくなった" oninput="D.common.trouble=this.value;D.free=this.value">${esc(D.common.trouble||"")}</textarea>
-   <div><span class="voice" id="vbtn" onclick="toggleVoice()">🎤 声で入力する</span></div>
+   <textarea id="free" placeholder="例：転びそうで外出がこわい／家族から見ると表情が乏しくなった" oninput="D.free=this.value">${esc(D.free||"")}</textarea>
+   <div><span class="voice" id="vbtn" onclick="toggleVoice('free')">🎤 声で入力する</span></div>
    <div class="mini" id="vstat" style="margin-top:6px"></div>`);}
 
 let EDIT_SUM=false; /* 文章の直接編集モード（既定は項目ごとの確認＋「直す」導線） */
@@ -3810,7 +4094,9 @@ function scrCCourse(){const C=D.consult;return card(`
   ${qhead("3","その後の経過")}
   <div class="chips">${CONSULT_COURSE.map(o=>copt(C.course===o,o,`setCVal('course','${o}')`)).join("")}</div>
   ${qhead("4","分布・左右差")}
-  <div class="chips">${CONSULT_DIST.map(o=>copt(C.dist===o,o,`setCVal('dist','${o}')`)).join("")}</div>`);}
+  <div class="chips">${CONSULT_DIST.map(o=>copt(C.dist===o,o,`setCVal('dist','${o}')`)).join("")}</div>
+  ${qhead("5","いまの歩行・ADL")}
+  <div class="chips">${CONSULT_ADL.map(o=>copt(C.adl===o,o,`setCVal('adl','${o}')`)).join("")}</div>`);}
 
 function scrCExam(){return card(`
   ${qhead("✓","神経所見（すべて任意）","とらなかった項目は<b>「未実施」のまま</b>で結構です。空欄を「正常」と読まないための区別です")}
@@ -3863,6 +4149,7 @@ function consultMissing(){
   if(!C.onset)m.push("発症様式（急性・亜急性・慢性・発作性・変動性）");
   if(!C.course)m.push("その後の経過（進行性・階段状・再発寛解など）");
   if(!C.dist)m.push("分布・左右差");
+  if(!C.adl)m.push("いまの歩行・ADL");
   const nd=CONSULT_EXAM_CORE.filter(it=>cExamVal(it.id)==="nd").map(it=>it.n);
   if(nd.length)m.push("神経所見（未実施）："+nd.join("・"));
   if(!C.drugs&&!C.drugChange)m.push("内服・薬剤の変更");
@@ -3902,7 +4189,7 @@ function consultSheet(){
 
    <div class="sec"><div class="lab">② 主症候と経過</div>
      <div class="assoc"><span class="g">主症候:</span> <b>${sx.main?esc(sx.main):"—"}</b>${sx.others.length?`　<span class="g">随伴:</span> ${sx.others.map(esc).join("、")}`:""}</div>
-     ${kvSec([["発症時期",C.since],["発症様式",C.onset],["経過",C.course],["分布・左右差",C.dist]])}</div>
+     ${kvSec([["発症時期",C.since],["発症様式",C.onset],["経過",C.course],["分布・左右差",C.dist],["歩行・ADL",C.adl]])}</div>
 
    <div class="sec"><div class="lab">③ 神経所見（共通コア5項目）</div>
      <div class="assoc">
@@ -3951,6 +4238,7 @@ function plainConsult(){
   L.push(`  主症候: ${sx.main||"—"}${sx.others.length?`　随伴: ${sx.others.join("、")}`:""}`);
   L.push(`  発症時期: ${C.since||"—"}　発症様式: ${C.onset||"—"}`);
   L.push(`  経過: ${C.course||"—"}　分布・左右差: ${C.dist||"—"}`);
+  L.push(`  歩行・ADL: ${C.adl||"—"}`);
   L.push("");
   L.push("② 神経所見（共通コア5項目）");
   L.push(`  異常: ${ex.ab.length?ex.ab.join("、"):"なし（記載なし）"}`);
@@ -4008,18 +4296,32 @@ function toggleSym(nm){
   const i=D.symptoms.indexOf(nm);if(i>=0)D.symptoms.splice(i,1);else D.symptoms.push(nm);
   /* 新たな「症状あり」の選択を最新の回答として採用。選択解除は陰性とは扱わない。 */
   const a=SYMPTOM_ASSOC[nm];if(i<0&&a&&D.assoc[a]!=="y")delete D.assoc[a];
+  /* 同じことをモジュールの「主な症状」で聞き直さない（選んだ症状を反映しておく） */
+  const mm=SYMPTOM_MODMAIN[nm];
+  if(mm){const [m,v]=mm;D.m[m]=D.m[m]||{};const arr=D.m[m].main=D.m[m].main||[];
+    if(i<0){if(!arr.includes(v))arr.push(v);}else{const j=arr.indexOf(v);if(j>=0)arr.splice(j,1);}}
+  if(i>=0&&D.primary===nm)D.primary=null;
+  if(i>=0&&D.firstSx===nm)D.firstSx=null;
   ASSOC_EDIT=null;
   updateMods();render();
 }
 function updateMods(){
   const set=new Set();D.symptoms.forEach(s=>{const f=SYMPTOMS.find(x=>x[0]===s);if(f&&f[1])set.add(f[1]);});
-  D.mods=[...set].sort();
+  D.mods=[...set].sort((a,b)=>a-b);
 }
-function toggleMulti(id,k,o){D.m[id][k]=D.m[id][k]||[];const a=D.m[id][k];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);
-  if(id===2&&k==="main"&&i<0)Object.keys(MODULE_ASSOC).forEach(nm=>{if(MODULE_ASSOC[nm].includes(o)&&D.assoc[nm]!=="y")delete D.assoc[nm];});
+/* 「あてはまらない」「ケガはない」「見た人はいない」は、ほかの選択と同時に選べない */
+const EXCLUSIVE_OPTS=["あてはまらない","ケガはない","見た人はいない"];
+function toggleIn(arr,o){const i=arr.indexOf(o);
+  if(i>=0){arr.splice(i,1);return false;}
+  if(EXCLUSIVE_OPTS.includes(o))arr.length=0;
+  else for(let j=arr.length-1;j>=0;j--)if(EXCLUSIVE_OPTS.includes(arr[j]))arr.splice(j,1);
+  arr.push(o);return true;}
+function toggleMulti(id,k,o){D.m[id]=D.m[id]||{};D.m[id][k]=D.m[id][k]||[];const added=toggleIn(D.m[id][k],o);
+  if(k==="main"&&added)Object.keys(MODULE_ASSOC).forEach(nm=>{if(MODULE_ASSOC[nm].some(([m,v])=>m===id&&v===o)&&D.assoc[nm]!=="y")delete D.assoc[nm];});
+  if(id===2&&k==="acts")deriveProx();
   render();}
 function toggleFunc(o){const i=D.func.indexOf(o);if(i>=0)D.func.splice(i,1);else D.func.push(o);render();}
-function toggleBg(f,o){const a=D.bg[f];const i=a.indexOf(o);if(i>=0)a.splice(i,1);else a.push(o);render();}
+function toggleBg(f,o){D.bg[f]=D.bg[f]||[];toggleIn(D.bg[f],o);render();}
 function toggleVisited(o){const i=D.visited.indexOf(o);if(i>=0)D.visited.splice(i,1);else D.visited.push(o);render();}
 function setTri(nm,v){
   if(!ASSOC.includes(nm)||!["y","n","u"].includes(v))return;
@@ -4029,15 +4331,15 @@ function setTri(nm,v){
 }
 /* まとめて「いいえ」：未回答で、かつ他の回答から反映されていない項目だけを対象にする。
    （反映済みの項目を含めると主症状と矛盾するため、必ず assocBulkTargets 経由で） */
-function assocBulkTargets(){return ASSOC.filter(k=>!D.assoc[k]&&!hasLinkedAnswer(k));}
+function assocBulkTargets(){return assocVisible().filter(k=>!D.assoc[k]&&!hasLinkedAnswer(k));}
 function assocAllNo(){assocBulkTargets().forEach(k=>{D.assoc[k]="nb";});ASSOC_EDIT=null;render();}
 function assocUndoBulk(){ASSOC.forEach(k=>{if(isBulkNo(k))delete D.assoc[k];});ASSOC_EDIT=null;render();}
 function confirmAssocEdit(){
   if(!ASSOC_EDIT)return;
   const {nm,value}=ASSOC_EDIT;
   D.symptoms=D.symptoms.filter(s=>SYMPTOM_ASSOC[s]!==nm);
-  if(D.m[2].main)D.m[2].main=D.m[2].main.filter(v=>!(MODULE_ASSOC[nm]||[]).includes(v));
-  D.daily=D.daily.filter(id=>!(DAILY_ASSOC[nm]||[]).includes(id));
+  (MODULE_ASSOC[nm]||[]).forEach(([m,v])=>{if(D.m[m]&&D.m[m].main)D.m[m].main=D.m[m].main.filter(x=>x!==v);});
+  if(D.primary&&!D.symptoms.includes(D.primary))D.primary=null;
   D.assoc[nm]=value;ASSOC_EDIT=null;SX_OPEN=null;
   updateMods();render();
 }
@@ -4121,17 +4423,15 @@ function commonOpts(k){const it=COMMON.find(c=>c.k===k);return it&&it.o?it.o:[];
 function codecDicts(){return {
   who:WHO.map(x=>x[0]), ageBand:AGES, hand:OPT_HAND, sym:SYMPTOMS.map(x=>x[0]),
   onset:ONSET_OPTS.map(x=>x[0]), sev:SEV_OPTS, trend:TREND_OPTS, evtag:EVENT_TAGS,
-  tempo:commonOpts("tempo"), course:commonOpts("course"), side:commonOpts("side"),
-  relapse:OPT_RELAPSE, relapseRecover:OPT_RELAPSE_RECOVER, freq:OPT_FREQ,
-  episodeDur:OPT_EPISODE_DUR, severity:OPT_SEVERITY,
-  aggravTags:AGGRAV_TAGS, reliefTags:RELIEF_TAGS,
-  assoc:ASSOC, func:FUNC, visited:VISITED,
-  risk:BG_RISK, immune:BG_IMMUNE, lifestyle:BG_LIFESTYLE, exposure:BG_EXPOSURE,
-  autonomic:BG_AUTONOMIC, dopaDrug:BG_DOPADRUG, med:OPT_MED, family:OPT_FAMILY,
+  tempo:commonOpts("tempo"), pattern:commonOpts("pattern"), side:commonOpts("side"),
+  relapse:OPT_RELAPSE, relapseRecover:OPT_RELAPSE_RECOVER, freq:OPT_FREQ, episodeDur:OPT_EPISODE_DUR,
+  assoc:ASSOC, func:FUNC, visited:VISITED, collateral:OPT_COLLATERAL,
+  risk:BG_RISK, immune:BG_IMMUNE, lifestyle:BG_LIFESTYLE, autonomic:BG_AUTONOMIC, drugKinds:BG_DRUGKINDS,
+  famPheno:FAM_PHENO, famRel:FAM_REL,
+  dopaDrug:BG_DOPADRUG, medChange:OPT_MEDCHANGE, family:OPT_FAMILY,
   preInfection:OPT_PREINFECTION, pregnancy:OPT_PREGNANCY, visSide:OPT_VIS_SIDE,
-  m1what:qmOpts(1,"what"), m1fall:qmOpts(1,"fall"), m1falldir:qmOpts(1,"falldir"), m1fallinj:qmOpts(1,"fallinj"),
-  m2main:qmOpts(2,"main"), m2prox:qmOpts(2,"prox"), m2area:qmOpts(2,"area"),
-  m3main:qmOpts(3,"main"), m3double:qmOpts(3,"double"), m3diurnal:qmOpts(3,"diurnal"), m3lid:qmOpts(3,"lid")
+  /* モジュールは QM から機械的に作る（モジュールを足しても番号付けの手作業は要らない） */
+  mod:Object.fromEntries(Object.keys(QM).map(id=>[id,Object.fromEntries(QM[id].filter(q=>q.o).map(q=>[q.k,q.o]))]))
 };}
 /* 設定ブロックの内容から決まる短い符号（FNV-1a）。選択肢を変えると自動で変わる */
 function schemaSig(){const s=JSON.stringify(codecDicts());let h=2166136261;
@@ -4147,11 +4447,15 @@ const UNA=(arr,is)=>(is||[]).map(i=>UN(arr,i)).filter(v=>v!==null);
 /* lite=true で自由記述を除いた版を作る（QRが密になりすぎたときの逃げ道）。
    リンクのコピーは常に自由記述込みなので、そちらを使えば情報は失われない。 */
 const FREE_TEXT_FIELDS=[["common","trouble"],["common","aggrav"],["common","relief"],
-  ["bg","medText"],["bg","allergy"],["bg","history"],["vis","note"],
+  ["bg","medText"],["bg","allergy"],["bg","history"],["bg","prevDx"],["vis","note"],
   [null,"free"],[null,"tests"],[null,"editedSummary"],
   /* コンサルトモードの自由記述。所見の詳細（examNote）は短く、診療上の意味が大きいので lite でも残す */
   ["consult","memo"],["consult","drugs"],["consult","history"],["consult","askOther"],["consult","testNote"]];
+const COMMON_KEYS=["tempo","pattern","side","relapse","relapseRecover","freq","episodeDur"];
+const BG_ARR=["risk","immune","lifestyle","autonomic","drugKinds","famPheno","famRel"];
+const BG_ONE=["dopaDrug","medChange","family","preInfection","pregnancy"];
 function packState(lite){
+  pruneHidden();
   const T=codecDicts(),c=D.common||{},b=D.bg||{},P={g:schemaSig()};
   const rest=JSON.parse(JSON.stringify(D));
   if(lite){
@@ -4162,39 +4466,37 @@ function packState(lite){
   const drop=(o,k)=>{if(o)delete o[k];};
   P.w=IX(T.who,D.who); P.a=IX(T.ageBand,D.ageBand); P.hd=IX(T.hand,D.hand);
   P.s=IXA(T.sym,D.symptoms);
-  ["who","ageBand","hand","symptoms","mods"].forEach(k=>drop(rest,k));
-  P.c={}; ["tempo","course","side","relapse","relapseRecover","freq","episodeDur","severity"]
-    .forEach(k=>{const i=IX(T[k],c[k]);if(i!==null)P.c[k]=i;drop(rest.common,k);});
+  {const i=IX(T.sym,D.primary);if(i!==null)P.pr=i;const j=IX(T.sym,D.firstSx);if(j!==null)P.fs=j;}
+  ["who","ageBand","hand","symptoms","mods","primary","firstSx"].forEach(k=>drop(rest,k));
+  P.c={}; COMMON_KEYS.forEach(k=>{const i=IX(T[k],c[k]);if(i!==null)P.c[k]=i;drop(rest.common,k);});
   {const i=IX(T.onset,c.visitBucket);if(i!==null)P.c.vb=i;drop(rest.common,"visitBucket");}
-  P.ct=IXA(T.aggravTags,c.aggravTags); P.cr=IXA(T.reliefTags,c.reliefTags);
-  drop(rest.common,"aggravTags"); drop(rest.common,"reliefTags");
   P.as=T.assoc.map(k=>({n:"0",y:"1",u:"2",nb:"3"}[(D.assoc||{})[k]]||"-")).join("");
   drop(rest,"assoc");
-  P.f=IXA(T.func,D.func); P.vs=IXA(T.visited,D.visited);
-  ["func","visited"].forEach(k=>drop(rest,k));
+  P.f=IXA(T.func,D.func); P.vs=IXA(T.visited,D.visited); P.cl=IXA(T.collateral,D.collateral);
+  ["func","visited","collateral"].forEach(k=>drop(rest,k));
   P.b={};
-  ["risk","immune","lifestyle","exposure","autonomic"].forEach(k=>{P.b[k]=IXA(T[k],b[k]);drop(rest.bg,k);});
-  ["med","family","dopaDrug","preInfection","pregnancy"].forEach(k=>{const i=IX(T[k],b[k]);if(i!==null)P.b[k]=i;drop(rest.bg,k);});
+  BG_ARR.forEach(k=>{const a=IXA(T[k],b[k]);if(a.length)P.b[k]=a;drop(rest.bg,k);});
+  BG_ONE.forEach(k=>{const i=IX(T[k],b[k]);if(i!==null)P.b[k]=i;drop(rest.bg,k);});
   {const i=IX(T.visSide,(D.vis||{}).side);if(i!==null)P.vi=i;drop(rest.vis,"side");}
   P.m={};
-  [[1,{what:"m1what",fall:"m1fall",falldir:"m1falldir",fallinj:"m1fallinj"}],
-   [2,{main:"m2main",prox:"m2prox",area:"m2area"}],
-   [3,{main:"m3main",double:"m3double",diurnal:"m3diurnal",lid:"m3lid"}]].forEach(([id,map])=>{
-    const mm=(D.m||{})[id]||{},o={};
-    Object.keys(map).forEach(k=>{const dict=T[map[k]];
+  Object.keys(T.mod).forEach(id=>{
+    const mm=(D.m||{})[id]||{},o={},map=T.mod[id];
+    Object.keys(map).forEach(k=>{const dict=map[k];
       if(Array.isArray(mm[k])){const a=IXA(dict,mm[k]);if(a.length)o[k]=a;}
       else{const i=IX(dict,mm[k]);if(i!==null)o[k]=i;}
       drop(rest.m&&rest.m[id],k);});
     if(Object.keys(o).length)P.m[id]=o;});
   P.x=(D.symptoms||[]).map(s=>{const r=(D.sx||{})[s]||{};
     /* 旧版の手描きカーブ(wave)は廃止したので送らない（QRを短くするため） */
-    return {o:IX(T.onset,r.onset),s:IX(T.sev,r.sev),t:IX(T.trend,r.trend),
-      e:(r.events||[]).map(e=>[IX(T.onset,e.bucket),IX(T.evtag,e.tag),(lite?"":(e.note||""))])};});
+    const x={o:IX(T.onset,r.onset),s:IX(T.sev,r.sev),t:IX(T.trend,r.trend),
+      e:(r.events||[]).map(e=>[IX(T.onset,e.bucket),IX(T.evtag,e.tag),(lite?"":(e.note||""))])};
+    const p=IX(T.tempo,r.tempo);if(p!==null)x.p=p;   /* 症状ごとの始まりの速さ（最近始まった症状だけ） */
+    return x;});
   drop(rest,"sx");
   /* 空になった入れ物を捨てて、残り（自由記述など）だけを r に入れる */
   const prune=o=>{Object.keys(o).forEach(k=>{const v=o[k];
     if(v&&typeof v==="object"&&!Array.isArray(v)){prune(v);if(!Object.keys(v).length)delete o[k];}
-    else if(v===null||v===undefined||v===""||(Array.isArray(v)&&!v.length))delete o[k];});};
+    else if(v===null||v===undefined||v===""||v===false||(Array.isArray(v)&&!v.length))delete o[k];});};
   prune(rest);
   if(Object.keys(rest).length)P.r=rest;
   return JSON.stringify(P);
@@ -4203,40 +4505,41 @@ function unpackState(P){
   if(!P||P.g!==schemaSig())return false;   /* 設定が変わっている＝誤読させない */
   const T=codecDicts();
   D.who=UN(T.who,P.w); D.ageBand=UN(T.ageBand,P.a); D.hand=UN(T.hand,P.hd);
-  D.symptoms=UNA(T.sym,P.s);
-  const set=new Set();D.symptoms.forEach(s=>{const f=SYMPTOMS.find(x=>x[0]===s);if(f&&f[1])set.add(f[1]);});
-  D.mods=[...set].sort();
+  D.symptoms=UNA(T.sym,P.s); D.primary=UN(T.sym,P.pr); D.firstSx=UN(T.sym,P.fs);
+  updateMods();
   D.common=D.common||{};
   const c=P.c||{};
-  ["tempo","course","side","relapse","relapseRecover","freq","episodeDur","severity"]
-    .forEach(k=>{const v=UN(T[k],c[k]);if(v!==null)D.common[k]=v;});
+  COMMON_KEYS.forEach(k=>{const v=UN(T[k],c[k]);if(v!==null)D.common[k]=v;});
   {const v=UN(T.onset,c.vb);if(v!==null)D.common.visitBucket=v;}
-  D.common.aggravTags=UNA(T.aggravTags,P.ct); D.common.reliefTags=UNA(T.reliefTags,P.cr);
   D.assoc={};(P.as||"").split("").forEach((ch,i)=>{const k=T.assoc[i];
     const v={"0":"n","1":"y","2":"u","3":"nb"}[ch];if(k&&v)D.assoc[k]=v;});
-  D.func=UNA(T.func,P.f); D.visited=UNA(T.visited,P.vs);
+  D.func=UNA(T.func,P.f); D.visited=UNA(T.visited,P.vs); D.collateral=UNA(T.collateral,P.cl);
   D.bg=D.bg||{};const b=P.b||{};
-  ["risk","immune","lifestyle","exposure","autonomic"].forEach(k=>{D.bg[k]=UNA(T[k],b[k]);});
-  ["med","family","dopaDrug","preInfection","pregnancy"].forEach(k=>{const v=UN(T[k],b[k]);if(v!==null)D.bg[k]=v;});
+  BG_ARR.forEach(k=>{D.bg[k]=UNA(T[k],b[k]);});
+  BG_ONE.forEach(k=>{const v=UN(T[k],b[k]);if(v!==null)D.bg[k]=v;});
   D.vis=D.vis||{};{const v=UN(T.visSide,P.vi);if(v!==null)D.vis.side=v;}
-  D.m=D.m||{};[1,2,3].forEach(i=>{D.m[i]=D.m[i]||{};});
-  const MAP={1:{what:"m1what",fall:"m1fall",falldir:"m1falldir",fallinj:"m1fallinj"},
-             2:{main:"m2main",prox:"m2prox",area:"m2area"},
-             3:{main:"m3main",double:"m3double",diurnal:"m3diurnal",lid:"m3lid"}};
-  Object.keys(P.m||{}).forEach(id=>{const o=P.m[id];Object.keys(o).forEach(k=>{
-    const dict=T[MAP[id][k]];if(!dict)return;
+  D.m=D.m||{};Object.keys(QM).forEach(i=>{D.m[i]=D.m[i]||{};});
+  Object.keys(P.m||{}).forEach(id=>{const o=P.m[id],map=T.mod[id]||{};Object.keys(o).forEach(k=>{
+    const dict=map[k];if(!dict)return;
     D.m[id][k]=Array.isArray(o[k])?UNA(dict,o[k]):UN(dict,o[k]);});});
   D.sx={};(P.x||[]).forEach((r,i)=>{const s=D.symptoms[i];if(!s)return;const o={};
     const on=UN(T.onset,r.o);if(on!==null)o.onset=on;
     const sv=UN(T.sev,r.s);if(sv!==null)o.sev=sv;
     const tr=UN(T.trend,r.t);if(tr!==null)o.trend=tr;
+    const tp=UN(T.tempo,r.p);if(tp!==null)o.tempo=tp;
     if(r.e&&r.e.length)o.events=r.e.map(e=>{const ev={bucket:UN(T.onset,e[0]),tag:UN(T.evtag,e[1])};
       if(e[2])ev.note=e[2];return ev;}).filter(e=>e.bucket&&e.tag);
     D.sx[s]=o;});
+  /* r（辞書に入らなかった残り）を戻す。入れ子のものは中身ごとに合わせる。
+     2026-09-11 修正：以前は Object.assign(D.m, P.r.m) でモジュールごと上書きしていたため、
+     人体図（bodyparts）を使うとモジュール②の回答が引き継ぎで全部消えていた。 */
   if(P.r)Object.keys(P.r).forEach(k=>{
-    if(P.r[k]&&typeof P.r[k]==="object"&&!Array.isArray(P.r[k])&&D[k]&&typeof D[k]==="object")
-      Object.assign(D[k],P.r[k]);
-    else D[k]=P.r[k];});
+    const v=P.r[k];
+    if(k==="m"&&v&&typeof v==="object"){Object.keys(v).forEach(id=>{D.m[id]=Object.assign(D.m[id]||{},v[id]);});return;}
+    if(v&&typeof v==="object"&&!Array.isArray(v)&&D[k]&&typeof D[k]==="object")Object.assign(D[k],v);
+    else D[k]=v;});
+  if(D.m[2]&&(D.m[2].bodyparts||[]).length)areaFromParts();
+  deriveProx();
   return true;
 }
 const b64u={enc:(bytes)=>{let s="";bytes.forEach(b=>s+=String.fromCharCode(b));
@@ -4297,10 +4600,10 @@ async function restoreState(){
   if(!obj){RESTORE_ERR="読み込めませんでした（QR・リンクが古い可能性があります）。お手数ですが、最初から入力してください。";return false;}
   if(!unpackState(obj)){RESTORE_ERR="このQR・リンクは、いまの質問内容とバージョンが違うため読み込めませんでした。お手数ですが、最初から入力してください。";return false;}
   /* 軽量化で落ちたキーの既定値を復元（undefined参照を防ぐ） */
-  D.symptoms=D.symptoms||[];D.mods=D.mods||[];D.func=D.func||[];D.daily=D.daily||[];D.visited=D.visited||[];
-  D.common=D.common||{};D.assoc=D.assoc||{};D.sx=D.sx||{};D.vis=D.vis||{};D.dailyNone=D.dailyNone||{};
-  D.m=D.m||{};[1,2,3].forEach(i=>{D.m[i]=D.m[i]||{};});
-  D.bg=D.bg||{};["risk","immune","lifestyle","exposure","autonomic"].forEach(k=>{D.bg[k]=D.bg[k]||[];});
+  D.symptoms=D.symptoms||[];D.mods=D.mods||[];D.func=D.func||[];D.collateral=D.collateral||[];D.visited=D.visited||[];
+  D.common=D.common||{};D.assoc=D.assoc||{};D.sx=D.sx||{};D.vis=D.vis||{};
+  D.m=D.m||{};Object.keys(QM).forEach(i=>{D.m[i]=D.m[i]||{};});
+  D.bg=D.bg||{};BG_ARR.forEach(k=>{D.bg[k]=D.bg[k]||[];});
   D.tests=D.tests||"";D.free=D.free||"";
   const vm=location.hash.match(/[#&]view=doctor/);
   const nx=location.hash.match(/[#&]view=next/);
@@ -4471,17 +4774,19 @@ function prev(){
 
 /* ===== 音声入力 ===== */
 let rec=null,recOn=false;
-function toggleVoice(){
+function toggleVoice(key){
+  key=key==="free"?"free":"trouble";
+  const get=()=>key==="free"?(D.free||""):(D.common.trouble||"");
+  const put=v=>{if(key==="free")D.free=v;else D.common.trouble=v;const f=document.getElementById(key);if(f)f.value=v;};
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const stat=document.getElementById("vstat");
   if(!SR){stat.textContent="※このブラウザは音声入力に未対応です。文字で入力してください。";return;}
   if(recOn){rec.stop();return;}
   rec=new SR();rec.lang="ja-JP";rec.interimResults=true;rec.continuous=true;
-  let base=D.common.trouble?D.common.trouble+" ":"";
+  const base=get()?get()+" ":"";
   rec.onstart=()=>{recOn=true;const b=document.getElementById("vbtn");
     b.classList.add("rec");b.textContent="● 録音中（タップで停止）";stat.textContent="お話しください…";};
-  rec.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
-    D.common.trouble=base+t;D.free=D.common.trouble;const f=document.getElementById("trouble");if(f)f.value=D.common.trouble;};
+  rec.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;put(base+t);};
   rec.onerror=e=>{stat.textContent="音声認識エラー: "+e.error;};
   rec.onend=()=>{recOn=false;const b=document.getElementById("vbtn");
     if(b){b.classList.remove("rec");b.textContent="🎤 声で入力する";}stat.textContent="（停止しました。文字での修正もできます）";};
@@ -4494,18 +4799,33 @@ function buildSummary(){
   if(D.editedSummary!==undefined)return D.editedSummary;
   return buildSummaryParts().map(p=>p.t).join("\n");
 }
+const PATTERN_TEXT={"ずっと続いている":"ずっと続いている","出たり消えたりする（発作のように・波がある）":"出たり消えたりをくり返している","一度出て、今は治まっている":"一度出て今は治まっている"};
+const SHEET_LAB={"m1.what":"歩き方","m1.aid":"歩行の段階","m1.fall":"転倒","m1.falldir":"転び方","m1.fallinj":"転倒によるけが",
+  "m2.main":"主な症状","m2.area":"場所","m2.spread":"広がり方","m2.acts":"やりにくい動作","m2.trig":"きっかけ",
+  "m3.main":"主な症状","m3.double":"二重の見え方","m3.diurnal":"朝夕の変化","m3.lid":"まぶた",
+  "m4.feel":"めまいの感じ","m4.dur":"1回の持続","m4.freq":"頻度","m4.trig":"きっかけ","m4.ear":"耳の症状",
+  "m5.hx":"今回の頭痛","m5.where":"部位","m5.dur":"1回の持続","m5.freq":"頻度","m5.with":"一緒に出ること","m5.trig":"強くなるきっかけ",
+  "m6.when":"強いとき","m6.where":"部位","m6.alc":"飲酒で"};
+function qlab(id,it){return SHEET_LAB["m"+id+"."+it.k]||it.q.replace(/（.*?）/,"").replace(/？$/,"");}
+/* モジュールの回答を「ラベル：値」の配列に（sec 付きの項目は別の見出しに出すので除く） */
+function modPairs(id,withSec){const m=D.m[id]||{},out=[];
+  QM[id].forEach(it=>{if(!withSec&&it.sec)return;if(!modQShown(id,it))return;let v=m[it.k];
+    if(Array.isArray(v))v=v.filter(x=>x!=="あてはまらない").join("・");if(v)out.push([qlab(id,it),v]);});
+  return out;}
 function buildSummaryParts(){
+  pruneHidden();
   const c=D.common;const parts=[];
   /* 時間軸 */
   const onsetExact=fmtWhen("onset");const onsetLab=overallOnset();
-  const onset=onsetExact?`${onsetExact}から`:(onsetLab&&onsetLab!=="わからない"?`${onsetLab}から`:"発症時期は不明だが");
-  const tempo=c.tempo&&c.tempo!=="わからない"?c.tempo.replace(/（.*?）/,""):null;
-  const course=c.course&&c.course!=="わからない"?c.course:null;
-  const worsen=fmtWhen("worsen");
-  let lead=onset;if(tempo)lead+=`「${tempo}」の経過`;
-  if(c.freq&&c.freq!=="わからない")lead+=`、頻度は${c.freq}`;
-  if(c.episodeDur&&c.episodeDur!=="わからない")lead+=`（1回の持続は${c.episodeDur}）`;
-  if(worsen)lead+=`、${worsen}にさらに悪化`;if(course)lead+=`、現在は${course}`;
+  const known=onsetExact||(onsetLab&&onsetLab!=="わからない");
+  const onset=onsetExact?`${onsetExact}から`:(known?`${onsetLab}から`:"始まった時期は不明");
+  const p=primarySym(),bits=[];
+  if(c.tempo&&c.tempo!=="わからない")bits.push(`${D.symptoms.length>1&&p?`「${p}」は`:""}${c.tempo}始まり`);
+  if(PATTERN_TEXT[c.pattern])bits.push(PATTERN_TEXT[c.pattern]);
+  let lead=bits.length?onset+"、"+bits.join("、"):(known?onset+"症状がある":"始まった時期・始まり方は未回答");
+  const fq=c.freq&&c.freq!=="わからない"?`頻度は${c.freq}`:"",du=c.episodeDur&&c.episodeDur!=="わからない"?`1回の持続は${c.episodeDur}`:"";
+  if(fq||du)lead+=`（${[fq,du].filter(Boolean).join("、")}）`;
+  const course=mainCourse();if(course)lead+=`。現在は${course}`;
   parts.push({t:lead+"。",ph:"common"});
   /* 再発・寛解 */
   if(c.relapse&&c.relapse!=="わからない"){
@@ -4517,58 +4837,53 @@ function buildSummaryParts(){
   if(c.visitBucket)parts.push({t:`今回、受診しようと思うほど悪くなったのは${c.visitBucket}ごろ。`,ph:"sxtime"});
   /* 症状が出た順序（時系列） */
   if(D.symptoms.length)parts.push({t:"症状が始まった時期は、"+onsetSummary()+"。",ph:"sxtime"});
+  const sxTempo=D.symptoms.filter(x=>D.sx[x]&&D.sx[x].tempo).map(x=>`${x}は${D.sx[x].tempo}始まった`);
+  if(sxTempo.length)parts.push({t:sxTempo.join("、")+"。",ph:"sxtime"});
   const evtAll=[];D.symptoms.forEach(s=>{((D.sx[s]&&D.sx[s].events)||[]).forEach(e=>evtAll.push(Object.assign({s:s},e,{m:eventMonths(e)})));});
   evtAll.sort((a,b)=>(b.m==null?-1:b.m)-(a.m==null?-1:a.m));
   if(evtAll.length)parts.push({t:"経過の目印："+evtAll.map(e=>`${e.bucket}に${(e.tag==="その他"&&e.note)?e.note:e.tag}（${e.s}）`).join("、")+"。",ph:"sxtime"});
-  if(c.severity)parts.push({t:`生活への支障：${c.severity}。`,ph:"common"});
-  const aggr=[...(c.aggravTags||[])];if(c.aggrav)aggr.push(c.aggrav.trim());
-  if(aggr.length)parts.push({t:"悪くなるきっかけ："+aggr.join("・")+"。",ph:"common"});
-  const rel=[...(c.reliefTags||[])];if(c.relief)rel.push(c.relief.trim());
-  if(rel.length)parts.push({t:"楽になること："+rel.join("・")+"。",ph:"common"});
   /* 局在の手がかり（モジュール） */
-  D.mods.forEach(id=>{const m=D.m[id];let f="";
+  D.mods.forEach(id=>{const m=D.m[id]||{};let f="";
     if(id===1){const w=(m.what||[]).join("・");if(w)f+=`歩行に関して${w}。`;
+      if(m.aid)f+=`歩き方は「${m.aid}」。`;
       if(m.fall&&m.fall!=="なし")f+=`転倒は${m.fall}（${m.falldir||"方向不明"}）。`;
       const inj=(m.fallinj||[]).filter(x=>x!=="ケガはない");if(inj.length)f+=`転倒による外傷：${inj.join("・")}。`;}
     else if(id===2){const w=(m.main||[]).join("・");const ar=(m.area||[]).join("・");
-      if(w)f+=`${w}が${ar?ar+"に":""}ある。`;if(m.prox)f+=`症状が強いのは${m.prox}。`;}
+      if(w)f+=`${w}が${ar?ar+"に":""}ある。`;else if(ar)f+=`症状の場所は${ar}。`;
+      if(m.spread&&m.spread!=="わからない")f+=m.spread==="広がっていない"?"広がってはいない。":`${m.spread}広がっている。`;
+      const acts=(m.acts||[]).filter(x=>x!=="あてはまらない");if(acts.length)f+=`やりにくい動作：${acts.join("・")}。`;
+      const tr=(m.trig||[]).filter(x=>x!=="あてはまらない");if(tr.length)f+=`きっかけ：${tr.join("・")}。`;}
     else if(id===3){const w=(m.main||[]).join("・");if(w)f+=`${w}がある。`;
+      if(m.double&&m.double!=="二重ではない")f+=`二重の見え方は${m.double}。`;
       if(m.diurnal&&m.diurnal!=="わからない")f+=`朝と夕方の様子：${m.diurnal}。`;
       if(m.lid&&m.lid!=="下がらない")f+=`まぶたは${m.lid}。`;}
+    else{const pr=modPairs(id,true);if(pr.length)f+=`${MODS_PT[id]}について、`+pr.map(([k,v])=>`${k}は${v}`).join("、")+"。";}
     if(f)parts.push({t:f,ph:"module",mod:id});});
   if(c.side&&!["体の左右は関係ない（めまい・のみこみなど）","わからない"].includes(c.side))parts.push({t:`左右差は${c.side}。`,ph:"common"});
   /* 一緒に出ている症状 */
   assocConflicts().forEach(k=>parts.push({t:assocConflictText(k)+"。",ph:"assoc"}));
   const pos=ASSOC.filter(k=>assocValue(k)==="y");
   if(pos.length)parts.push({t:"一緒に出ている症状："+pos.map(x=>x.replace(/（.*?）/,"")).join("、")+" があります。",ph:"assoc"});
-  /* 機能 */
+  /* 生活への影響・見た人 */
   if(D.func.length)parts.push({t:"生活面では"+D.func.join("・")+"に支障。",ph:"daily"});
-  /* ふだんの困りごと（領域ごとにまとめる） */
-  if(D.daily.length){
-    const dg=DAILY_GROUPS.filter(g=>dSel(g).length)
-      .map(g=>g.g+"（"+dSel(g).map(it=>it.t).join("・")+"）");
-    parts.push({t:"ふだんの困りごと："+dg.join("、")+"。",ph:"daily"});
-  }
-  /* 見えにくさの詳細 */
-  const vb=[];
-  if(D.vis.side&&D.vis.side!=="わからない")vb.push(D.vis.side);
-  if(D.vis.note)vb.push(D.vis.note.trim());
-  if(vb.length)parts.push({t:"目の症状："+vb.join("／")+"。",ph:"daily"});
+  if((D.collateral||[]).length)parts.push({t:"様子を見た人・動画："+D.collateral.join("・")+"。",ph:"daily"});
+  /* 目の症状 */
+  if(D.vis.side&&D.vis.side!=="わからない")parts.push({t:"目の症状："+D.vis.side+"。",ph:"sxtime"});
   /* 背景 */
-  const bgp=[];
-  if(D.bg.risk.length)bgp.push(D.bg.risk.join("・"));
-  if(D.bg.med&&D.bg.med!=="飲んでいない"&&D.bg.med!=="わからない")
-    bgp.push(medLabel(D.bg.med)+(D.bg.medText?`（${D.bg.medText}）`:""));
-  if(D.bg.dopaDrug&&(D.bg.dopaDrug.includes("飲")))bgp.push("動作の遅さ・ふるえに関係しうる薬："+D.bg.dopaDrug);
-  if(D.bg.family==="いる")bgp.push("似た症状の家族あり");
-  if(D.bg.autonomic&&D.bg.autonomic.length)bgp.push("尿・立ちくらみ・便秘などの症状："+D.bg.autonomic.join("・"));
-  if(D.bg.preInfection&&["あった","ワクチン接種のあとから"].includes(D.bg.preInfection))bgp.push("症状の前の感染・予防接種："+D.bg.preInfection);
-  if(D.bg.pregnancy&&["妊娠中","授乳中"].includes(D.bg.pregnancy))bgp.push(D.bg.pregnancy);
-  if(D.bg.immune.length)bgp.push(D.bg.immune.join("・"));
-  if(D.bg.lifestyle.length)bgp.push(D.bg.lifestyle.join("・"));
-  if(D.bg.exposure.length)bgp.push(D.bg.exposure.join("・"));
-  if(D.bg.history)bgp.push("これまでの病気・手術："+D.bg.history.trim());
-  if(D.bg.allergy)bgp.push("アレルギー："+D.bg.allergy.trim());
+  const bgp=[],b=D.bg;
+  if(b.prevDx)bgp.push("ほかの医療機関で言われたこと："+b.prevDx.trim());
+  if(b.risk.length)bgp.push(b.risk.join("・"));
+  if(medLine())bgp.push(medLine());
+  const dk=(b.drugKinds||[]).filter(x=>x!=="あてはまらない");if(dk.length)bgp.push("使っている薬："+dk.join("・"));
+  if(b.dopaDrug&&(b.dopaDrug.includes("飲")))bgp.push("動作の遅さ・ふるえに関係しうる薬："+b.dopaDrug);
+  if(b.family==="いる")bgp.push("似た症状の家族あり");
+  if((b.famPheno||[]).length)bgp.push("家族・血縁："+b.famPheno.join("・")+((b.famRel||[]).length?`（${b.famRel.join("・")}）`:""));
+  if(autoPos().length)bgp.push("尿・立ちくらみ・便秘などの症状："+autoPos().join("・"));
+  if(b.preInfection&&["あった","ワクチン接種のあとから"].includes(b.preInfection))bgp.push("症状の前の感染・予防接種："+b.preInfection);
+  if(b.pregnancy&&["妊娠中","授乳中"].includes(b.pregnancy))bgp.push(b.pregnancy);
+  if(b.immune.length)bgp.push(b.immune.join("・"));
+  if(b.lifestyle.length)bgp.push(b.lifestyle.join("・"));
+  if(b.history)bgp.push("これまでの病気・手術："+b.history.trim());
   if(bgp.length)parts.push({t:"背景："+bgp.join("、")+"。",ph:"bg"});
   if(D.visited.length)parts.push({t:"既受診："+D.visited.join("・")+"。",ph:"bg"});
   if(D.tests)parts.push({t:"受けた検査："+D.tests.trim(),ph:"bg"});
@@ -4579,11 +4894,9 @@ function nowStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMo
 function timelineHtml(){
   const c=D.common;
   const onset=fmtWhen("onset")||(overallOnset()&&overallOnset()!=="わからない"?overallOnset():null);
-  const worsen=fmtWhen("worsen");
-  if(!onset&&!worsen)return "";
-  const pts=[{lab:"発症",sub:onset||"時期不明",cls:"start"}];
-  if(worsen)pts.push({lab:"さらに悪化",sub:worsen,cls:"worse"});
-  pts.push({lab:"現在（受診）",sub:(c.course&&c.course!=="わからない"?c.course:nowStr()),cls:"now"});
+  if(!onset)return "";
+  const pts=[{lab:"発症",sub:onset,cls:"start"}];
+  pts.push({lab:"現在（受診）",sub:(mainCourse()||nowStr()),cls:"now"});
   return `<div class="tl">`+pts.map((p,i)=>
     `<div class="tlp ${p.cls}"><span class="dot"></span><div class="tll"><b>${p.lab}</b>${p.sub}</div></div>`+
     (i<pts.length-1?`<div class="tlbar"></div>`:``)
@@ -4592,6 +4905,7 @@ function timelineHtml(){
 function whoLabel(){const f=WHO.find(w=>w[0]===D.who);return f?f[1]:"—";}
 
 function patientView(){
+  pruneHidden();
   const sum=(D.editedSummary!==undefined?D.editedSummary:buildSummary());const u=unconfirmedItems();
   const pos=ASSOC.filter(k=>assocValue(k)==="y");
   return `<div class="pv">
@@ -4604,13 +4918,9 @@ function patientView(){
      return `<div class="blk"><h4>🔁 前回とくらべて${D.prev&&D.prev.date?`（前回 ${esc(D.prev.date)}）`:""}</h4>
        <ul>${rows.map(r=>`<li>${esc(r.s)}：${esc(r.txt)}</li>`).join("")}</ul></div>`;})()}
    <div class="blk"><h4>📝 入力内容のまとめ</h4><div>${esc(sum).replace(/\n/g,"<br>")}</div></div>
-   ${D.daily.length?`<div class="blk"><h4>＋ ふだんの困りごと</h4>
-     ${DAILY_GROUPS.filter(g=>dSel(g).length).map(g=>
-       `<div style="margin:4px 0"><b style="color:var(--brand-d)">${g.e} ${g.g}</b><ul>${dSel(g).map(it=>`<li>${it.t}${it.sub?`（${it.sub}）`:""}</li>`).join("")}</ul></div>`).join("")}
-     <p class="mini">※チェックの数は重症度を表すものではありません。これらは他の原因でも起こります。</p></div>`:""}
    <div class="blk"><h4>💬 医師に伝えるとよいポイント</h4>
      <ul>
-       <li>いつから・どう変化したか（${fmtWhen("onset")||overallOnset()||"—"} / ${D.common.tempo||"—"}${fmtWhen("worsen")?`／${fmtWhen("worsen")}に悪化`:""}）</li>
+       <li>いつから・どう変化したか（${fmtWhen("onset")||overallOnset()||"—"} / ${D.common.tempo||"—"}）</li>
        ${D.func.length?`<li>できなくなったこと：${D.func.join("・")}</li>`:""}
        ${pos.length?`<li>一緒に出ている症状：${pos.map(x=>x.replace(/（.*?）/,"")).join("、")}</li>`:""}
        ${u.map(x=>`<li>${x}</li>`).join("")}
@@ -4643,25 +4953,31 @@ function redFlags(){
   if(A["飲み込みにくさ・むせ"]==="y")f.push("飲み込みにくさ・むせあり");
   if(A["ろれつが回りにくい"]==="y")f.push("ろれつの回りにくさあり");
   if(A["筋肉がやせる・ぴくつく"]==="y")f.push("筋肉のやせ・ぴくつきあり");
-  if(c.tempo&&(c.tempo.includes("突然")||c.tempo.includes("急に")))f.push("急な発症（秒〜数日）");
-  if(c.course&&c.course.includes("悪くなって"))f.push("進行性の悪化");
+  if(["数秒〜数分で","数時間で","数日で"].includes(c.tempo))f.push("急な発症（秒〜数日）");
+  if(isWorsening())f.push("進行性の悪化");
   const diu=(D.m[3]&&D.m[3].diurnal);
   if(diu&&(diu.includes("夕方")||diu.includes("使うと悪化")))f.push("夕方の増悪・易疲労性あり");
   if(c.relapse&&c.relapse.includes("くり返"))f.push("出て治まるをくり返す経過");
   return f;
 }
 /* 陽性所見サマリ（医師が最初の10秒で骨格を掴む1〜2行） */
+const PATTERN_SHORT={"ずっと続いている":"持続","出たり消えたりする（発作のように・波がある）":"出たり消えたり（発作性・波）","一度出て、今は治まっている":"一度出て現在は消失"};
 function posSummary(){
   const c=D.common,seg=[];
   const on=fmtWhen("onset")||((overallOnset()&&overallOnset()!=="わからない")?overallOnset():null);
   if(on)seg.push(on+"発症");
-  if(c.tempo&&c.tempo!=="わからない")seg.push(c.tempo.replace(/（.*?）/,""));
-  if(c.course&&c.course!=="わからない")seg.push(c.course);
+  if(c.tempo&&c.tempo!=="わからない")seg.push(c.tempo+"始まる");
+  if(PATTERN_SHORT[c.pattern])seg.push(PATTERN_SHORT[c.pattern]);
+  if(mainCourse())seg.push(mainCourse());
   if(c.side&&!["体の左右は関係ない（めまい・のみこみなど）","わからない"].includes(c.side))seg.push(c.side);
-  if(D.mods.includes(1)&&D.m[1].fall&&D.m[1].fall!=="なし")seg.push("転倒"+D.m[1].fall);
-  if(D.mods.includes(2)&&D.m[2].prox&&D.m[2].prox!=="わからない")seg.push("分布:"+D.m[2].prox);
+  if(hasMod(1)&&D.m[1].aid)seg.push("歩行:"+D.m[1].aid);
+  if(hasMod(1)&&fell())seg.push("転倒"+D.m[1].fall);
+  if(hasMod(2)&&D.m[2].prox)seg.push("分布:"+D.m[2].prox);
   const diu=(D.m[3]&&D.m[3].diurnal);
   if(diu&&diu!=="わからない"&&diu!=="一日中同じ")seg.push(diu);
+  if(hasMod(4)&&D.m[4].feel&&D.m[4].feel!=="わからない")seg.push("めまい:"+D.m[4].feel);
+  if(hasMod(5)&&D.m[5].hx&&D.m[5].hx!=="わからない")seg.push("頭痛:"+D.m[5].hx);
+  if(hasMod(6)&&D.m[6].when&&D.m[6].when!=="わからない")seg.push("ふるえ:"+D.m[6].when);
   const pos=ASSOC.filter(k=>assocValue(k)==="y").map(x=>x.replace(/（.*?）/,""));
   if(pos.length)seg.push("随伴＋: "+pos.join("・"));
   if(D.func.length)seg.push("ADL支障: "+D.func.slice(0,3).join("・")+(D.func.length>3?" 他":""));
@@ -4685,7 +5001,7 @@ function syndromePatterns(){
   const yes=n=>A[n]==="y",no=n=>A[n]==="n";
   const inA=(a,v)=>Array.isArray(a)&&a.indexOf(v)>=0;
   const sym=s=>D.symptoms.indexOf(s)>=0&&(!SYMPTOM_ASSOC[s]||assocValue(SYMPTOM_ASSOC[s])==="y");
-  const dHas=id=>D.daily.indexOf(id)>=0;
+  const m6=D.m[6]||{},slow=["数週間で","数か月かけて","年単位でゆっくり"].indexOf(c.tempo)>=0;
   const push=(name,core,ev,ask,min)=>{if(core&&ev.length>=(min||2))out.push({name:name,ev:ev,ask:ask});};
 
   /* 神経筋接合部（日内変動・易疲労性） */
@@ -4695,7 +5011,7 @@ function syndromePatterns(){
    if(m3.lid&&m3.lid!=="下がらない")ev.push("まぶた："+m3.lid);
    if(inA(m3.main,"物が二重に見える")||sym("ものが二重に見える"))ev.push("複視");
    if(sym("疲れると悪くなる・夕方につらい")||inA(m3.main,"疲れると見えにくい"))ev.push("疲れで悪化");
-   if(dHas("battery"))ev.push("使っていると電池切れのように動けなくなる");
+   if(inA(m3.main,"使っていると電池が切れたように動けなくなる"))ev.push("使っていると電池切れのように動けなくなる");
    push("神経筋接合部のパターン（日内変動・易疲労性）",core,ev,
      "上方注視の維持による眼瞼下垂の増悪、反復動作での筋力低下、球症状の日内変動、頸部屈筋の易疲労");}
 
@@ -4704,36 +5020,39 @@ function syndromePatterns(){
    const ev=[];
    if(yes("動作が遅い・小さくなった"))ev.push("動作が遅い・小さくなった");
    if(yes("安静にしていても手がふるえる"))ev.push("安静時のふるえ");
+   else if(m6.when==="じっとしているとき")ev.push("ふるえはじっとしているときに強い");
    if(yes("表情が乏しい・声が小さい"))ev.push("表情が乏しい・声が小さい");
    if(inA(m1.what,"足が出ない・すくむ"))ev.push("足が出ない・すくむ");
    if(yes("においが分かりにくい"))ev.push("においが分かりにくい");
    if(yes("夢で大声・手足が動く（睡眠中）"))ev.push("睡眠中の大声・手足の動き");
-   if(D.bg.autonomic&&D.bg.autonomic.length)ev.push("自律神経症状："+D.bg.autonomic.join("・"));
-   if(c.tempo&&(c.tempo.indexOf("ゆっくり")>=0||c.tempo.indexOf("だんだん")>=0))ev.push("経過："+c.tempo);
-   const drug=D.bg.dopaDrug&&["飲んでいる／最近飲んだ","以前飲んでいた"].indexOf(D.bg.dopaDrug)>=0;
-   if(drug)ev.push("動作の遅さ・ふるえに関係しうる薬："+D.bg.dopaDrug);
+   if(autoPos().length)ev.push("自律神経症状："+autoPos().join("・"));
+   if(slow)ev.push("始まり："+c.tempo);
+   const drug=inA(D.bg.drugKinds,DOPA_CHIP)&&D.bg.dopaDrug!=="わからない"||["飲んでいる／最近飲んだ","以前飲んでいた"].indexOf(D.bg.dopaDrug)>=0;
+   if(drug)ev.push("動作の遅さ・ふるえに関係しうる薬"+(D.bg.dopaDrug?"："+D.bg.dopaDrug:"あり"));
    push("動作緩慢・寡動を軸とするパターン",core,ev,
      "左右差、固縮と姿勢反射、小刻み歩行やすくみ足の有無、症状の出現順序"+
      (drug?"、薬剤の使用時期と症状出現の時間関係":""));}
 
-  /* 再発と寛解をくり返す経過（時間的多発） */
-  {const core=!!((c.relapse&&c.relapse.indexOf("回")>=0)||(c.tempo&&c.tempo.indexOf("出たり治ったり")>=0));
+  /* 再発と寛解をくり返す経過（時間的多発）
+     2026-09-11 修正：以前は「くり返す」という経過だけで成立し、失神らしい入力でもこのパターンが出ていた。
+     持続する症状が数日以上続いて治まったことがある場合に限り、発作のように出たり消えたりする人は対象外にする。 */
+  {const lasting=["数日","数週間","数か月","完全には治っていない"].indexOf(c.relapseRecover)>=0;
+   const core=!!(c.relapse&&c.relapse.indexOf("回")>=0&&lasting&&!isEpisodic());
    const ev=[];
-   if(c.relapse&&c.relapse.indexOf("回")>=0)ev.push("過去のエピソード："+c.relapse);
-   if(c.tempo&&c.tempo.indexOf("出たり治ったり")>=0)ev.push("経過："+c.tempo);
-   if(c.relapseRecover)ev.push("前回の回復："+c.relapseRecover);
+   if(core)ev.push("過去のエピソード："+c.relapse);
+   if(core)ev.push("前回の回復："+c.relapseRecover);
    if(yes("視力が落ちた・目が痛い")||sym("視力が落ちた・目が痛い"))ev.push("視力低下・眼痛");
    if(yes("胴体・脚に帯のようなしめつけ感"))ev.push("帯のようなしめつけ感");
    if(yes("しびれ・感覚の鈍さ"))ev.push("しびれ・感覚の鈍さ");
-   if(inA(c.aggravTags,"暑いとき・入浴後"))ev.push("暑いとき・入浴後に悪化");
+   if(inA(m2.trig,"暑さ・入浴で強くなる"))ev.push("暑さ・入浴で悪化");
    push("再発と寛解をくり返す経過（時間的多発）",core,ev,
-     "過去のエピソードごとの部位・持続・回復の程度、暑さや入浴での一過性の増悪、頸部前屈での電撃様感覚");}
+     "過去のエピソードごとの部位・持続・回復の程度、暑さや入浴での一過性の増悪、頸部前屈での電撃様感覚",3);}
 
   /* 筋萎縮・線維束性収縮を伴うパターン */
   {const core=yes("筋肉がやせる・ぴくつく")||sym("手足がやせる・ぴくつく");
    const ev=[];
    if(core)ev.push("筋のやせ・ぴくつき");
-   if(c.course&&c.course.indexOf("悪くなって")>=0)ev.push("経過："+c.course);
+   if(isWorsening())ev.push("経過："+mainCourse());
    if(yes("ろれつが回りにくい"))ev.push("ろれつが回りにくい");
    if(yes("飲み込みにくさ・むせ"))ev.push("飲み込みにくさ・むせ");
    if(yes("息苦しさ"))ev.push("息苦しさ");
@@ -4745,9 +5064,11 @@ function syndromePatterns(){
   {const core=yes("胴体・脚に帯のようなしめつけ感");
    const ev=[];
    if(core)ev.push("胴体・脚の帯のようなしめつけ感");
-   if(inA(m2.area,"両脚"))ev.push("両脚の症状");
+   const bp=m2.bodyparts||[];
+   if(inA(m2.area,"両脚")||(bp.indexOf("legL")>=0&&bp.indexOf("legR")>=0))ev.push("両脚の症状");
    if(inA(D.bg.autonomic,"尿が近い・もれる・出にくい"))ev.push("排尿のトラブル");
    if(inA(D.func,"トイレ（排尿・排便）"))ev.push("排尿・排便のADL支障");
+   if(yes("首・腰・背中の痛み（手足に響く）"))ev.push("首・腰・背中の痛み");
    push("脊髄レベルを示唆するパターン",core,ev,
      "感覚レベルの有無、腱反射・病的反射、膀胱直腸機能、頸部・背部の疼痛");}
 
@@ -4758,15 +5079,16 @@ function syndromePatterns(){
    if(c.side==="左右で同じくらい")ev.push("左右差：左右で同じくらい");
    if(yes("しびれ・感覚の鈍さ"))ev.push("しびれ・感覚の鈍さ");
    if(inA(D.bg.risk,"糖尿病"))ev.push("背景：糖尿病");
-   if(c.tempo&&(c.tempo.indexOf("ゆっくり")>=0||c.tempo.indexOf("だんだん")>=0))ev.push("経過："+c.tempo);
-   if(dHas("temp"))ev.push("お湯の温度が分かりにくい");
+   if(inA(D.bg.lifestyle,"お酒をよく飲む"))ev.push("背景：お酒をよく飲む");
+   if(slow)ev.push("始まり："+c.tempo);
+   if(m2.spread==="足先から上へ")ev.push("足先から上へ広がる");
    push("遠位優位・左右対称の末梢神経パターン",core,ev,
      "遠位優位の感覚低下と腱反射の低下、左右対称性、背景（糖尿病・アルコール・薬剤・ビタミン）の確認");}
 
   /* 近位筋優位の脱力パターン */
   {const core=m2.prox==="肩や太ももに近い方";
    const ev=[];
-   if(core)ev.push("分布：肩や太ももに近い方（近位優位）");
+   if(core)ev.push("分布：肩や太ももに近い方（近位優位）"+((m2.acts||[]).length?"＝"+m2.acts.filter(x=>ACTS_PROX.indexOf(x)>=0).join("・"):""));
    if(inA(m2.main,"力が入らない"))ev.push("力が入らない");
    if(inA(D.func,"階段の上り下り"))ev.push("階段の上り下りに支障");
    if(inA(m1.what,"立ち上がりにくい"))ev.push("立ち上がりにくい");
@@ -4775,7 +5097,7 @@ function syndromePatterns(){
      "近位筋の徒手筋力、立ち上がり・階段動作、感覚障害の欠如、筋原性酵素");}
 
   /* 突然発症・局所性のパターン */
-  {const core=!!(c.tempo&&c.tempo.indexOf("突然")>=0);
+  {const core=c.tempo==="数秒〜数分で";
    const ev=[];
    if(core)ev.push("発症："+c.tempo);
    if(c.side&&["右のほうが強い","左のほうが強い"].indexOf(c.side)>=0)ev.push("左右差："+c.side);
@@ -4787,7 +5109,8 @@ function syndromePatterns(){
   {const core=!!(D.bg.preInfection&&["あった","ワクチン接種のあとから"].indexOf(D.bg.preInfection)>=0);
    const ev=[];
    if(core)ev.push("症状の前の感染・予防接種："+D.bg.preInfection);
-   if(c.tempo&&c.tempo.indexOf("急に")>=0)ev.push("経過："+c.tempo);
+   if(["数時間で","数日で","数週間で"].indexOf(c.tempo)>=0)ev.push("始まり："+c.tempo);
+   if(m2.spread==="足先から上へ")ev.push("足先から上へ広がる");
    if(inA(m2.main,"力が入らない")||sym("力が入らない"))ev.push("力が入らない");
    if(yes("しびれ・感覚の鈍さ"))ev.push("しびれ・感覚の鈍さ");
    push("先行感染・ワクチン後の急性〜亜急性経過",core,ev,
@@ -4806,16 +5129,66 @@ function syndromePatterns(){
   return out.sort((a,b)=>b.ev.length-a.ev.length).slice(0,3);
 }
 
+/* 医療者シート・カルテ転記で共通に使う行（見出しは 2026-09-11 に①〜⑨へ組み直し） */
+function sheetTimePairs(){const c=D.common,p=primarySym(),many=D.symptoms.length>1;
+  const sxT=D.symptoms.filter(x=>D.sx[x]&&D.sx[x].tempo).map(x=>`${x}：${D.sx[x].tempo}`).join("、");
+  return [
+   ["始まりの速さ"+(many&&p?`（${p}）`:""),c.tempo],
+   ["続き方",c.pattern],
+   ["頻度",c.freq],["1回の持続",c.episodeDur],
+   ["その後の変化（主な症状）",mainCourse()],
+   ["ほかの症状の始まりの速さ",sxT||null],
+   ["最初に気づいた症状",D.firstSx],
+   ["以前にも（再発・寛解）",c.relapse?c.relapse+(c.relapseRecover?`（前回${c.relapseRecover}で軽快）`:""):null]];}
+function sheetTrigPairs(){const out=[];
+  D.mods.forEach(id=>QM[id].forEach(it=>{if(it.sec!=="trig"||!modQShown(id,it))return;
+    const v=(((D.m[id]||{})[it.k])||[]).filter(x=>x!=="あてはまらない");if(v.length)out.push([MODS[id]+"："+qlab(id,it),v.join("・")]);}));
+  const diu=D.m[3]&&D.m[3].diurnal;if(hasMod(3)&&diu)out.push(["日内変動・易疲労性",diu]);
+  return out;}
+function sheetAdlPairs(){const out=[];
+  if(D.func.length)out.push(["できなくなったこと",D.func.join("・")]);
+  D.mods.forEach(id=>QM[id].forEach(it=>{if(it.sec!=="adl"||!modQShown(id,it))return;let v=(D.m[id]||{})[it.k];
+    if(Array.isArray(v))v=v.filter(x=>x!=="あてはまらない").join("・");if(v)out.push([qlab(id,it),v]);}));
+  return out;}
+function sheetBgPairs(){const b=D.bg,dk=(b.drugKinds||[]).filter(x=>x!=="あてはまらない");
+  return [
+   ["他院での説明（患者申告・未確認）",b.prevDx?b.prevDx:(b.prevDxNone?"特に言われていない":null)],
+   ["血管リスク・持病",b.risk.length?b.risk.join("・"):null],
+   ["薬（症状の前後の変更）",medLine()||null],
+   ["使っている薬",dk.length?dk.join("・"):((b.drugKinds||[]).length?"あてはまらない":null)],
+   ["動作の遅さ・ふるえに関係しうる薬",b.dopaDrug],
+   ["自律神経症状",(b.autonomic||[]).length?b.autonomic.join("・"):null],
+   ["家族歴（似た症状）",b.family],
+   ["家族・血縁の様子",(b.famPheno||[]).length?b.famPheno.join("・")+((b.famRel||[]).length?`（${b.famRel.join("・")}）`:""):null],
+   ["先行感染・ワクチン",b.preInfection],
+   ["妊娠・授乳",b.pregnancy],
+   ["免疫/感染/腫瘍の手がかり",b.immune.length?b.immune.join("・"):null],
+   ["生活",b.lifestyle.length?b.lifestyle.join("・"):null],
+   ["既往・手術",b.history||null],
+   ["既受診科",D.visited.length?D.visited.join("・"):null],
+   ["受けた検査",D.tests||null]].filter(x=>x[1]);}
+/* 目撃者情報：本人以外の入力と、見た人・動画 */
+function sheetWitness(){const rows=[];
+  if(isProxy())rows.push(["入力者",whoLabel()+"（本人以外）"]);
+  if(showQ("daily.collateral"))rows.push(["見た人・動画",(D.collateral||[]).length?D.collateral.join("・"):"未回答"]);
+  return rows;}
+function sheetLocPairs(){const c=D.common,rows=[];
+  if(c.side)rows.push(["左右差",c.side]);else if(showQ("common.side"))rows.push(["左右差","未聴取"]);
+  if(D.hand)rows.push(["利き手",D.hand]);
+  if(D.vis&&D.vis.side)rows.push(["目の症状（片目か両目か）",D.vis.side]);
+  return rows;}
+function modSheetPairs(id){const pr=modPairs(id,false);
+  if(id===2&&(D.m[2]||{}).prox)pr.push(["近い方／先の方（動作から）",D.m[2].prox]);
+  return pr;}
 function doctorSheet(){
+  pruneHidden();
   const c=D.common;
   const rf=redFlags();
   const rfBox=rf.length?`<div style="background:#fdecec;border:1px solid #f1b9b9;color:#9a2a2a;border-radius:8px;padding:8px 11px;margin:8px 0;font-size:calc(12.5px*var(--fs))">
-     <b>⚠ 注意サイン（見落とし防止・診断ではありません）</b><br>${rf.map(x=>"・"+x).join("<br>")}</div>`:"";
-  const sum=(D.editedSummary!==undefined?D.editedSummary:buildSummary()).split("\n").filter(x=>!x.startsWith("家族から見た")).join(" ");
-  const modBlocks=D.mods.map(id=>{const m=D.m[id];let rows="";
-    QM[id].forEach(it=>{let v=m[it.k];if(Array.isArray(v))v=v.join("・");
-      if(v)rows+=`<div><b>${it.q.replace(/（.*?）/,"").replace(/？$/,"")}</b><br>${v}</div>`;});
-    return rows?`<div style="margin:3px 0"><span class="g" style="color:var(--sub);font-weight:700">${MODS[id]}</span><div class="kv">${rows}</div></div>`:"";}).join("");
+     <b>⚠ 注意サイン（見落とし防止・診断ではありません）</b><br>${rf.map(x=>"・"+esc(x)).join("<br>")}</div>`:"";
+  const kvRows=pr=>pr.map(([k,v])=>`<div><b>${esc(k)}</b><br>${esc(String(v))}</div>`).join("");
+  const modBlocks=D.mods.map(id=>{const pr=modSheetPairs(id);
+    return pr.length?`<div style="margin:3px 0"><span class="g" style="color:var(--sub);font-weight:700">${MODS[id]}</span><div class="kv">${kvRows(pr)}</div></div>`:"";}).join("");
   const u=unconfirmedItems();
   const pats=syndromePatterns();
   const patBox=pats.length?`<div class="patbox">
@@ -4826,24 +5199,15 @@ function doctorSheet(){
        <div class="pa"><b>確認</b>：${esc(p.ask)}</div></div>`).join("")}
      <div class="mini" style="margin-top:6px">※ 患者・家族の自己申告のみから所見の組み合わせを機械的に抽出したものです。診察所見・検査は含みません。病名の判断と除外は医師が行ってください。</div>
    </div>`:"";
-  const risks=[...D.bg.risk];
-  let medline=D.bg.med?(medLabel(D.bg.med)+(D.bg.medText?`（${D.bg.medText}）`:"")):"";
   /* 中身が空のセクションは見出しごと省き、末尾に「未聴取」を1行だけ出す。
      「聞いていない」という情報は残しつつ、空セクションで紙面を使わないため。 */
   const notAsked=[];
-  const dailyRows=DAILY_GROUPS.filter(g=>dStatus(g)!=="unasked");
-  const dailyEye=(D.vis.side||D.vis.note)?`<div style="margin-top:3px"><span class="g">目の症状:</span> ${[D.vis.side&&D.vis.side!=="わからない"?D.vis.side:"",D.vis.note?esc(D.vis.note):""].filter(Boolean).join("／")}</div>`:"";
-  const sec4=D.func.length?`<div class="sec"><div class="lab">④ 機能への影響（歩行・嚥下・排尿・認知・ADL）</div>
-     ${D.func.join("・")}</div>`:(notAsked.push("④ 機能への影響"),"");
-  const sec4d=(dailyRows.length||dailyEye)?`<div class="sec"><div class="lab">④' ふだんの困りごと（感覚・気分・易疲労・排尿・認知；本人/家族の実感）</div>
-     ${dailyRows.map(g=>{const st=dStatus(g);
-       const val=st==="sel"?dSel(g).map(it=>it.t).join("・"):'<span class="n">なし（申告）</span>';
-       return `<div><span class="g">${g.g}:</span> ${val}</div>`;}).join("")}
-     ${dailyRows.length<DAILY_GROUPS.length?`<div class="mini">他の領域（${DAILY_GROUPS.filter(g=>dStatus(g)==="unasked").map(g=>g.g).join("、")}）は未確認</div>`:""}
-     ${dailyEye}</div>`:(notAsked.push("④' ふだんの困りごと"),"");
-  const sec6=(D.visited.length||D.tests)?`<div class="sec"><div class="lab">⑥ 既受診科・受けた検査</div>
-     ${kvSec([["既受診科",D.visited.length?D.visited.join("・"):null],["受けた検査",D.tests||null]])}</div>`
-     :(notAsked.push("⑥ 既受診科・受けた検査"),"");
+  const loc=sheetLocPairs(),trig=sheetTrigPairs(),adl=sheetAdlPairs(),bgp=sheetBgPairs(),wit=sheetWitness();
+  const sec4=trig.length?`<div class="sec"><div class="lab">④ 増悪・軽快因子</div>${kvSec(trig)}</div>`:"";
+  const sec5=adl.length?`<div class="sec"><div class="lab">⑤ ADLへの影響</div>${kvSec(adl)}</div>`:(notAsked.push("⑤ ADLへの影響"),"");
+  const sec6=bgp.length?`<div class="sec"><div class="lab">⑥ 関連既往・薬剤・家族歴</div>${kvSec(bgp)}</div>`:(notAsked.push("⑥ 関連既往・薬剤・家族歴"),"");
+  const sec7=wit.length?`<div class="sec"><div class="lab">⑦ 目撃者情報</div>${kvSec(wit)}</div>`:"";
+  const p=primarySym();
   const id4=SESSION.id;
   return `<div class="sheet">
    <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
@@ -4854,35 +5218,23 @@ function doctorSheet(){
 
    <div class="topbox">
      <div class="cc">${c.trouble?esc(c.trouble):(D.symptoms.slice(0,3).join("・")||"—")}</div>
+     ${D.symptoms.length>1&&p?`<div style="margin-top:3px"><b style="color:var(--sub)">いちばん困っている症状</b>：${esc(p)}</div>`:""}
      ${c.visitBucket?`<div style="margin-top:4px"><b style="color:var(--sub)">受診のきっかけ</b>：${esc(c.visitBucket)}ごろから悪化して受診</div>`:""}
-     ${posSummary()?`<div style="margin-top:5px">${posSummary()}</div>`:""}
+     ${posSummary()?`<div style="margin-top:5px">${esc(posSummary())}</div>`:""}
    </div>
    ${rfBox}
    ${(function(){const rows=prevCompareRows();if(!rows.length)return "";
      return `<div class="sec"><div class="lab">🔁 前回からの変化${D.prev&&D.prev.date?`（前回 ${esc(D.prev.date)}）`:""}</div>
        <div class="assoc">${rows.map(r=>`<div><span class="g">${esc(r.mark)} ${esc(r.s)}:</span> ${esc(r.txt)}</div>`).join("")}</div></div>`;})()}
-   <div class="sec time-section"><div class="lab">① 時間軸（発症・経過・時期の整理）</div>
+   <div class="sec time-section"><div class="lab">① 発症・時間軸</div>
      ${trajectoryChart()}
-     ${(function(){
-       const a=[...(c.aggravTags||[])];if(c.aggrav)a.push(c.aggrav);
-       const r=[...(c.reliefTags||[])];if(c.relief)r.push(c.relief);
-       return kvSec([
-        ["出方・進み方",c.tempo],
-        ["頻度",c.freq],
-        ["1回の持続",c.episodeDur],
-        ["増悪時期",fmtWhen("worsen")],
-        ["その後の経過",c.course],
-        ["再発・寛解",c.relapse?c.relapse+(c.relapseRecover?`（前回${c.relapseRecover}で軽快）`:""):null],
-        ["日内変動・易疲労性",(D.m[3]&&D.m[3].diurnal)],
-        ["生活への支障",c.severity],
-        ["増悪因子",a.length?a.join("・"):null],
-        ["軽減因子",r.length?r.join("・"):null]]);})()}</div>
+     ${kvSec(sheetTimePairs())}</div>
 
-   <div class="sec"><div class="lab">② 局在の手がかり（部位・分布・左右差）</div>
-     <div class="kv"><div><b>左右差</b><br>${c.side||"未聴取"}</div><div><b>利き手</b><br>${D.hand||"未聴取"}</div></div>
+   <div class="sec"><div class="lab">② 症状の特徴・分布</div>
+     ${loc.length?`<div class="kv">${kvRows(loc)}</div>`:""}
      ${modBlocks}</div>
 
-   <div class="sec"><div class="lab">③ 一緒に出ている症状（＋陽性 / −陰性 / ?未確認）</div>
+   <div class="sec"><div class="lab">③ 随伴症状（＋陽性 / −陰性 / ?未確認）</div>
      ${(function(){
        /* 見落とすと影響の大きい項目だけ、陽性・陰性を1行に集約して先に出す */
        const KEY=["飲み込みにくさ・むせ","ろれつが回りにくい","息苦しさ","筋肉がやせる・ぴくつく"];
@@ -4895,33 +5247,18 @@ function doctorSheet(){
      <div class="assoc">${assocGrouped()}</div></div>
 
    ${sec4}
-   ${sec4d}
-
-   <div class="sec"><div class="lab">⑤ 背景（持病・薬剤・家族歴・免疫/感染・生活・環境・既往・アレルギー）</div>
-     ${kvSec([
-       ["血管リスク・持病",risks.length?risks.join("・"):null],
-       ["薬剤",medline||null],
-       ["動作の遅さ・ふるえに関係しうる薬",D.bg.dopaDrug],
-       ["自律神経症状",D.bg.autonomic&&D.bg.autonomic.length?D.bg.autonomic.join("・"):null],
-       ["家族歴（似た症状）",D.bg.family],
-       ["先行感染・ワクチン",D.bg.preInfection],
-       ["妊娠・授乳",D.bg.pregnancy],
-       ["免疫/感染/腫瘍の手がかり",D.bg.immune.length?D.bg.immune.join("・"):null],
-       ["生活・習慣",D.bg.lifestyle.length?D.bg.lifestyle.join("・"):null],
-       ["仕事・環境・接触",D.bg.exposure.length?D.bg.exposure.join("・"):null],
-       ["既往・手術",D.bg.history||null],
-       ["アレルギー",D.bg.allergy||null]])}</div>
-
+   ${sec5}
    ${sec6}
+   ${sec7}
    ${notAsked.length?`<div class="sec mini"><span class="g">未聴取:</span> ${notAsked.join("／")}</div>`:""}
 
    ${patBox}
 
-   <div class="sec"><div class="lab">⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）</div>
-     ${u.length?`<div class="askbox">${"・"+u.join("<br>・")}</div>`:'<span class="mini">特になし</span>'}</div>
+   <div class="sec"><div class="lab">⑧ 次に確認する価値が高い項目（診断には言及しない）</div>
+     ${u.length?`<div class="askbox">${"・"+u.map(esc).join("<br>・")}</div>`:'<span class="mini">特になし</span>'}</div>
 
-   <div class="sec"><div class="lab">⑧ 自由記載（ご本人・ご家族の言葉）</div>
-     <div class="quote">${D.free?esc(D.free):'<span class="mini">音声・自由記載なし</span>'}</div></div>
+   <div class="sec"><div class="lab">⑨ ほかに伝えたいこと（本人・家族の言葉）</div>
+     <div class="quote">${D.free?esc(D.free):'<span class="mini">記載なし</span>'}</div></div>
 
    <div class="foot">本シートは患者・家族の自己申告を整理したものです。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。</div>
   </div>`;
@@ -4929,66 +5266,44 @@ function doctorSheet(){
 
 /* ===== プレーンテキスト出力（カルテ転記・連携添付用） ===== */
 function plainSheet(){
-  const c=D.common;const L=[];const sep="─".repeat(40);
+  pruneHidden();
+  const c=D.common;const L=[];const sep="─".repeat(40);const kvL=pairs=>pairs.filter(x=>x[1]).map(([k,v])=>`  ${k}: ${v}`);
   L.push(sep);
   L.push("NeuroBridge 病歴メモ（患者・家族入力／診断ではありません）");
   L.push(`作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}`);
-  L.push(`選択症候: ${D.symptoms.join("、")||"—"}`);
+  L.push(`選択症候: ${D.symptoms.join("、")||"—"}${D.symptoms.length>1&&primarySym()?`（いちばん困っている: ${primarySym()}）`:""}`);
   L.push(sep);
   L.push(`【主訴】 ${c.trouble||D.symptoms.slice(0,3).join("・")||"—"}`);
+  if(c.visitBucket)L.push(`【受診のきっかけ】 ${c.visitBucket}ごろから悪化`);
   {const ps=posSummary();if(ps)L.push(`【陽性所見サマリ】 ${ps}`);}
   {const rf=redFlags();if(rf.length){L.push("");L.push("⚠ 注意サイン（見落とし防止・診断ではありません）");rf.forEach(x=>L.push("  ・"+x));}}
+  {const rows=prevCompareRows();
+   if(rows.length){L.push("");L.push(`◆ 前回からの変化${D.prev&&D.prev.date?`（前回 ${D.prev.date}）`:""}`);
+     rows.forEach(r=>L.push(`  ${r.mark} ${r.s}: ${r.txt}`));}}
   L.push("");
-  L.push("① 時間軸（発症・経過・順序）");
+  L.push("① 発症・時間軸");
   L.push(`  発症時期(最古): ${fmtWhen("onset")?fmtWhen("onset"):(overallOnset()||"—")}`);
   {const rows=D.symptoms.filter(s=>D.sx[s]&&(D.sx[s].onset||D.sx[s].sev||D.sx[s].trend));
-   rows.forEach(s=>{const r=D.sx[s];L.push(`   ・${s}: ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend].filter(Boolean).join(" / ")}`);});
-   if(D.symptoms.length)L.push(`  申告された発症時期: ${onsetSummary()}`);}
-  L.push(`  出方・進み方: ${c.tempo||"—"}　頻度: ${c.freq||"—"}`);
-  if(c.episodeDur)L.push(`  1回の持続: ${c.episodeDur}`);
-  if(fmtWhen("worsen"))L.push(`  増悪時期: ${fmtWhen("worsen")}`);
-  if(c.relapse)L.push(`  再発・寛解: ${c.relapse}${c.relapseRecover?`（前回${c.relapseRecover}で軽快）`:""}`);
-  if(c.visitBucket)L.push(`  今回の受診理由（増悪）: ${c.visitBucket}`);
-  L.push(`  その後の経過: ${c.course||"—"}　日内変動・易疲労性: ${(D.m[3]&&D.m[3].diurnal)||"—"}　生活への支障: ${c.severity||"—"}`);
-  {const a=[...(c.aggravTags||[])];if(c.aggrav)a.push(c.aggrav);const r=[...(c.reliefTags||[])];if(c.relief)r.push(c.relief);
-   L.push(`  増悪因子: ${a.length?a.join("・"):"—"}　軽減因子: ${r.length?r.join("・"):"—"}`);}
+   rows.forEach(s=>{const r=D.sx[s];L.push(`   ・${s}: ${[r.onset,r.sev&&"つらさ"+r.sev,r.trend,r.tempo&&("始まり"+r.tempo)].filter(Boolean).join(" / ")}`);});
+   if(D.symptoms.length)L.push(`  症状が始まった時期: ${onsetSummary()}`);}
+  kvL(sheetTimePairs()).forEach(x=>L.push(x));
   L.push("");
-  L.push("② 局在の手がかり（部位・分布・左右差）");
-  L.push(`  左右差: ${c.side||"—"}`);
-  D.mods.forEach(id=>{const m=D.m[id];const r=[];
-    QM[id].forEach(it=>{let v=m[it.k];if(Array.isArray(v))v=v.join("・");
-      if(v)r.push(`${it.q.replace(/（.*?）/,"").replace(/？$/,"")}: ${v}`);});
-    if(r.length)L.push(`  ${MODS[id]} ─ ${r.join(" / ")}`);});
+  L.push("② 症状の特徴・分布");
+  kvL(sheetLocPairs()).forEach(x=>L.push(x));
+  D.mods.forEach(id=>{const r=modSheetPairs(id).map(([k,v])=>`${k}: ${v}`);if(r.length)L.push(`  ${MODS[id]} ─ ${r.join(" / ")}`);});
   L.push("");
-  L.push("③ 一緒に出ている症状（＋陽性 / −陰性 / ?未確認）");
+  L.push("③ 随伴症状（＋陽性 / −陰性 / ?未確認）");
   ASSOC_GROUPS.forEach(g=>{
     const inner=g.items.map(nm=>{const v=assocValue(nm);const s=nm.replace(/（.*?）/,"");
       return v==="conflict"?assocConflictText(nm):s+(v==="y"?"＋":v==="n"?"−":"?");}).join(" ");
     L.push(`  ${g.g}: ${inner}`);});
+  {const t=sheetTrigPairs();if(t.length){L.push("");L.push("④ 増悪・軽快因子");kvL(t).forEach(x=>L.push(x));}}
   L.push("");
-  L.push(`④ 機能への影響: ${D.func.length?D.func.join("・"):"記載なし"}`);
-  L.push("④' ふだんの困りごと（感覚・気分・易疲労・排尿・認知）");
-  DAILY_GROUPS.forEach(g=>{const st=dStatus(g);
-    const val=st==="sel"?dSel(g).map(it=>it.t).join("・"):st==="none"?"なし（申告）":"未確認";
-    L.push(`  ${g.g}: ${val}`);});
-  {const v=[D.vis.side&&D.vis.side!=="わからない"?D.vis.side:"",D.vis.note||""].filter(Boolean);
-   if(D.vis.side||D.vis.note)L.push(`  目の症状: ${v.join("／")}`);}
+  {const a=sheetAdlPairs();L.push("⑤ ADLへの影響"+(a.length?"":": 記載なし"));kvL(a).forEach(x=>L.push(x));}
   L.push("");
-  L.push("⑤ 背景");
-  L.push(`  血管リスク・持病: ${D.bg.risk.length?D.bg.risk.join("・"):"—"}`);
-  L.push(`  薬剤: ${D.bg.med?(D.bg.med+(D.bg.medText?`（${D.bg.medText}）`:"")):"—"}　動作の遅さ・ふるえに関係しうる薬: ${D.bg.dopaDrug||"—"}`);
-  L.push(`  自律神経症状: ${D.bg.autonomic&&D.bg.autonomic.length?D.bg.autonomic.join("・"):"—"}`);
-  L.push(`  先行感染・ワクチン: ${D.bg.preInfection||"—"}　妊娠・授乳: ${D.bg.pregnancy||"—"}`);
-  L.push(`  家族歴（似た症状）: ${D.bg.family||"—"}　免疫/感染/腫瘍: ${D.bg.immune.length?D.bg.immune.join("・"):"—"}`);
-  L.push(`  生活・習慣: ${D.bg.lifestyle.length?D.bg.lifestyle.join("・"):"—"}　仕事・環境・接触: ${D.bg.exposure.length?D.bg.exposure.join("・"):"—"}`);
-  L.push(`  既往・手術: ${D.bg.history||"—"}　アレルギー: ${D.bg.allergy||"—"}`);
+  {const b=sheetBgPairs();L.push("⑥ 関連既往・薬剤・家族歴"+(b.length?"":": 記載なし"));kvL(b).forEach(x=>L.push(x));}
+  {const w=sheetWitness();if(w.length){L.push("");L.push("⑦ 目撃者情報");kvL(w).forEach(x=>L.push(x));}}
   L.push("");
-  L.push(`⑥ 既受診科: ${D.visited.length?D.visited.join("・"):"—"}`);
-  L.push(`  受けた検査: ${D.tests||"—"}`);
-  L.push("");
-  {const rows=prevCompareRows();
-   if(rows.length){L.push(`◆ 前回からの変化${D.prev&&D.prev.date?`（前回 ${D.prev.date}）`:""}`);
-     rows.forEach(r=>L.push(`  ${r.mark} ${r.s}: ${r.txt}`));L.push("");}}
   const pats=syndromePatterns();
   if(pats.length){
     L.push("◆ 入力から見える症候パターン（所見のまとまり・診断ではありません）");
@@ -4999,11 +5314,11 @@ function plainSheet(){
     L.push("");
   }
   const u=unconfirmedItems();
-  L.push("⑦ 未確認だが追加で聞くとよい項目（診断には言及しない）");
+  L.push("⑧ 次に確認する価値が高い項目（診断には言及しない）");
   L.push(u.length?u.map(x=>"  ・"+x).join("\n"):"  特になし");
   L.push("");
-  L.push("⑧ 家族から見た変化 / 自由記載");
-  L.push(`  原文: ${D.free||"（なし）"}`);
+  L.push("⑨ ほかに伝えたいこと（本人・家族の言葉）");
+  L.push(`  ${D.free||"（なし）"}`);
   L.push(sep);
   L.push("本シートは自己申告の整理です。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。");
   return L.join("\n");
