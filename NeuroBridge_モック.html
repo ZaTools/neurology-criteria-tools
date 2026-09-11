@@ -2413,6 +2413,18 @@ var qrcode = function() {
   .tri button.on-y{background:var(--pos);color:#fff;border-color:var(--pos)}
   .tri button.on-n{background:#6b7b8b;color:#fff;border-color:#6b7b8b}
   .tri button.on-u{background:var(--unk);color:#fff;border-color:var(--unk)}
+  /* コンサルトモードの所見3値：異常は赤、正常はグレー（＝明示的な陰性）、未実施はオレンジ */
+  .tri button.on-ab{background:#b3402c;color:#fff;border-color:#b3402c}
+  /* 医療者向けの選択チップ。患者向けの .opt（1個62px）は高齢の方に合わせた寸法で、
+     14個並ぶ診療科などに使うと画面が長くなりすぎる。タップ域は44pxを確保する。 */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 6px}
+  .chip{border:1.5px solid var(--line);background:#fcfdff;border-radius:12px;padding:10px 14px;
+    cursor:pointer;font-family:inherit;font-size:calc(15px*var(--fs));color:var(--ink);
+    min-height:44px;display:inline-flex;align-items:center;line-height:1.35;text-align:left}
+  .chip:hover{border-color:#9fc3e8}
+  .chip.sel{border-color:var(--brand);background:var(--brand-l);color:var(--brand-d);font-weight:800}
+  .chip.sel::before{content:"✓";font-weight:900;margin-right:6px}
+  .chip:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
   /* 確認待ち（訂正するか聞いている状態）。押したことが見た目で分かるようにする */
   .tri button.pend{outline:3px dashed var(--brand);outline-offset:2px;background:var(--brand-l);color:var(--brand-d);font-weight:800}
 
@@ -2504,6 +2516,7 @@ var qrcode = function() {
   /* 陽性がいちばん強く見えるように重みを付ける（未確認は数が多いので細く・控えめに） */
   .sheet .assoc .y{color:var(--pos);font-weight:800} .sheet .assoc .n{color:#6b7b8b;font-weight:400}
   .sheet .assoc .u{color:#8a7b6b;font-weight:400}
+  .sheet .assoc .ab{color:#b3402c;font-weight:800}
   /* .mini は本文より小さい注記のつもりだが、シート内では逆に大きくなっていたので上書きする */
   .sheet .mini{font-size:calc(11.5px * var(--fs))}
   .sheet .undet{margin-top:2px}
@@ -2753,7 +2766,13 @@ const D = { who:null, ageBand:null, symptoms:[], mods:[], common:{}, m:{1:{},2:{
             assoc:{}, func:[], daily:[], dailyNone:{}, vis:{}, sx:{},
             bg:{risk:[],med:null,medText:"",family:null,immune:[],lifestyle:[],exposure:[],allergy:"",history:"",
                 autonomic:[],dopaDrug:null,preInfection:null,pregnancy:null},
-            visited:[], tests:"", free:"" };
+            visited:[], tests:"", free:"",
+            /* コンサルトモード（医療者用）の入力。患者向けの項目とは混ぜない。
+               モードそのものは D に持たない（下の MODE 変数）＝引き継ぎQRで
+               患者側の端末にモードが移ってしまわないようにするため。 */
+            consult:{from:{dept:null,doctor:"",place:null},ask:[],askOther:"",when:null,
+              sx:{sel:[],main:null},since:null,onset:null,course:null,dist:null,
+              exam:{},examNote:{},drugs:"",drugChange:null,history:"",tests:[],testNote:"",memo:""} };
 /* ============================================================================
    ▼▼▼ ここから【設定ブロック】：質問文と選択肢はすべてこの範囲にあります ▼▼▼
    文言の調整はここだけを見ればできます。中身の一覧：
@@ -2800,7 +2819,7 @@ const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る
 /* ★デプロイのたびに必ず更新すること★
    ブラウザのキャッシュで古い版が表示されていても気づけるように、
    画面と医療者シートに版数を出し、下の checkForUpdate() で自動確認する。 */
-const APP_VERSION = "2026-09-10b";
+const APP_VERSION = "2026-09-10c";
 
 const SESSION = { id:"NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000), start:Date.now() };
 let _saved=false;
@@ -3014,6 +3033,60 @@ const OPT_PREINFECTION=["あった","ワクチン接種のあとから","なか�
 const OPT_PREGNANCY=["妊娠中","授乳中","どちらでもない","答えない"];
 const OPT_VIS_SIDE=["片目だけ","両目","わからない"];
 const OPT_HAND=["右利き","左利き","両手つかう","わからない"];
+/* ============================================================================
+   ▼ コンサルトモード（医療者用：他科の先生から脳神経内科への相談）の設定
+   ----------------------------------------------------------------------------
+   患者向けのテーブル（SYMPTOMS など）とは別に、医学用語の症候を「id ＋ 表示ラベル」で持つ。
+   患者側は「選択肢の文言そのものが判定の識別子」という作りになっていて、文言を直すと
+   判定が壊れる。その負債をここでは繰り返さない：ラベルは自由に直してよく、id を変えな
+   ければ判定も引き継ぎも壊れない。
+   ============================================================================ */
+const CONSULT_DEPT=["内科","外科","整形外科","脳神経外科","眼科","耳鼻咽喉科","皮膚科","泌尿器科","産婦人科","精神科","小児科","救急科","リハビリ科","その他"];
+const CONSULT_PLACE=["外来","病棟","救急外来","他院"];
+/* 何を答えてほしいか＝コンサルトの問い。現状のコンサルトで最も欠けているのは所見ではなく問い */
+const CONSULT_ASK=[["loc","局在・責任病巣の評価"],["etio","原因検索の進め方"],["test","検査の要否と順序"],
+  ["drug","内服薬の影響の評価"],["rehab","リハ・嚥下・装具の適応"],["refer","専門外来・転科・転院の要否"],
+  ["obs","経過観察でよいかの判断"],["other","その他（下に書く）"]];
+/* 希望時期は「依頼側の希望」。ツールが緊急性を判定するものではない（画面と出力に明記する） */
+const CONSULT_WHEN=["今日中","数日以内","次の外来まで","急がない"];
+/* コンサルト頻度の高い症候を先頭に出す近道（この8つで多くの依頼が1タップで済む） */
+const CONSULT_SX_QUICK=["cs_dist","px_sz","cn_vert","mo_hemi","se_num","cb_gait","cn_dys","cn_dip"];
+const CONSULT_SX_GROUPS=[
+ {g:"意識・精神状態",items:[["cs_dist","意識障害"],["cs_del","せん妄"],["cs_cog","認知機能低下"],["cs_syn","失神"]]},
+ {g:"発作性",items:[["px_sz","けいれん"],["px_tia","一過性の局所神経症状"],["px_loc","一過性意識消失"]]},
+ {g:"脳神経",items:[["cn_dip","複視"],["cn_pto","眼瞼下垂"],["cn_va","視力障害"],["cn_vf","視野障害"],
+   ["cn_fp","顔面神経麻痺"],["cn_fs","顔面の感覚障害"],["cn_hear","難聴・耳鳴"],["cn_vert","めまい"],
+   ["cn_dys","構音障害"],["cn_swa","嚥下障害"],["cn_sme","嗅覚・味覚障害"]]},
+ {g:"運動",items:[["mo_hemi","片麻痺"],["mo_para","対麻痺"],["mo_quad","四肢麻痺"],["mo_mono","単麻痺"],
+   ["mo_prox","近位筋優位の筋力低下"],["mo_dist","遠位筋優位の筋力低下"],["mo_atr","筋萎縮"],
+   ["mo_fas","線維束性収縮"],["mo_rig","筋強剛"],["mo_bra","無動・寡動"],
+   ["mo_inv","不随意運動（振戦・ミオクローヌス・ジストニア・舞踏運動）"]]},
+ {g:"感覚",items:[["se_num","しびれ"],["se_hyp","感覚鈍麻"],["se_par","異常感覚"],["se_pai","神経障害性疼痛"],["se_lev","感覚レベル"]]},
+ {g:"協調・歩行",items:[["cb_tru","体幹失調"],["cb_lim","四肢失調"],["cb_gait","歩行障害"],["cb_fall","易転倒"]]},
+ {g:"自律神経",items:[["au_oh","起立性低血圧"],["au_bla","排尿障害"],["au_con","便秘"],["au_swe","発汗異常"]]},
+ {g:"高次脳機能",items:[["hi_aph","失語"],["hi_apr","失行"],["hi_agn","失認"],["hi_neg","半側空間無視"],["hi_mem","記憶障害"]]},
+ {g:"その他",items:[["ot_ha","頭痛"],["ot_nec","項部硬直"],["ot_wt","体重減少"],["ot_fev","発熱を伴う神経症状"]]}];
+const CONSULT_SX=CONSULT_SX_GROUPS.flatMap(g=>g.items.map(it=>({id:it[0],n:it[1],g:g.g})));
+function csxName(id){const f=CONSULT_SX.find(x=>x.id===id);return f?f.n:"";}
+function csxGroupOf(id){const f=CONSULT_SX.find(x=>x.id===id);return f?f.g:"";}
+/* 神経内科医が最初に組み立てる骨格＝時間軸。この3つは他科の先生でも確実に答えられる */
+const CONSULT_SINCE=ONSET_OPTS.map(x=>x[0]);
+const CONSULT_ONSET=["急性（分〜時間）","亜急性（日〜週）","慢性（月〜年）","発作性","変動性","わからない"];
+const CONSULT_COURSE=["進行性","階段状","再発寛解","単相性","変動性","改善傾向","わからない"];
+const CONSULT_DIST=["片側性","両側性・左右対称","近位優位","遠位優位","限局（1か所）","体の高さで境がある","全身","わからない"];
+/* 共通コア5所見（症候によらず必ず出す）。症候別セットは第2段で足す。
+   3値の既定は「未実施」。空欄を「正常」と読ませないことが、この機能の設計の中心。
+   他科の先生が神経診察に慣れている前提を置かないので、取り方を1行だけ添える。 */
+const CONSULT_EXAM_CORE=[
+  {id:"consc",n:"意識・見当識",h:"開眼・従命。年月日と場所が言えるか"},
+  {id:"speech",n:"構音・失語",h:"会話が流暢か、聞いて分かるか、復唱できるか"},
+  {id:"motor",n:"四肢の左右差",h:"上肢挙上10秒（Barré）で落ちる側があるか"},
+  {id:"gait",n:"歩行",h:"立てるか、歩けるか、介助はどれくらい必要か"},
+  {id:"cn",n:"顔面・眼球運動",h:"顔の左右差、上下左右を追視できるか"}];
+const CONSULT_EXAM_V=[["ab","異常"],["nl","正常"],["nd","未実施"]];
+const CONSULT_DRUGCHANGE=["あり（下に記入）","なし","わからない"];
+/* 検査は「実施の有無」だけを持つ。結果値はカルテにあるので二重に持たない */
+const CONSULT_TESTS=["採血","頭部CT","頭部MRI","脊髄MRI","脳波","神経伝導・筋電図","髄液検査","心電図"];
 /* ▲▲▲ ここまで【設定ブロック】 ▲▲▲ */
 
 /* 選択肢の文言（「飲んでいる薬がある」）をそのまま文に埋めると読みにくいので、
@@ -3070,20 +3143,30 @@ function unconfirmedItems(){
 
 /* ===== フロー ===== */
 let phase="intro",modCursor=0,OUT='p';
+/* コンサルトモード。入口は URL（#consult）で分ける＝患者向けの導入画面は1タップも増やさない。
+   MODE を D に入れないのは、引き継ぎQRで患者の端末にモードが移らないようにするため。 */
+let MODE="patient";
+function isConsult(){return MODE==="consult";}
+function detectMode(){try{const h=String(location.hash||"");
+  if(/[#&](consult|c)(&|$)/.test(h)||/[#&]mode=c(&|$)/.test(h))MODE="consult";}catch(e){}}
 const STEPS=[["who","入力者"],["symptoms","症状をえらぶ"],["sxtime","症状の経過"],["common","全体の様子"],
   ["module","くわしく"],["assoc","一緒の症状"],["daily","生活と困りごと"],["bg","背景・持病"],["free","記入"],["confirm","確認"]];
+/* コンサルトモードの進み方（患者向けの STEPS とは別） */
+const CSTEPS=[["cask","答えてほしいこと"],["csx","症候"],["ccourse","経過"],["cexam","神経所見"],["cdata","既存の情報"]];
+function steps(){return isConsult()?CSTEPS:STEPS;}
 const app=document.getElementById("app");
 
 let _lastPhase=null,_lastMod=null;
 function render(){
   let h="";
-  const fn={intro:scrIntro,who:scrWho,symptoms:scrSymptoms,sxtime:scrSxtime,common:scrCommon,module:scrModule,
-    assoc:scrAssoc,daily:scrDaily,bg:scrBg,free:scrFree,confirm:scrConfirm,output:scrOutput}[phase];
+  const fn={intro:(isConsult()?scrCIntro:scrIntro),who:scrWho,symptoms:scrSymptoms,sxtime:scrSxtime,common:scrCommon,module:scrModule,
+    assoc:scrAssoc,daily:scrDaily,bg:scrBg,free:scrFree,confirm:scrConfirm,output:(isConsult()?scrCOut:scrOutput),
+    cask:scrCAsk,csx:scrCSx,ccourse:scrCCourse,cexam:scrCExam,cdata:scrCData}[phase];
   h=fn();
   // 画面（フェーズ／モジュール）が変わったときだけ先頭へ。同じ画面内の操作はスクロール位置を保持
   const screenChanged=(phase!==_lastPhase)||(phase==="module"&&modCursor!==_lastMod);
   const sy=window.scrollY;
-  app.innerHTML=h; drawStepper(); updateNav();
+  app.innerHTML=h; applyModeChrome(); drawStepper(); updateNav();
   syncHistory();
   applyOneQ(screenChanged);
   if(screenChanged)autoRead();
@@ -3091,15 +3174,25 @@ function render(){
   _lastPhase=phase; _lastMod=modCursor;
 }
 
+/* ヘッダー・サイドの文言をモードで切り替える（患者向けの案内を医療者に出さない） */
+function applyModeChrome(){try{
+  const q=document.querySelector?document.querySelector.bind(document):null;
+  const s1=q&&q(".logo .s");
+  if(s1)s1.textContent=isConsult()?"医療者用：コンサルト依頼メモ（診断ではありません）":"神経内科につながる症状メモ（診断ではありません）";
+  ["ttsBtn","oneqBtn"].forEach(id=>{const b=document.getElementById(id);if(b&&b.style)b.style.display=isConsult()?"none":"";});
+  const sub=q&&q(".side .sub"); if(sub)sub.textContent=isConsult()?"約60秒（所見を入れても2〜3分）":"5〜10分でおわります";
+  const re=q&&q(".sresure"); if(re&&re.style)re.style.display=isConsult()?"none":"";
+}catch(e){}}
 function drawStepper(){
-  const idx=STEPS.findIndex(s=>s[0]===phase);const finished=phase==="output";
+  const ST=steps();
+  const idx=ST.findIndex(s=>s[0]===phase);const finished=phase==="output";
   const ms=document.getElementById("mstep");
   if(phase==="intro"){ms.innerHTML="";}
-  else if(finished){ms.innerHTML=`<div class="seg">${STEPS.map(()=>'<i class="done"></i>').join("")}</div><div class="lab">✓ 完成しました</div>`;}
-  else {ms.innerHTML=`<div class="seg">${STEPS.map((s,i)=>`<i class="${i<idx?'done':i===idx?'cur':''}"></i>`).join("")}</div>
-    <div class="lab">ステップ ${idx+1} / ${STEPS.length}　・　${STEPS[idx][1]}</div>`;}
+  else if(finished){ms.innerHTML=`<div class="seg">${ST.map(()=>'<i class="done"></i>').join("")}</div><div class="lab">✓ 完成しました</div>`;}
+  else {ms.innerHTML=`<div class="seg">${ST.map((s,i)=>`<i class="${i<idx?'done':i===idx?'cur':''}"></i>`).join("")}</div>
+    <div class="lab">ステップ ${idx+1} / ${ST.length}　・　${ST[idx][1]}</div>`;}
   const ds=document.getElementById("dstep");
-  ds.innerHTML=STEPS.map((s,i)=>{
+  ds.innerHTML=ST.map((s,i)=>{
     let cls=finished?"done":(i<idx?"done":i===idx?"cur":"");
     const mark=(cls==="done")?"✓":(i+1);
     return `<div class="it ${cls}"><span class="c">${mark}</span>${s[1]}</div>`;
@@ -3626,6 +3719,266 @@ function scrOutput(){
      <p class="mini">${_saved?"✓ 選択式の回答（匿名）を保存しました（改善・研究用）。自由記述・個人情報は保存していません。":"入力内容は保存されていません。この画面を閉じると消えます。"}</p>
      <button class="voice" onclick="LEAVING=true;location.reload()">↺ 最初からやり直す</button></div>`;}
 
+/* ============================================================================
+   ▼ コンサルトモード：入力画面と出力（医療者用）
+   ----------------------------------------------------------------------------
+   ・入口は URL で分ける（#consult）。患者向けの導入画面は1タップも増やさない。
+   ・患者向けタブは持たない（患者の端末でタブを切り替えると読める経路をそもそも作らない）。
+   ・病名・鑑別・検査の指示・救急受診の勧奨は出さない。出すのは「記録の整理」と
+     「まだ埋まっていない項目」だけ。
+   ============================================================================ */
+function cInput(val,ph,handler,wide){
+  const st=(wide?"width:100%;":"min-width:220px;flex:1 1 220px;")+"min-height:44px;font-size:calc(16px*var(--fs));font-family:inherit;padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:#fcfdff;color:var(--ink)";
+  return `<input type="text" value="${escAttr(val||"")}" placeholder="${escAttr(ph)}" oninput="${handler}" style="${st}">`;}
+function copt(sel,label,onclick){return `<button type="button" class="chip${sel?" sel":""}" aria-pressed="${!!sel}" onclick="${onclick}">${label}</button>`;}
+function cAskSel(id){return D.consult.ask.indexOf(id)>=0;}
+function toggleCAsk(id){const a=D.consult.ask,i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);render();}
+function setCFrom(k,v){D.consult.from[k]=(D.consult.from[k]===v?null:v);render();}
+function setCFromText(k,v){D.consult.from[k]=v;}
+function setCVal(k,v){D.consult[k]=(D.consult[k]===v?null:v);render();}
+function setCText(k,v){D.consult[k]=v;}
+function toggleCTest(t){const a=D.consult.tests,i=a.indexOf(t);if(i>=0)a.splice(i,1);else a.push(t);render();}
+let CSX_OPEN=null;
+function toggleCsxGroup(g){CSX_OPEN=(CSX_OPEN===g?null:g);render();}
+function csxSel(id){return D.consult.sx.sel.indexOf(id)>=0;}
+function toggleCsx(id){const s=D.consult.sx,a=s.sel,i=a.indexOf(id);
+  if(i>=0){a.splice(i,1);if(s.main===id)s.main=a[0]||null;}
+  else{a.push(id);if(!s.main)s.main=id;}
+  render();}
+function setCsxMain(id){if(csxSel(id))D.consult.sx.main=id;render();}
+/* 所見の既定は「未実施」。空欄を「正常」と読ませないため、未回答も nd として扱う */
+function cExamVal(id){return D.consult.exam[id]||"nd";}
+function setCExam(id,v){D.consult.exam[id]=v;if(v!=="ab")delete D.consult.examNote[id];render();}
+function setCExamNote(id,v){D.consult.examNote[id]=v;}
+function cExamCls(id,v){return cExamVal(id)===v?({ab:"on-ab",nl:"on-n",nd:"on-u"}[v]||""):"";}
+
+function scrCIntro(){return `<div class="card">
+  ${RESTORE_ERR?`<div class="note" style="background:#fdecec;border-color:#f1b9b9;color:#9a2a2a">⚠ ${esc(RESTORE_ERR)}</div>`:""}
+  <h2>コンサルト依頼メモを、60秒で</h2>
+  <p class="lead">脳神経内科への相談を、そのままカルテに貼れる依頼文にします。<b>答えてほしいことと主症候だけ</b>で完成します（約60秒）。神経所見は任意で、足すと2〜3分です。</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0">
+    ${infoRow("❓","答えてほしいことが最初に決まる")}
+    ${infoRow("🕒","発症様式と経過がそろう")}
+    ${infoRow("⬜","「未実施」と「正常」を区別する")}
+    ${infoRow("📋","カルテに貼れるテキストで出る")}
+    ${infoRow("📱","病歴は患者・家族にQRで渡せる")}
+  </div>
+  <div class="note" style="background:#fdecec;border-color:#f1b9b9;color:#9a2a2a"><b>急ぐ判断にこのツールを使わないでください。</b>緊急性は目の前の患者さんの状態で判断してください。このツールは診断・鑑別・検査の指示を行いません。病名は出しません。</div>
+  <div class="note">入力内容はこの端末の中だけにあり、保存も送信もされません。画面を閉じると消えます。</div>
+  <div class="mini" style="text-align:right;margin-top:8px;opacity:.7">版 ${APP_VERSION}</div>
+</div>`;}
+
+function scrCAsk(){const f=D.consult.from;return card(`
+  ${qhead("1","何を答えてほしいですか？","この1問がいちばん効きます。複数選べます")}
+  <div class="opts grid">${CONSULT_ASK.map(([id,n])=>opt(cAskSel(id),n,`toggleCAsk('${id}')`,true)).join("")}</div>
+  ${cAskSel("other")?`<div style="margin-top:10px">${cInput(D.consult.askOther,"答えてほしいこと（自由記載）","setCText('askOther',this.value)",true)}</div>`:""}
+  ${qhead("2","患者さんはどこにいますか？")}
+  <div class="chips">${CONSULT_PLACE.map(o=>copt(f.place===o,o,`setCFrom('place','${o}')`)).join("")}</div>
+  ${qhead("3","いつまでに返事がほしいですか？","<b>依頼側のご希望</b>として記録します。ツールが緊急性を判定するものではありません")}
+  <div class="chips">${CONSULT_WHEN.map(o=>copt(D.consult.when===o,o,`setCVal('when','${o}')`)).join("")}</div>
+  ${qhead("4","依頼元（任意）")}
+  <div class="chips">${CONSULT_DEPT.map(o=>copt(f.dept===o,o,`setCFrom('dept','${o}')`)).join("")}</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">${cInput(f.doctor,"依頼医名（任意）","setCFromText('doctor',this.value)")}</div>
+  <div class="mini" style="margin-top:8px">患者さんのお名前・IDは入れないでください。このツールは患者さんを特定する情報を持ちません。</div>`);}
+
+function csxChips(){const s=D.consult.sx;if(!s.sel.length)return "";
+  const bs="border:1.5px solid var(--line);background:#fff;border-radius:20px;padding:9px 14px;margin:0 6px 6px 0;cursor:pointer;font-family:inherit;font-size:calc(14px*var(--fs));min-height:40px";
+  const bsel="border:1.5px solid var(--brand);background:var(--brand);color:#fff;font-weight:800;border-radius:20px;padding:9px 14px;margin:0 6px 6px 0;cursor:pointer;font-family:inherit;font-size:calc(14px*var(--fs));min-height:40px";
+  return `<div style="background:#f5f9fd;border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:4px 0 14px">
+    <div class="mini" style="color:var(--sub);margin-bottom:7px">選んだ症候（タップで<b>主症候</b>を切り替えられます）</div>
+    ${s.sel.map(id=>`<button type="button" onclick="setCsxMain('${id}')" style="${s.main===id?bsel:bs}">${s.main===id?"◎ 主症候：":""}${esc(csxName(id))}</button>`).join("")}</div>`;}
+
+function scrCSx(){
+  const gbs="width:100%;text-align:left;border:1.5px solid var(--line);background:#fcfdff;border-radius:12px;padding:13px 15px;cursor:pointer;font-family:inherit;font-size:calc(16px*var(--fs));font-weight:700;color:var(--ink);min-height:48px";
+  return card(`
+  ${qhead("1","症候を選んでください","医学用語です。最初に選んだものが主症候になります（あとから切り替えられます）")}
+  ${csxChips()}
+  <div class="grouplab">よく相談される症候</div>
+  <div class="chips">${CONSULT_SX_QUICK.map(id=>copt(csxSel(id),csxName(id),`toggleCsx('${id}')`)).join("")}</div>
+  <div class="grouplab">すべての症候（開いて選ぶ）</div>
+  ${CONSULT_SX_GROUPS.map(g=>{const n=g.items.filter(it=>csxSel(it[0])).length;const open=CSX_OPEN===g.g;
+    return `<div style="margin:8px 0">
+      <button type="button" onclick="toggleCsxGroup('${g.g}')" style="${gbs}">${open?"▾":"▸"} ${g.g}${n?`　<span style="color:var(--brand-d)">選択 ${n}</span>`:""}</button>
+      ${open?`<div class="chips" style="margin-top:8px">${g.items.map(([id,nm])=>copt(csxSel(id),nm,`toggleCsx('${id}')`)).join("")}</div>`:""}
+    </div>`;}).join("")}`);}
+
+function scrCCourse(){const C=D.consult;return card(`
+  ${qhead("1","いつからですか？")}
+  <div class="chips">${CONSULT_SINCE.map(o=>copt(C.since===o,o,`setCVal('since','${o}')`)).join("")}</div>
+  ${qhead("2","発症様式")}
+  <div class="chips">${CONSULT_ONSET.map(o=>copt(C.onset===o,o,`setCVal('onset','${o}')`)).join("")}</div>
+  ${qhead("3","その後の経過")}
+  <div class="chips">${CONSULT_COURSE.map(o=>copt(C.course===o,o,`setCVal('course','${o}')`)).join("")}</div>
+  ${qhead("4","分布・左右差")}
+  <div class="chips">${CONSULT_DIST.map(o=>copt(C.dist===o,o,`setCVal('dist','${o}')`)).join("")}</div>`);}
+
+function scrCExam(){return card(`
+  ${qhead("✓","神経所見（すべて任意）","とらなかった項目は<b>「未実施」のまま</b>で結構です。空欄を「正常」と読まないための区別です")}
+  <div class="mini" style="background:#f5f9fd;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin:0 0 14px">
+    ここを飛ばしても依頼メモは作れます。埋まっていない項目は出力の最後に一覧で出ます。</div>
+  <div class="triwrap">
+  ${CONSULT_EXAM_CORE.map(it=>`
+    <div class="tri">
+      <div class="nm">${it.n}<div class="mini" style="color:var(--sub);font-weight:400;line-height:1.4">${it.h}</div></div>
+      <div class="grp">${CONSULT_EXAM_V.map(([v,lab])=>`<button type="button" class="${cExamCls(it.id,v)}" aria-pressed="${cExamVal(it.id)===v}" onclick="setCExam('${it.id}','${v}')">${lab}</button>`).join("")}</div>
+    </div>
+    ${cExamVal(it.id)==="ab"?`<div style="margin:-2px 0 4px">${cInput(D.consult.examNote[it.id],"どこが・どちら側が・どの程度（任意）",`setCExamNote('${it.id}',this.value)`,true)}</div>`:""}`).join("")}
+  </div>`);}
+
+function scrCData(){const C=D.consult;return card(`
+  ${qhead("1","内服（任意）","気になる薬があれば薬剤名を。開始時期が分かれば添えてください")}
+  <textarea placeholder="例）2週間前からレボフロキサシン、以前からアムロジピン" oninput="setCText('drugs',this.value)">${esc(C.drugs)}</textarea>
+  ${qhead("2","症状の前後で、始めた薬・変えた薬はありますか？","可逆性を見落とさないための1問です")}
+  <div class="chips">${CONSULT_DRUGCHANGE.map(o=>copt(C.drugChange===o,o,`setCVal('drugChange','${o}')`)).join("")}</div>
+  ${qhead("3","既往・手術（任意）")}
+  ${cInput(C.history,"例）糖尿病、胃全摘（2018）","setCText('history',this.value)",true)}
+  ${qhead("4","すでに実施した検査（任意）","結果はカルテで拝見します。ここは<b>実施の有無</b>だけで結構です")}
+  <div class="chips">${CONSULT_TESTS.map(o=>copt(C.tests.indexOf(o)>=0,o,`toggleCTest('${o}')`)).join("")}</div>
+  <div style="margin-top:10px">${cInput(C.testNote,"実施日・その他の検査（任意）","setCText('testNote',this.value)",true)}</div>
+  ${qhead("5","ひとことメモ（任意）","経過や、電話で伝えたいことがあれば")}
+  <textarea placeholder="自由記載" oninput="setCText('memo',this.value)">${esc(C.memo)}</textarea>`);}
+
+function scrCOut(){return `<div class="card outhead no-print">
+   <div class="outdone">✅ コンサルト依頼メモができました。</div>
+   <div class="outacts">
+     <button class="copybtn print" title="印刷またはPDFで保存します" onclick="window.print()">🖨 印刷 / PDF</button>
+     <button class="copybtn" id="copyBtn" onclick="copySheet()">📋 カルテ用にコピー</button>
+     <button class="copybtn" title="患者さん・ご家族の端末で病歴を入力してもらいます" onclick="showHandoff('patient')">📱 患者・家族に渡す</button>
+     <button class="copybtn" title="このメモを別の端末で開きます" onclick="showHandoff('doctor')">📱 別の端末で開く</button>
+   </div>
+   <div class="printhint">印刷画面で「PDFとして保存」を選ぶとPDFになります（A4 1枚に収まります）。カルテには「カルテ用にコピー」の貼り付けが早いです。</div>
+ </div>
+ <div class="panels"><div class="panel active"><div class="card">${consultSheet()}</div></div></div>
+ <div class="card no-print" style="text-align:center">
+   <p class="mini">入力内容は保存されていません。この画面を閉じると消えます。</p>
+   <button class="voice" onclick="LEAVING=true;location.reload()">↺ 最初からやり直す</button></div>`;}
+
+/* まだ埋まっていない項目＝神経内科医が最初に取るべきもの。
+   「何が分かっているか」より「何が残っているか」を先に見せるのが時間短縮に直結する。 */
+function consultMissing(){
+  const C=D.consult,m=[];
+  if(!C.ask.length)m.push("答えてほしいこと（コンサルトの問い）");
+  if(!C.sx.main)m.push("主症候");
+  if(!C.since)m.push("発症時期");
+  if(!C.onset)m.push("発症様式（急性・亜急性・慢性・発作性・変動性）");
+  if(!C.course)m.push("その後の経過（進行性・階段状・再発寛解など）");
+  if(!C.dist)m.push("分布・左右差");
+  const nd=CONSULT_EXAM_CORE.filter(it=>cExamVal(it.id)==="nd").map(it=>it.n);
+  if(nd.length)m.push("神経所見（未実施）："+nd.join("・"));
+  if(!C.drugs&&!C.drugChange)m.push("内服・薬剤の変更");
+  if(!D.symptoms.length)m.push("患者・家族からの病歴（「患者・家族に渡す」のQRで埋まります）");
+  return m;
+}
+function consultAskText(){const C=D.consult;
+  return C.ask.map(id=>{const x=CONSULT_ASK.find(a=>a[0]===id);if(!x)return "";
+    return (id==="other"&&C.askOther)?C.askOther:x[1];}).filter(Boolean);}
+function consultSxText(){const s=D.consult.sx;
+  const others=s.sel.filter(id=>id!==s.main).map(csxName);
+  return {main:s.main?csxName(s.main):"",others:others};}
+function consultExamRows(){
+  const ab=[],nl=[],nd=[];
+  CONSULT_EXAM_CORE.forEach(it=>{const v=cExamVal(it.id);
+    const note=D.consult.examNote[it.id];
+    if(v==="ab")ab.push(it.n+(note?`（${note}）`:""));
+    else if(v==="nl")nl.push(it.n);
+    else nd.push(it.n);});
+  return {ab:ab,nl:nl,nd:nd};
+}
+
+function consultSheet(){
+  const C=D.consult,f=C.from,sx=consultSxText(),ask=consultAskText(),ex=consultExamRows();
+  const hasPt=!!(D.symptoms&&D.symptoms.length);
+  const KEY=["飲み込みにくさ・むせ","ろれつが回りにくい","息苦しさ","筋肉がやせる・ぴくつく"];
+  const pos=hasPt?KEY.filter(k=>assocValue(k)==="y"):[],neg=hasPt?KEY.filter(k=>assocValue(k)==="n"):[];
+  const miss=consultMissing();
+  return `<div class="sheet">
+   <h3>NeuroBridge コンサルト依頼メモ <span class="ai-tag">記録の整理／診断ではありません</span></h3>
+   <div class="meta">作成日: ${nowStr()}　依頼元: ${[f.dept?esc(f.dept):"",f.doctor?esc(f.doctor)+" 先生":""].filter(Boolean).join(" ")||"—"}　患者の居場所: ${f.place?esc(f.place):"—"}　ID: ${SESSION.id}　版: ${APP_VERSION}</div>
+
+   <div class="topbox">
+     <div class="cc">① 答えてほしいこと：${ask.length?ask.map(esc).join("／"):"—（未記入）"}</div>
+     <div style="margin-top:4px"><b style="color:var(--sub)">希望時期</b>：${C.when?esc(C.when):"—"}　<span class="mini">（依頼側の希望であり、緊急性の判定ではありません）</span></div>
+   </div>
+
+   <div class="sec"><div class="lab">② 主症候と経過</div>
+     <div class="assoc"><span class="g">主症候:</span> <b>${sx.main?esc(sx.main):"—"}</b>${sx.others.length?`　<span class="g">随伴:</span> ${sx.others.map(esc).join("、")}`:""}</div>
+     ${kvSec([["発症時期",C.since],["発症様式",C.onset],["経過",C.course],["分布・左右差",C.dist]])}</div>
+
+   <div class="sec"><div class="lab">③ 神経所見（共通コア5項目）</div>
+     <div class="assoc">
+       <div><span class="g">異常:</span> ${ex.ab.length?`<span class="ab">${ex.ab.map(esc).join("、")}</span>`:'<span class="u">なし（記載なし）</span>'}</div>
+       <div><span class="g">正常（確認済み）:</span> ${ex.nl.length?`<span class="n">${ex.nl.map(esc).join("、")}</span>`:'<span class="u">—</span>'}</div>
+       <div><span class="g">未実施:</span> ${ex.nd.length?`<span class="u">${ex.nd.map(esc).join("、")}</span>`:"—"}</div>
+     </div>
+     <div class="mini">「未実施」は見ていない項目です。<b>正常とは異なります。</b></div></div>
+
+   <div class="sec"><div class="lab">④ 既存の情報</div>
+     ${kvSec([["内服",C.drugs||null],["症状の前後の薬の開始・変更",C.drugChange],
+       ["既往・手術",C.history||null],["実施済みの検査",C.tests.length?C.tests.join("・"):null],
+       ["検査の実施日・その他",C.testNote||null]])}</div>
+
+   <div class="sec"><div class="lab">⑤ 患者・家族からの病歴</div>
+     ${hasPt?`<div class="assoc">
+        <div><span class="g">主訴:</span> ${D.common.trouble?esc(D.common.trouble):esc(D.symptoms.slice(0,3).join("・"))}</div>
+        ${posSummary()?`<div>${posSummary()}</div>`:""}
+        ${pos.length?`<div><span class="g">重要な陽性:</span> <span class="y">${pos.join("、")}</span></div>`:""}
+        ${neg.length?`<div><span class="g">重要な陰性:</span> <span class="n">${neg.join("、")}</span></div>`:""}
+        <div class="mini">詳細は同じリンクの「病歴メモ」（患者・家族入力）に入っています。</div></div>`
+      :`<div class="assoc"><span class="u">未取得</span>
+        <div class="mini">この画面の「📱 患者・家族に渡す」からQRを出すと、待ち時間や病室で入力してもらえます。</div></div>`}</div>
+
+   ${C.memo?`<div class="sec"><div class="lab">⑥ 依頼医のメモ</div><div class="quote">${esc(C.memo)}</div></div>`:""}
+
+   <div class="sec"><div class="lab">${C.memo?"⑦":"⑥"} まだ埋まっていない項目</div>
+     ${miss.length?`<div class="askbox">${"・"+miss.map(esc).join("<br>・")}</div>`:'<span class="mini">主要な項目はそろっています。</span>'}</div>
+
+   <div class="foot">本メモは記録の整理です。病名・診断・治療方針の判断は担当医が行います。緊急性は目の前の患者さんの状態で判断してください。患者さんを特定する情報は持たず、保存もしていません。</div>
+  </div>`;
+}
+
+/* カルテ転記用のプレーンテキスト（他科の先生がいちばん使う出口） */
+function plainConsult(){
+  const C=D.consult,f=C.from,sx=consultSxText(),ask=consultAskText(),ex=consultExamRows();
+  const L=[],sep="─".repeat(40);
+  L.push(sep);
+  L.push("NeuroBridge コンサルト依頼メモ（記録の整理／診断ではありません）");
+  L.push(`作成日: ${nowStr()}　依頼元: ${[f.dept||"",f.doctor?f.doctor+" 先生":""].filter(Boolean).join(" ")||"—"}　患者の居場所: ${f.place||"—"}`);
+  L.push(sep);
+  L.push(`【答えてほしいこと】 ${ask.length?ask.join("／"):"—"}`);
+  L.push(`【希望時期】 ${C.when||"—"}（依頼側の希望。緊急性の判定ではありません）`);
+  L.push("");
+  L.push("① 主症候と経過");
+  L.push(`  主症候: ${sx.main||"—"}${sx.others.length?`　随伴: ${sx.others.join("、")}`:""}`);
+  L.push(`  発症時期: ${C.since||"—"}　発症様式: ${C.onset||"—"}`);
+  L.push(`  経過: ${C.course||"—"}　分布・左右差: ${C.dist||"—"}`);
+  L.push("");
+  L.push("② 神経所見（共通コア5項目）");
+  L.push(`  異常: ${ex.ab.length?ex.ab.join("、"):"なし（記載なし）"}`);
+  L.push(`  正常（確認済み）: ${ex.nl.length?ex.nl.join("、"):"—"}`);
+  L.push(`  未実施: ${ex.nd.length?ex.nd.join("、"):"—"}　※未実施は見ていない項目です。正常とは異なります。`);
+  L.push("");
+  L.push("③ 既存の情報");
+  L.push(`  内服: ${C.drugs||"—"}`);
+  L.push(`  症状の前後の薬の開始・変更: ${C.drugChange||"—"}`);
+  L.push(`  既往・手術: ${C.history||"—"}`);
+  L.push(`  実施済みの検査: ${C.tests.length?C.tests.join("・"):"—"}${C.testNote?`（${C.testNote}）`:""}`);
+  L.push("");
+  L.push("④ 患者・家族からの病歴");
+  if(D.symptoms&&D.symptoms.length){
+    L.push(`  主訴: ${D.common.trouble||D.symptoms.slice(0,3).join("・")}`);
+    const ps=posSummary();if(ps)L.push(`  ${ps}`);
+    L.push("  ※詳細は同じリンクの病歴メモに入っています。");
+  }else L.push("  未取得（QRで患者・家族に渡すと埋まります）");
+  if(C.memo){L.push("");L.push("⑤ 依頼医のメモ");L.push(`  ${C.memo}`);}
+  L.push("");
+  L.push("◆ まだ埋まっていない項目");
+  const miss=consultMissing();
+  L.push(miss.length?miss.map(x=>"  ・"+x).join("\n"):"  主要な項目はそろっています。");
+  L.push(sep);
+  L.push("本メモは記録の整理です。病名・診断・治療方針の判断は担当医が行います。患者を特定する情報は持たず、保存もしていません。");
+  return L.join("\n");
+}
+
 /* ===== 部品 ===== */
 function card(inner){return `<div class="card">${inner}</div>`;}
 function escAttr(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -3795,7 +4148,9 @@ const UNA=(arr,is)=>(is||[]).map(i=>UN(arr,i)).filter(v=>v!==null);
    リンクのコピーは常に自由記述込みなので、そちらを使えば情報は失われない。 */
 const FREE_TEXT_FIELDS=[["common","trouble"],["common","aggrav"],["common","relief"],
   ["bg","medText"],["bg","allergy"],["bg","history"],["vis","note"],
-  [null,"free"],[null,"tests"],[null,"editedSummary"]];
+  [null,"free"],[null,"tests"],[null,"editedSummary"],
+  /* コンサルトモードの自由記述。所見の詳細（examNote）は短く、診療上の意味が大きいので lite でも残す */
+  ["consult","memo"],["consult","drugs"],["consult","history"],["consult","askOther"],["consult","testNote"]];
 function packState(lite){
   const T=codecDicts(),c=D.common||{},b=D.bg||{},P={g:schemaSig()};
   const rest=JSON.parse(JSON.stringify(D));
@@ -3936,6 +4291,7 @@ function prevCompareRows(){
 async function handoffURL(extra,lite){const enc=await encodeState(lite);
   const base=location.href.split("#")[0];return base+"#s="+enc+(extra||"");}
 async function restoreState(){
+  detectMode();
   const m=location.hash.match(/[#&]s=([^&]+)/);if(!m)return false;
   const obj=await decodeState(m[1]);
   if(!obj){RESTORE_ERR="読み込めませんでした（QR・リンクが古い可能性があります）。お手数ですが、最初から入力してください。";return false;}
@@ -3955,13 +4311,24 @@ async function restoreState(){
     RESTORE_NOTE=`前回（${D.prev.date||"前回受診時"}）の内容を読み込みました。<b>変わったところだけ</b>直してください。`;
   }
   if(D.symptoms&&D.symptoms.length){phase=nx?"sxtime":(vm?"output":"confirm");if(vm)OUT='d';}
+  D.consult=D.consult||{};D.consult.ask=D.consult.ask||[];D.consult.sx=D.consult.sx||{sel:[],main:null};
+  D.consult.exam=D.consult.exam||{};D.consult.examNote=D.consult.examNote||{};
+  D.consult.tests=D.consult.tests||[];D.consult.from=D.consult.from||{dept:null,doctor:"",place:null};
+  if(isConsult()&&(D.consult.ask.length||D.consult.sx.main))phase=vm?"output":"cask";
   return true;
+}
+/* 引き継ぎ先ごとの追加パラメータ。患者に渡すときは mode を付けない（患者モードで開く） */
+function handoffExtra(view){
+  if(view==="doctor")return "&view=doctor"+((D.consult&&D.consult.ask&&D.consult.ask.length)?"&mode=c":"");
+  if(view==="next")return "&view=next";
+  return "";
 }
 async function showHandoff(view){
   if(view==="next")D.savedAt=nowStr();   /* 次回「前回の受診日」として表示するため */
-  const url=await handoffURL(view==="doctor"?"&view=doctor":(view==="next"?"&view=next":""),false);
-  const title=view==="doctor"?"医師用シートを別端末で開く":(view==="next"?"次回の受診用に保存":"スマホで続きを入力する");
-  const guide=view==="doctor"?"カルテ端末などでこのQRを読み取ると、同じ内容の医師用シートが開きます。"
+  const url=await handoffURL(handoffExtra(view),false);
+  const title=view==="doctor"?"医師用シートを別端末で開く":(view==="next"?"次回の受診用に保存":(view==="patient"?"患者・ご家族に病歴を入力してもらう":"スマホで続きを入力する"));
+  const guide=view==="patient"?"患者さん・ご家族のスマホでこのQRを読み取ると、病歴の入力が始まります。入力後に出るQRを読み取ると、この依頼メモに病歴が加わります。（サーバーには保存されません）"
+    :view==="doctor"?"カルテ端末などでこのQRを読み取ると、同じ内容の医師用シートが開きます。"
     :(view==="next"?"このQRを撮影するか、リンクを保存しておいてください。次回の受診でこれを開くと、今日の内容から続けて入力でき、前回からの変化がまとまります。（サーバーには保存されません）"
     :"患者さんのスマホでこのQRコードを読み取ると、続きから入力できます。（サーバーには保存されません）");
   const wrap=document.createElement("div");wrap.className="modal";wrap.id="hoModal";
@@ -3971,7 +4338,7 @@ async function showHandoff(view){
     <div class="qr" id="qrBox"></div>
     <div class="lk" id="qrLink">${url}</div>
     <div class="row">
-      <button class="pri" onclick="copyHandoff('${view==="doctor"?"doctor":""}')">🔗 リンクをコピー</button>
+      <button class="pri" onclick="copyHandoff('${view||""}')">🔗 リンクをコピー</button>
       <button onclick="closeHandoff()">閉じる</button>
     </div>
     <p class="mini" id="qrWarn" style="margin-top:8px"></p></div>`;
@@ -3989,7 +4356,7 @@ async function showHandoff(view){
   if(!r||r.mod>MAX_MOD){
     /* 入力が多くQRが細かくなりすぎる場合は、自由記述を外した軽い版に切り替える。
        黙って落とすと医師側で気づけないので、外したことを必ず明示する。 */
-    const liteUrl=await handoffURL(view==="doctor"?"&view=doctor":"",true);
+    const liteUrl=await handoffURL(handoffExtra(view),true);
     const r2=build(liteUrl);
     if(r2&&(!r||r2.mod<=MAX_MOD)){
       draw(r2);
@@ -4002,7 +4369,7 @@ async function showHandoff(view){
   else warn.textContent="※入力が多いためQRを作れませんでした。リンクのコピーをお使いください。";
 }
 function closeHandoff(){const m=document.getElementById("hoModal");if(m)m.remove();}
-async function copyHandoff(view){const url=await handoffURL(view==="doctor"?"&view=doctor":"");
+async function copyHandoff(view){const url=await handoffURL(handoffExtra(view));
   const done=()=>{const b=event&&event.target;if(b){b.textContent="✓ コピーしました";setTimeout(()=>b.textContent="🔗 リンクをコピー",1800);}};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(done).catch(()=>fallbackCopy(url,done));
   else fallbackCopy(url,done);
@@ -4012,9 +4379,10 @@ async function copyHandoff(view){const url=await handoffURL(view==="doctor"?"&vi
 function updateNav(){
   const nb=document.getElementById("nextBtn"),bb=document.getElementById("backBtn");
   bb.style.visibility=phase==="intro"?"hidden":"visible";
-  if(phase==="intro"){nb.textContent="同意して始める →";nb.disabled=false;}
-  else if(phase==="output"){nb.style.display="none";bb.textContent="← 確認にもどる";return;}
+  if(phase==="intro"){nb.textContent=isConsult()?"はじめる →":"同意して始める →";nb.disabled=false;}
+  else if(phase==="output"){nb.style.display="none";bb.textContent=isConsult()?"← 入力にもどる":"← 確認にもどる";drawMidout();return;}
   else if(phase==="confirm"){nb.textContent="メモを作る →";nb.disabled=false;}
+  else if(phase==="cdata"){nb.textContent="依頼メモを作る →";nb.disabled=false;}
   else{nb.textContent="次へ →";nb.disabled=!canNext();}
   nb.style.display="";bb.textContent="← 戻る";
   /* 進めない理由をことばで示す（グレーアウトだけにしない） */
@@ -4023,6 +4391,8 @@ function updateNav(){
   drawMidout();
 }
 function nextHint(){
+  if(phase==="cask")return "「答えてほしいこと」を1つ以上選ぶと、次へ進めます";
+  if(phase==="csx")return "症候を1つ以上選ぶと、次へ進めます";
   if(phase==="who")return "どなたが入力するかを選ぶと、次へ進めます";
   if(phase==="symptoms")return "症状を1つ以上選ぶと、次へ進めます（「その他」でも大丈夫です）";
   if(phase==="common")return "最初の質問に1つ答えると進めます（「わからない」でも大丈夫です）";
@@ -4031,6 +4401,12 @@ function nextHint(){
 /* 診察に呼ばれたら：ここまでの内容でメモを作る（F11 途中出力） */
 function drawMidout(){
   const el=document.getElementById("midout");if(!el)return;
+  if(isConsult()){
+    /* 「ただコンサルトしたいだけ」の先生が、途中でいつでも依頼メモを作れるようにする */
+    const go=["csx","ccourse","cexam","cdata"].indexOf(phase)>=0&&(D.consult.ask.length||D.consult.sx.main);
+    el.innerHTML=go?`<button onclick="phase='output';render()">ここまでで依頼メモを作る →</button>`:"";
+    return;
+  }
   if(RETC&&!["intro","confirm","output"].includes(phase)){
     el.innerHTML=`<button onclick="RETC=false;phase='confirm';render()">修正できたら：確認画面にもどる →</button>`;return;
   }
@@ -4038,12 +4414,24 @@ function drawMidout(){
   el.innerHTML=show?`<button onclick="phase='confirm';render()">診察に呼ばれたら：ここまでの内容でメモを作る →</button>`:"";
 }
 function canNext(){
+  if(phase==="cask")return D.consult.ask.length>0;
+  if(phase==="csx")return !!D.consult.sx.main;
+  if(phase==="ccourse"||phase==="cexam"||phase==="cdata")return true;
   if(phase==="who")return !!D.who;
   if(phase==="symptoms")return D.symptoms.length>0;
   if(phase==="common")return !!D.common.tempo;
   return true;
 }
 function next(){
+  if(isConsult()){
+    if(phase==="intro")phase="cask";
+    else if(phase==="cask")phase="csx";
+    else if(phase==="csx")phase="ccourse";
+    else if(phase==="ccourse")phase="cexam";
+    else if(phase==="cexam")phase="cdata";
+    else if(phase==="cdata")phase="output";
+    render();return;
+  }
   if(phase==="intro")phase="who";
   else if(phase==="who")phase="symptoms";
   else if(phase==="symptoms")phase="sxtime";
@@ -4058,6 +4446,15 @@ function next(){
   render();
 }
 function prev(){
+  if(isConsult()){
+    if(phase==="cask")phase="intro";
+    else if(phase==="csx")phase="cask";
+    else if(phase==="ccourse")phase="csx";
+    else if(phase==="cexam")phase="ccourse";
+    else if(phase==="cdata")phase="cexam";
+    else if(phase==="output")phase="cdata";
+    render();return;
+  }
   if(phase==="who")phase="intro";
   else if(phase==="symptoms")phase="who";
   else if(phase==="sxtime")phase="symptoms";
@@ -4451,6 +4848,9 @@ function doctorSheet(){
   return `<div class="sheet">
    <h3>NeuroBridge 病歴メモ <span class="ai-tag">患者・家族入力／診断ではありません</span></h3>
    <div class="meta">作成日: ${nowStr()}　入力者: ${whoLabel()}${D.ageBand&&D.ageBand!=="答えない"?`　年代: ${D.ageBand}`:""}　選択症候: ${D.symptoms.join("、")||"—"}　ID: ${id4}　版: ${APP_VERSION}</div>
+   ${(D.consult&&D.consult.ask&&D.consult.ask.length)?`<div class="sec"><div class="lab">📨 コンサルト依頼（依頼医の記入）</div>
+     <div class="assoc">${[D.consult.from.dept?esc(D.consult.from.dept)+"より":"",D.consult.sx.main?"主症候: "+esc(csxName(D.consult.sx.main)):""].filter(Boolean).join("　")}
+     ${consultAskText().length?`<div><span class="g">答えてほしいこと:</span> ${consultAskText().map(esc).join("／")}</div>`:""}</div></div>`:""}
 
    <div class="topbox">
      <div class="cc">${c.trouble?esc(c.trouble):(D.symptoms.slice(0,3).join("・")||"—")}</div>
@@ -4609,7 +5009,7 @@ function plainSheet(){
   return L.join("\n");
 }
 function copySheet(){
-  const txt=plainSheet();const btn=document.getElementById("copyBtn");
+  const txt=isConsult()?plainConsult():plainSheet();const btn=document.getElementById("copyBtn");
   const ok=()=>{if(!btn)return;btn.classList.add("done");btn.textContent="✓ コピーしました";
     setTimeout(()=>{btn.classList.remove("done");btn.textContent="📋 シートをコピー";},2000);};
   if(navigator.clipboard&&navigator.clipboard.writeText){
@@ -4647,6 +5047,7 @@ window.addEventListener("popstate",e=>{
    何か入力済みのときだけ確認を出す（意図的なやり直しでは出さない）。 */
 let LEAVING=false;
 function hasAnyInput(){
+  if(D.consult&&(D.consult.ask.length||D.consult.sx.main))return true;
   if(D.symptoms&&D.symptoms.length)return true;
   if(D.who)return true;
   return !!(D.common&&(D.common.trouble||D.common.tempo))||!!D.free;
