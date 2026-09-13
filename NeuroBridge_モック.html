@@ -2712,6 +2712,20 @@ var qrcode = function() {
   .bodysvg .reg.sel{fill:var(--brand);stroke:var(--brand-d)}
   .bodysvg .rlab{font-size:11px;fill:#5d6e7e;pointer-events:none}
   .bodyleg{font-size:calc(14px*var(--fs));color:var(--sub);max-width:240px;text-align:left}
+  /* 2026-09-12f 手の図（左右を切り替えて1つずつ大きく出す＝指の的が44px を下回らないように） */
+  .handwrap{flex-direction:column;gap:6px;width:100%}
+  .handtabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .handtabs button{min-height:44px;min-width:88px;border:2px solid var(--line);background:#fff;color:var(--sub);
+    border-radius:22px;padding:8px 16px;font-size:calc(15px*var(--fs));font-weight:800;font-family:inherit;cursor:pointer}
+  .handtabs button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  .handtabs button .n{font-weight:700;font-size:calc(12.5px*var(--fs));opacity:.85;margin-left:6px}
+  .handsvg{touch-action:manipulation;width:100%;max-width:300px;height:auto;display:block;margin:0 auto}
+  .handsvg .reg{fill:#eef3f9;stroke:#9fc3e8;stroke-width:2;cursor:pointer;transition:.1s}
+  .handsvg .reg:active{opacity:.7}
+  .handsvg .reg.sel{fill:var(--brand);stroke:var(--brand-d)}
+  .handsvg .zlab{font-size:11px;fill:#44586a;pointer-events:none;text-anchor:middle;font-weight:700}
+  .handsvg .reg.sel+.zlab{fill:#fff}
+  .handdor{display:flex;justify-content:center;margin-top:2px}
   /* 2026-09-11c 任意の画面の「とばす」 */
   .skipbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;
     background:#f5f9fd;border:1px solid var(--line);border-radius:10px;padding:4px 4px 4px 12px;margin:0 0 12px;
@@ -2763,6 +2777,7 @@ var qrcode = function() {
     .sheet .time-section details.more{display:none!important}
     /* すべて印刷するときは、ICHD-3 の根拠を次のページに送って1枚目を要点だけにする */
     body:not(.print-brief) .sheet .sec.ichd{column-span:all;break-before:page;page-break-before:always}
+    body:not(.print-brief) .sheet .sec.critsec{break-before:auto;page-break-before:auto;break-inside:auto}
     body.print-brief .sheet .ichd .morein{display:none!important}
   }
   @media (max-width:899px),(pointer:coarse){
@@ -3144,6 +3159,169 @@ const ICHD3=(function(){
     _:{and,or,neg,atLeast,atMostOne,inRange,ge}};
 })();
 </script>
+<script id="criteria-engine">
+/* ===== 診断基準 rule engine（めまい・下肢の不快感）=====
+   2026-09-12。ICHD3 エンジンと同じ作り：画面・DOM・入力データ（D）には触らない純関数だけを置く。
+   入力は画面側の dizzyFacts() / rlsFacts() が作る「正規化した事実」、出力は criterion ごとの
+   met（充足）/ not_met（未充足）/ unknown（評価不能）の3値と、その根拠。
+   ・回答がないものを not_met にしない（情報不足 ≠ 基準を満たさない）。
+   ・最後の criterion（ほかの疾患でうまく説明されない）は常に unknown＝医師が確認する。
+   ・診断を確定しない。出すのは「基準をどこまで満たすか」だけ。
+   ・★ユーザー決定 2026-09-12：疾患名は出さない。code＝基準の出典と番号、name＝所見のまとまりの記述。
+     頭痛（ICHD-3）だけは医療者シートに疾患名を出す例外（決定H1）で、ここには広げない。
+   ・症候別の Red flag は evaluateSymptomRedFlags() で別に返し、画面側で基準の評価より先に出す。
+   準拠：ICHD-3 (2018) A1.6.6 ／ Bárány Society 2015（前庭性の反復性めまいと耳症状の基準）
+        ／ Bárány Society 2017（持続性知覚性姿勢誘発めまいの基準）／ IRLSSG 2014（下肢の不快感の必須基準）。
+   範囲 {min,max} の単位は、持続＝分・回数＝回。 */
+const CRIT=(function(){
+  const MET="met",NOT="not_met",UNK="unknown";
+  const tri=x=>x===true?MET:x===false?NOT:UNK;
+  const and=(...xs)=>xs.includes(NOT)?NOT:(xs.every(x=>x===MET)?MET:UNK);
+  const or=(...xs)=>xs.includes(MET)?MET:(xs.every(x=>x===NOT)?NOT:UNK);
+  const neg=x=>x===MET?NOT:x===NOT?MET:UNK;
+  const atLeast=(n,xs)=>{const m=xs.filter(x=>x===MET).length,u=xs.filter(x=>x===UNK).length;
+    return m>=n?MET:(m+u>=n?UNK:NOT);};
+  /* 範囲 r が [lo,hi] に収まるか。重なりが幅0（境目で接するだけ）なら not_met */
+  const inRange=(r,lo,hi)=>{if(!r)return UNK;if(r.min>=lo&&r.max<=hi)return MET;
+    return (Math.min(r.max,hi)-Math.max(r.min,lo)>0)?UNK:NOT;};
+  /* 範囲 r が t 以上か（下限を含み上限を含まない） */
+  const ge=(r,t)=>!r?UNK:(r.min>=t?MET:(r.max<=t?NOT:UNK));
+  const SYM={[MET]:"✓",[NOT]:"×",[UNK]:"?"};
+  const crit=(id,label,status,ev)=>({id,label,status,ev:ev||""});
+  const lab=(r,none)=>r&&r.label?r.label:(none||"未回答");
+  /* まとめ。E（ほかの疾患で説明されない）など always の criterion は充足判定から外す */
+  function summarize(code,name,criteria,notes){
+    const core=criteria.filter(c=>!c.always);
+    const overall=and(...core.map(c=>c.status));
+    const ids=core.map(c=>c.id).join("");
+    const range=ids.length>1?`${ids[0]}–${ids[ids.length-1]}`:ids;
+    let text;
+    if(overall===MET)text=`Criteria ${range}：充足 → ${code} の基準に合致する所見あり。最終判断には診察・ほかの疾患の除外が必要`;
+    else if(overall===NOT){const nm=core.filter(c=>c.status===NOT);
+      text=`基準未充足：`+nm.map(c=>`${c.id}（${c.ev||c.label}）`).join("／");}
+    else{const uk=core.filter(c=>c.status===UNK);
+      text=`評価不能：`+uk.map(c=>`${c.id}（${c.ev||c.label}）`).join("／")+" が不明";}
+    return {code,name,criteria,overall,text,notes:notes||[]};
+  }
+  const OTHER=(id,label)=>({id:id||"E",label:label||"ほかの疾患でうまく説明されない",status:UNK,ev:"医師による確認が必要",always:true});
+
+  /* ---- ICHD-3 A1.6.6（反復する前庭症状＋片頭痛性の特徴）---- */
+  function evaluateVestibularMigraine(f){
+    const d=f||{};
+    const A=ge(d.attacks,5);
+    const B=tri(d.migraineHx);
+    const C=and(inRange(d.durMin,5,4320),tri(d.moderate));
+    const D=d.migFeat==null?UNK:tri(d.migFeat);
+    const notes=[];
+    if(d.migraineHxFrom)notes.push("B の根拠："+d.migraineHxFrom);
+    return summarize("ICHD-3 A1.6.6","反復する前庭症状＋片頭痛性の特徴",[
+      crit("A","中等度以上の前庭症状の発作が5回以上",A,lab(d.attacks,"回数 未回答")),
+      crit("B","現在または過去に ICHD-3 1.1／1.2 の基準を満たす",B,
+        d.migraineHx===true?"あり":d.migraineHx===false?"なし":"頭痛の問診なし（医師確認）"),
+      crit("C","前庭症状は中等度以上で 5分〜72時間",C,
+        `${lab(d.durMin,"持続 未回答")}・強さ ${d.moderate===true?"中等度以上":d.moderate===false?"軽度":"未回答"}`),
+      crit("D","発作の50%以上で片頭痛性の特徴（頭痛の性状・光音過敏・視覚性前兆）を1つ以上伴う",D,d.migFeatEv||"未回答"),
+      OTHER("E","ほかの ICHD-3 診断・前庭疾患でうまく説明されない")],notes);
+  }
+
+  /* ---- Bárány 2015（反復する回転性めまい＋変動する耳症状）----
+     definite は聴力検査が必須なので、問診だけでは B を評価できない（常に unknown）。
+     probable は問診だけで評価できる。 */
+  function meniereCore(f,hiHours){
+    const d=f||{};
+    return and(ge(d.attacks,2),inRange(d.durMin,20,hiHours),tri(d.rotational),tri(d.spontaneous));
+  }
+  function meniereEv(f){const d=f||{};
+    return `${lab(d.attacks,"回数 未回答")}・${lab(d.durMin,"持続 未回答")}・回転性 ${SYM[tri(d.rotational)]}・自発性 ${SYM[tri(d.spontaneous)]}`;}
+  function earEv(f){const d=f||{};
+    return d.earFluct===true?`変動する耳症状あり（${d.earSide||"側 未回答"}）`:
+      d.earFluct===false?(d.earNone?"耳の症状なし":"耳の症状は変動しない"):"耳症状の変動 未回答";}
+  function evaluateMeniereDefinite(f){const d=f||{};
+    return summarize("Bárány 2015（A–D）","反復する回転性めまい＋聴力検査での難聴＋変動する耳症状",[
+      crit("A","20分〜12時間の自発性回転性めまいが2回以上",meniereCore(d,720),meniereEv(d)),
+      {id:"B",label:"患側耳の低〜中音域の感音難聴を聴力検査で確認",status:UNK,ev:"純音聴力検査が必要（問診では評価できない）"},
+      crit("C","患側耳の変動する耳症状（聞こえ・耳鳴り・耳閉感）",tri(d.earFluct),earEv(d)),
+      OTHER("D","ほかの前庭疾患でうまく説明されない")],
+      ["B は聴力検査の所見なので、問診だけでは常に評価不能になります"]);
+  }
+  function evaluateMeniereProbable(f){const d=f||{};
+    return summarize("Bárány 2015（probable A–C）","反復する回転性めまい＋変動する耳症状（聴力検査なしで評価できる枠）",[
+      crit("A","20分〜24時間のめまいが2回以上",meniereCore(d,1440),meniereEv(d)),
+      crit("B","患側耳の変動する耳症状（聞こえ・耳鳴り・耳閉感）",tri(d.earFluct),earEv(d)),
+      OTHER("C","ほかの前庭疾患でうまく説明されない")]);
+  }
+
+  /* ---- Bárány 2017（3か月以上続く持続性のふらつき）---- */
+  function evaluatePPPD(f){const d=f||{};
+    const B=atLeast(1,[tri(d.upright),tri(d.motion),tri(d.visual)]);
+    const bev=[`立位 ${SYM[tri(d.upright)]}`,`動き ${SYM[tri(d.motion)]}`,`視覚刺激（人混みなど） ${SYM[tri(d.visual)]}`].join("・");
+    return summarize("Bárány 2017（A–E）","3か月以上ほとんど毎日続く持続性のふらつき（姿勢・動き・視覚刺激で増悪）",[
+      crit("A","ふらつき・浮動感が3か月以上、ほとんどの日にある",tri(d.over3m),
+        d.over3m===true?"3か月以上ほぼ毎日":d.over3m===false?"3か月以上ではない":"未回答"),
+      crit("B","立位・体の動き・複雑な視覚刺激のいずれかで増悪",B,bev),
+      crit("C","めまい・平衡障害を起こす出来事が先行している",tri(d.trigger),d.triggerEv||"未回答"),
+      crit("D","著しい苦痛・生活への支障がある",tri(d.impact),d.impactEv||"未回答"),
+      OTHER("E","ほかの疾患でうまく説明されない")]);
+  }
+
+  /* ---- IRLSSG 2014（下肢の不快感の必須5項目）---- */
+  function evaluateRLS(f){const d=f||{};
+    const notes=[];
+    if(d.mimics&&d.mimics.length)notes.push("紛らわしい所見の回答："+d.mimics.join("・"));
+    return summarize("IRLSSG 2014（必須5項目）","夕方〜夜に強い下肢の不快感と、動かしたい衝動",[
+      crit("1","脚を動かしたい強い衝動（多くは不快な感覚を伴う）",tri(d.urge),d.urge===true?"あり":d.urge===false?"なし":"未回答"),
+      crit("2","安静・じっとしているときに始まる、または強くなる",tri(d.rest),d.rest===true?"あり":d.rest===false?"なし":"未回答"),
+      crit("3","動かすと、その間は軽くなる",tri(d.move),d.move===true?"あり":d.move===false?"なし":"未回答"),
+      crit("4","夕方から夜に強い（またはその時間帯にだけ起こる）",tri(d.evening),d.eveningEv||"未回答"),
+      OTHER("5","ほかの状態（こむら返り・むくみ・じっと座っていられない感じなど）だけでは説明されない")],notes);
+  }
+
+  /* ---- 症候別の Red flag（基準の評価より常に先に出す）----
+     urgent＝患者画面で「受付スタッフに見せてください」を出す項目。
+     ★病名・受診勧奨は書かない（記述だけ）。 */
+  const SXRF_TEXT={
+    dzFocal:"めまいに複視・ろれつ・言葉の出にくさ・片側の脱力／しびれのいずれかを伴う",
+    dzEarAcute:"片耳の聞こえ・耳鳴り・耳づまりが最近（数日以内）に出た",
+    dzCantWalk:"めまいのため一人で歩けない",
+    nmBladder:"両脚または体幹の症状に、排尿・排便のトラブルを伴う",
+    nmBilatGait:"両手または両脚の同時の症状に、歩きにくさを伴う",
+    wkRapidResp:"数時間〜数日で進む脱力に、息苦しさを伴う",
+    gtBladder:"歩行障害に、排尿・排便のトラブルを伴う",
+    trUnilateral:"ふるえが片側だけにある",
+    eyMono:"片目を隠しても二重に見える（片眼性）"};
+  const SX_URGENT=["dzFocal","nmBladder","wkRapidResp"];
+  function evaluateSymptomRedFlags(f){const r=(f&&f.sxFlags)||f||{};
+    return Object.keys(SXRF_TEXT).filter(k=>r[k]).map(k=>({id:k,text:SXRF_TEXT[k]+(typeof r[k]==="string"?`（${r[k]}）`:""),urgent:SX_URGENT.includes(k)}));
+  }
+
+  /* ---- Katz hand diagram（手のしびれの分布の分類）----
+     分布のパターンだけで classic / probable / possible / unlikely に分ける。
+     ★分類名は病名ではなく分布の記述として扱う（この欄でも病名は出さない）。
+     zones: d1 d2 d3 d4 d5（指）／palmR（手のひら・親指側）／palmU（手のひら・小指側）／dorsum（手の甲）／prox（手首より上） */
+  function katz(zones){
+    const z=zones||[],has=k=>z.indexOf(k)>=0;
+    const n=["d1","d2","d3"].filter(has).length;
+    if(!z.length)return {id:"none",label:"未入力",note:""};
+    if(n===0)return {id:"unlikely",label:"母指〜中指にかからない分布（unlikely）",note:"母指・示指・中指のいずれにも症状なし"};
+    if(n===1)return {id:"possible",label:"一部のみ一致（possible）",note:"母指・示指・中指のうち1本のみ"};
+    const palmOnlyUlnar=has("palmU")&&!has("palmR");
+    if(!has("palmR")&&!has("palmU")&&!has("dorsum"))
+      return {id:"classic",label:"典型的な分布（classic）",note:"母指〜中指の2本以上で、手のひら・手の甲に及ばない"};
+    if(!has("dorsum")&&!palmOnlyUlnar)
+      return {id:"probable",label:"典型に近い分布（probable）",note:"母指〜中指の2本以上＋手のひら（小指側だけではない）"};
+    return {id:"possible",label:"一部のみ一致（possible）",note:has("dorsum")?"手の甲にも及ぶ":"手のひらは小指側のみ"};
+  }
+
+  function evaluateDizzy(f){
+    return [evaluateVestibularMigraine(f),evaluateMeniereProbable(f),evaluateMeniereDefinite(f),evaluatePPPD(f)];
+  }
+  return {MET,NOT,UNK,SYM,SX_URGENT,
+    evaluateDizzy,evaluateVestibularMigraine,evaluateMeniereDefinite,evaluateMeniereProbable,
+    evaluatePPPD,evaluateRLS,evaluateSymptomRedFlags,katz,
+    version:"ICHD-3 (2018) A1.6.6 ／ Bárány 2015・2017 ／ IRLSSG 2014",
+    _:{and,or,neg,atLeast,inRange,ge,tri}};
+})();
+</script>
 <script>
 /* ===== 状態（画面内メモリのみ・保存しない） ===== */
 const D = { who:null, ageBand:null, symptoms:[], mods:[], primary:null, firstSx:null, common:{},
@@ -3168,8 +3346,11 @@ const D = { who:null, ageBand:null, symptoms:[], mods:[], primary:null, firstSx:
      ASSOC_GROUPS(一緒に出ている症状) / ASSOC_PLAN(主訴ごとに優先して聞く同時症状)
      FUNC(生活への影響) / QM(症候別モジュール①〜⑥) / BG_*(背景) / OPT_*(その他の単発の選択肢)
      HA_*(頭痛の選択肢。判定用の範囲と識別子つき) / ICHD_SUPPORT(医療者シートの ICHD-3 criteria support を出すか)
+     VS_*(めまいの選択肢。判定用の範囲つき) / RLS_*(脚の不快感) / HAND_ZONES(手の図)
+     CRIT_SUPPORT(医療者シートの「診断基準の充足」を出すか)
      QMETA(質問ごとの目的・分類。表示には使わない)
    ※ ICHD-3 の判定そのものは設定ブロックではなく、上の <script id="ichd3-engine"> にある（改訂時はそこだけ差し替える）。
+  ※ めまい・脚の不快感の判定は <script id="criteria-engine">（同じく設定ブロックの外）。
 
    ★編集するときの注意★
    ・選択肢の文言を変えると、その回答を使っている判定
@@ -3212,7 +3393,7 @@ const SAVE_ENDPOINT = ""; // ←ここに公開したWebアプリのURLを貼る
 /* ★デプロイのたびに必ず更新すること★
    ブラウザのキャッシュで古い版が表示されていても気づけるように、
    画面と医療者シートに版数を出し、下の checkForUpdate() で自動確認する。 */
-const APP_VERSION = "2026-09-11e";
+const APP_VERSION = "2026-09-13a";
 
 const SESSION = { id:"NBG-"+nowStr().slice(2).replace(/-/g,"")+"-"+Math.floor(1000+Math.random()*9000), start:Date.now() };
 let _saved=false;
@@ -3316,7 +3497,8 @@ const TEMPO_ACUTE=["数秒〜数分で","数時間で"], TEMPO_SUB=["数日で",
 const ASSOC_GROUPS = [
   {g:"目・顔のうごき", items:["ものが二重に見える","見える範囲が欠ける（片側が見えない）","顔がゆがむ・動きにくい","視力が落ちた・目が痛い"]},
   {g:"話す・飲み込む・息", items:["ろれつが回りにくい","言葉が出ない・言い間違える","飲み込みにくさ・むせ","息苦しさ"]},
-  {g:"動き・ふるえ", items:["安静にしていても手がふるえる","動作が遅い・小さくなった","表情が乏しい・声が小さい","筋肉がやせる・ぴくつく"]},
+  {g:"動き・ふるえ", items:["安静にしていても手がふるえる","動作が遅い・小さくなった","片方の腕の振りが小さくなった",
+    "表情が乏しい・声が小さい","筋肉がやせる・ぴくつく"]},
   {g:"感覚・痛み", items:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感","首・腰・背中の痛み（手足に響く）","頭痛"]},
   {g:"頭のはたらき・睡眠・その他", items:["物忘れ・性格や行動の変化","夢で大声・手足が動く（睡眠中）","においが分かりにくい","吐き気・しゃっくりが続く"]},
 ];
@@ -3328,11 +3510,11 @@ const ASSOC_PLAN = {
   nmSub:["しびれ・感覚の鈍さ","胴体・脚に帯のようなしめつけ感","飲み込みにくさ・むせ","息苦しさ","顔がゆがむ・動きにくい","ものが二重に見える","首・腰・背中の痛み（手足に響く）"],
   weakChronic:["ろれつが回りにくい","飲み込みにくさ・むせ","息苦しさ","筋肉がやせる・ぴくつく","しびれ・感覚の鈍さ","首・腰・背中の痛み（手足に響く）"],
   numbChronic:["筋肉がやせる・ぴくつく","胴体・脚に帯のようなしめつけ感","首・腰・背中の痛み（手足に響く）"],
-  gait:["動作が遅い・小さくなった","安静にしていても手がふるえる","物忘れ・性格や行動の変化","しびれ・感覚の鈍さ","夢で大声・手足が動く（睡眠中）","飲み込みにくさ・むせ","ろれつが回りにくい"],
+  gait:["動作が遅い・小さくなった","片方の腕の振りが小さくなった","安静にしていても手がふるえる","物忘れ・性格や行動の変化","しびれ・感覚の鈍さ","夢で大声・手足が動く（睡眠中）","飲み込みにくさ・むせ"],
   bulbar:["息苦しさ","飲み込みにくさ・むせ","ろれつが回りにくい","顔がゆがむ・動きにくい"],
   dizzy:["ろれつが回りにくい","ものが二重に見える","しびれ・感覚の鈍さ","頭痛"],
-  move:["動作が遅い・小さくなった","表情が乏しい・声が小さい","安静にしていても手がふるえる","物忘れ・性格や行動の変化","夢で大声・手足が動く（睡眠中）"],
-  tremor:["動作が遅い・小さくなった","表情が乏しい・声が小さい","においが分かりにくい","夢で大声・手足が動く（睡眠中）"],
+  move:["動作が遅い・小さくなった","片方の腕の振りが小さくなった","表情が乏しい・声が小さい","安静にしていても手がふるえる","夢で大声・手足が動く（睡眠中）"],
+  tremor:["動作が遅い・小さくなった","片方の腕の振りが小さくなった","表情が乏しい・声が小さい","においが分かりにくい","夢で大声・手足が動く（睡眠中）"],
   headache:["見える範囲が欠ける（片側が見えない）"],   /* 複視・しびれ・言葉は頭痛の最初の問（Red flag）で聞く */
   generic:["しびれ・感覚の鈍さ","ろれつが回りにくい","飲み込みにくさ・むせ","ものが二重に見える","物忘れ・性格や行動の変化","頭痛"]
 };
@@ -3454,7 +3636,45 @@ const HA_MEDS=[["アセトアミノフェン（カロナール・タイレノー
  ["トラマドール（トラムセットなど）","op","トラマドール"],
  ["そのほかの薬・名前がわからない","ot","そのほかの薬"],["使っていない",null]];
 const HA_MEDDAYS=[["月1〜4日",1,5],["月5〜9日",5,10],["月10〜14日",10,15],["月15日以上",15,32],["わからない"]];
-const MOD_PAGE_TITLE={5:["いまの頭痛と、これまでの回数","1回の頭痛の様子","前ぶれ・目のまわりの痛み・きっかけ・薬"]};
+/* === めまい・脚の不快感モジュール（2026-09-12f・診断基準 support 用） ===
+   患者さんに見せる文なので病名は書かない。判定は <script id="criteria-engine"> にだけ置く。
+   [文言, 下限, 上限) の範囲は判定に使う（持続＝分・回数＝回）。文言を変えても範囲は残すこと。
+   ★ユーザー決定 2026-09-12：医療者シートにも疾患名は出さず、基準の出典と記号だけを出す。 */
+let CRIT_SUPPORT = true;     // ← false にすると医療者シートの「診断基準の充足」を出さない（質問・Red flag はそのまま）
+/* 発作の回数（生涯）。基準の「5回以上」「2回以上」に直結する */
+const VS_COUNT=[["1回だけ",1,2],["2〜4回",2,5],["5回以上",5,Infinity],["数えきれないほど",5,Infinity],["わからない"]];
+/* 1回の持続（分）。20分・12時間・24時間・72時間の境目は基準に合わせてある（動かさないこと） */
+const VS_DUR=[["数秒〜1分",0,1],["1〜5分",1,5],["5〜20分",5,20],["20分〜1時間",20,60],["1〜12時間",60,720],
+ ["12〜24時間",720,1440],["1〜3日",1440,4320],["3日より長い",4320,Infinity],["ずっと続いている"],["わからない"]];
+const VS_SEV=["動けない・横になるしかない","つらいが、がまんして動ける","気になるが、ふだんどおり動ける","わからない"];
+const VS_MIG=["頭が痛くなる","光がまぶしくてつらい","音がうるさくてつらい","キラキラ・ギザギザしたものが見える","あてはまらない"];
+const VS_EARVAR=["めまいのたびに強さが変わる","いつも同じ","耳の症状はない","わからない"];
+const VS_PPPDTRIG=["急なめまいの発作","耳の病気・頭のけが","体調をくずした・強いストレス","立ちくらみ・脈の乱れ","特にない","わからない"];
+/* 脚の不快感（必須5項目のうち、問診で聞ける4項目＋紛らわしい所見） */
+const RLS_EVE=["夕方から夜にかけて","朝のほうが強い","時間帯は変わらない","わからない"];
+const RLS_MIMIC=["こむら返り（脚がつる）","じっと座っていられない感じが全身にある","夕方に脚がむくむ","脚の血管が浮き出る","あてはまらない"];
+/* === 手の図（Katz hand diagram の分布を取る）===
+   ラベルはそのまま引き継ぎの表示に使う。id は判定に使うので変えないこと。 */
+/* shape の中の数字は viewBox（0 0 172 250）の座標。指の幅30＝画面では約51〜54px。
+   short＝図の中に書く短い名前（左右で反転しても読めるよう、文字だけは反転させない）。 */
+const HAND_ZONES=[
+ {id:"d1",label:"母指（親指）",short:"母指",shape:`<rect x="2" y="116" width="32" height="76" rx="16" transform="rotate(-22 18 154)"/>`,tx:19,ty:158},
+ {id:"d2",label:"示指（人さし指）",short:"示指",shape:`<rect x="36" y="34" width="30" height="98" rx="15"/>`,tx:51,ty:90},
+ {id:"d3",label:"中指",short:"中指",shape:`<rect x="68" y="22" width="30" height="110" rx="15"/>`,tx:83,ty:84},
+ {id:"d4",label:"環指（くすり指）",short:"環指",shape:`<rect x="100" y="32" width="30" height="100" rx="15"/>`,tx:115,ty:90},
+ {id:"d5",label:"小指",short:"小指",shape:`<rect x="132" y="52" width="30" height="80" rx="15"/>`,tx:147,ty:100},
+ {id:"palmR",label:"手のひら（親指側）",short:"親指側",shape:`<path d="M32,134 H98 V200 H60 q-28,-2 -28,-30 Z"/>`,tx:64,ty:170},
+ {id:"palmU",label:"手のひら（小指側）",short:"小指側",shape:`<path d="M98,134 H166 q4,44 -16,66 H98 Z"/>`,tx:128,ty:170},
+ {id:"prox",label:"手首より上（前腕・腕）",short:"手首より上",shape:`<rect x="56" y="204" width="84" height="40" rx="12"/>`,tx:98,ty:228},
+];
+/* 手の甲は図にすると小さくなりすぎるので、図の下のボタンで聞く */
+const HAND_DORSUM={id:"dorsum",label:"手の甲にもある"};
+const HAND_SIDES=[["R","右手"],["L","左手"]];
+
+/* ふるえの活性化条件（2026-09-13a）。安静／姿勢／動作／課題特異的／等尺性を分けて取る */
+const TR_WHEN=["座って手を膝に置いたとき","手を前に伸ばして止めたとき","コップを口へ運ぶとき","字を書くとき",
+ "歩いているとき","力を入れて踏ん張るとき","あてはまらない"];
+const MOD_PAGE_TITLE={4:["めまいの様子","一緒に起こること・きっかけ"],5:["いまの頭痛と、これまでの回数","1回の頭痛の様子","前ぶれ・目のまわりの痛み・きっかけ・薬"]};
 
 /* === 症候別モジュール（どこが・何ができないか） ===
    cat＝見出し。sec:"adl" は医療者シートの「ADLへの影響」、sec:"trig" は「増悪・軽快因子」に出す。
@@ -3466,32 +3686,77 @@ const QM = {
       "暗い所・目を閉じるとふらつく","歩くと足がしびれ・痛み、休むと治まる","膝・腰などの痛みで歩きにくい"]},
   {k:"aid",cat:"歩き方の様子",sec:"adl",q:"いまの歩き方に近いものは？",
    o:["普通に歩ける","長い距離は難しい","手すり・つかまりが必要","杖を使う","歩行器・シルバーカーを使う","車いすを使う","介助がないと歩けない"]},
+  {k:"hard",cat:"歩き方の様子",q:"歩くときに、いちばん困るのはどの場面ですか？",
+   o:["立ち上がるとき","歩き出すとき","方向を変えるとき","段差・階段","長く歩いたあと","特に決まっていない"]},
+  {k:"claud",cat:"歩き方の様子",q:"歩いていて足がしびれ・痛くなるとき、前かがみになる・自転車に乗ると楽になりますか？",
+   o:["楽になる","姿勢に関係なく、歩く距離で決まる","わからない"]},
+  {k:"wide",cat:"歩き方の様子",q:"足を開きぎみにして歩くようになりましたか？",o:YNU},
+  {k:"stairs",cat:"歩き方の様子",q:"階段は、上りと下りのどちらが困りますか？",o:["上り","下り","どちらも","どちらも困らない","わからない"]},
+  {k:"support",cat:"歩き方の様子",q:"手すりや杖につかまると、見違えるほど安定しますか？",o:YNU},
   {k:"fall",cat:"転倒について",q:"転んだことはありますか？",o:["なし","1〜2回","3回以上","数えきれない"]},
   {k:"falldir",cat:"転倒について",q:"転び方の傾向は？",o:["前のめり","後ろ向き","横向き","つまずいて","一定しない","わからない"]},
   {k:"fallinj",cat:"転倒について",q:"転んでケガ・骨折・頭を打ったことは？",sub:"あてはまるものすべて",multi:true,o:["頭を打った","骨折した","打撲・すり傷","出血した","ケガはない"]},
+  {k:"worse",cat:"強くなるとき",sec:"trig",q:"歩きにくさが強くなるのは、どんなときですか？",sub:"あてはまるものすべて",multi:true,
+   o:["暗いところ・目を閉じたとき","人混み・広い場所","下り坂・段差","長く歩いたあと","朝より夕方","特にない"]},
  ],
  2:[
   {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて（最初に選んだ症状は反映済みです）",multi:true,o:["力が入らない","しびれ・鈍さ","痛みを伴う","ピリピリする","筋肉がやせてきた","ぴくぴくとひきつる"]},
   {k:"area",cat:"場所",q:"症状のある場所は？",sub:"あてはまるものすべて",multi:true,o:BODY_AREA_LABELS},
+  {k:"handmap",cat:"場所",ui:"hand",q:"手のどこに症状がありますか？",sub:"手の図で、症状のあるところをすべてタップしてください（左右それぞれ）"},
   {k:"spread",cat:"場所",q:"最初の場所から広がっていますか？",o:["広がっていない","足先から上へ","手から足へ（足から手へ）","片側から反対側へ","わからない"]},
   {k:"acts",cat:"やりにくくなった動作",sec:"adl",q:"やりにくくなった動作は？",sub:"あてはまるものすべて",multi:true,
    o:ACTS_PROX.concat(ACTS_DIST,["あてはまらない"])},
+  {k:"night",cat:"強くなるきっかけ",q:"手の症状は、夜中や明け方に強くなりますか？",o:["強くなる","変わらない","夜は出ない","わからない"]},
+  {k:"thermal",cat:"感じ方",q:"熱いもの・冷たいものの感じ方が鈍いですか？",
+   sub:"やけど・切り傷に気づかないことがあれば「鈍い」を選んでください",o:["鈍い","変わらない","わからない"]},
+  {k:"morning",cat:"感じ方",q:"朝起きたときに、手や体がこわばりますか？",o:["30分以内でほぐれる","30分より長く続く","こわばらない","わからない"]},
+  {k:"qual",cat:"強くなるきっかけ",q:"しびれや痛みは、どんな感じですか？",sub:"あてはまるものすべて",multi:true,
+   o:["焼けるような感じ","電気が走るような感じ","チクチク・ピリピリする","冷たく感じる","触られるだけで痛い",
+      "足の裏に砂・厚い靴下がついた感じ","あてはまらない"]},
   {k:"trig",cat:"強くなるきっかけ",sec:"trig",q:"症状が出る・強くなるきっかけは？",sub:"あてはまるものすべて",multi:true,
-   o:["首を動かすと手に響く","歩くと出て、休むと治まる","暑さ・入浴で強くなる","あてはまらない"]},
+   o:["首を動かすと手に響く","首を前に曲げると、背中や手足に電気が走る","歩くと出て、休むと治まる",
+      "暑さ・入浴で強くなる","あてはまらない"]},
+  /* 脚の不快感（IRLSSG 2014 の必須項目）。あてはまりそうな人にだけ、1問目から順に出す */
+  {k:"rls",cat:"脚の不快感",q:"じっとしているとき、脚の奥がむずむずして、動かしたくてたまらなくなることがありますか？",o:YNU},
+  {k:"rlsRest",cat:"脚の不快感",q:"その感じは、座ったり横になったりしてじっとしていると、強くなりますか？",o:YNU},
+  {k:"rlsMove",cat:"脚の不快感",q:"歩いたり脚を動かしたりすると、その間は楽になりますか？",o:YNU},
+  {k:"rlsEve",cat:"脚の不快感",q:"その感じが強いのは、いつですか？",o:RLS_EVE},
+  {k:"rlsMimic",cat:"脚の不快感",q:"次のようなことはありますか？",sub:"あてはまるものすべて",multi:true,o:RLS_MIMIC},
  ],
  3:[
   {k:"main",cat:"症状の性質",q:"主な症状は？",sub:"あてはまるものすべて（最初に選んだ症状は反映済みです）",multi:true,
    o:["物が二重に見える","まぶたが下がる","目が開けづらい","疲れると見えにくい","全身がだるい"]},
-  {k:"double",cat:"症状の性質",q:"二重の見え方は？",o:["横並び","上下","ななめ","片目を閉じると消える","二重ではない"]},
+  {k:"double",cat:"症状の性質",q:"二重の見え方は？",o:["横並び","上下","ななめ","わからない"]},
+  {k:"monoc",cat:"症状の性質",q:"片方の目を手でかくすと、二重は消えますか？",sub:"どちらの目をかくしても試してみてください",
+   o:["片目をかくすと消える","片目をかくしても二重が残る","わからない"]},
+  {k:"dir",cat:"症状の性質",q:"どちらを見たときに、二重がひどくなりますか？",sub:"あてはまるものすべて",multi:true,
+   o:["右を見たとき","左を見たとき","上を見たとき","下を見たとき","遠くを見たとき","近くを見たとき","変わらない"]},
+  {k:"tilt",cat:"症状の性質",q:"首を左右どちらかに傾けると、二重は楽になりますか？",o:YNU},
   {k:"lid",cat:"まぶたの様子",q:"まぶたの様子は？",o:["片側が下がる","両側が下がる","変動する","下がらない"]},
  ],
  4:[
-  {k:"feel",cat:"めまいの感じ",q:"どんなめまいですか？",o:["ぐるぐる回る","ふわふわする・体が揺れる","気が遠くなる・目の前が暗くなる","歩くときだけふらつく","わからない"]},
-  {k:"dur",cat:"時間",q:"1回のめまいは、どれくらい続きますか？",o:["数秒〜1分","数分〜20分くらい","20分〜数時間","1日以上続く","ずっと続いている","わからない"]},
-  {k:"freq",cat:"時間",q:"どれくらいの頻度で起きますか？",o:["毎日","週に数回","月に数回","これまでに1〜2回","わからない"]},
-  {k:"trig",cat:"きっかけ",sec:"trig",q:"めまいが起きるきっかけは？",sub:"あてはまるものすべて",multi:true,
-   o:["寝返り・頭の向きを変えると","立ち上がると","じっとしていても起きる","人混み・ストレスで","あてはまらない"]},
-  {k:"ear",cat:"耳の症状",q:"聞こえにくい・耳鳴り・耳がつまる感じはありますか？",o:["右の耳にある","左の耳にある","両方の耳にある","耳の症状はない","わからない"]},
+  /* 2026-09-12f めまい。pg＝ページ（0:めまいの様子 1:一緒に起こること・きっかけ）。
+     持続と回数は基準の境目（5分・20分・12時間・24時間・72時間／2回・5回）に合わせてある。 */
+  {k:"feel",pg:0,cat:"めまいの感じ",q:"どんなめまいですか？",o:["ぐるぐる回る","ふわふわする・体が揺れる","気が遠くなる・目の前が暗くなる","歩くときだけふらつく","わからない"]},
+  {k:"dur",pg:0,cat:"時間",q:"1回のめまいは、どれくらい続きますか？",sub:"いちばん多いときの長さで大丈夫です",o:VS_DUR.map(x=>x[0])},
+  {k:"count",pg:0,cat:"時間",q:"これまで、同じようなめまいは何回くらいありましたか？",o:VS_COUNT.map(x=>x[0])},
+  {k:"freq",pg:0,cat:"時間",q:"どれくらいの頻度で起きますか？",o:["毎日","週に数回","月に数回","これまでに1〜2回","わからない"]},
+  {k:"sev",pg:0,cat:"めまいの強さ",q:"めまいの間、ふだんの動作はどうなりますか？",o:VS_SEV},
+  {k:"mig",pg:1,cat:"めまいと一緒に起こること",q:"めまいの半分以上で、次のことが一緒に起こりますか？",sub:"あてはまるものすべて",multi:true,o:VS_MIG},
+  {k:"migHx",pg:1,cat:"めまいと一緒に起こること",q:"めまいとは別に、くり返す頭痛（吐き気がする、光や音がつらくなる）がこれまでにありましたか？",o:YNU},
+  {k:"trig",pg:1,cat:"きっかけ",sec:"trig",q:"めまいが起きる・強くなるきっかけは？",sub:"あてはまるものすべて",multi:true,
+   o:["寝返り・頭の向きを変えると","立ち上がると","じっとしていても起きる",
+      "人混み・スーパーの棚・車や電車の中で","強いストレス・不安で","あてはまらない"]},
+  {k:"latency",pg:1,cat:"きっかけ",q:"頭を動かしてから、めまいが始まるまではどれくらいですか？",
+   o:["動かしてすぐ","少し遅れて（数秒たってから）","わからない"]},
+  {k:"habit",pg:1,cat:"きっかけ",q:"同じ動きをくり返すと、めまいは弱くなりますか？",o:YNU},
+  {k:"ear",pg:1,cat:"耳の症状",q:"聞こえにくい・耳鳴り・耳がつまる感じはありますか？",o:["右の耳にある","左の耳にある","両方の耳にある","耳の症状はない","わからない"]},
+  {k:"earVar",pg:1,cat:"耳の症状",q:"その耳の症状は、めまいのたびに強さが変わりますか？",o:VS_EARVAR},
+  {k:"earNew",pg:1,cat:"耳の症状",q:"その耳の症状が出はじめたのは、いつごろですか？",o:["数日以内","1〜2週間前","1か月以上前","もとからある","わからない"]},
+  {k:"pppd3m",pg:1,cat:"続くふらつき",q:"ふらつき・フワフワする感じが、3か月以上、ほとんど毎日続いていますか？",o:YNU},
+  {k:"pppdTrig",pg:1,cat:"続くふらつき",q:"そのふらつきが始まる前に、次のようなことがありましたか？",sub:"あてはまるものすべて",multi:true,o:VS_PPPDTRIG},
+  {k:"between",pg:1,cat:"続くふらつき",q:"発作と発作のあいだも、フワフワした感じは残っていますか？",o:YNU},
+  {k:"oscil",pg:1,cat:"続くふらつき",q:"歩くと、景色が揺れて見えますか？",o:YNU},
  ],
  5:[
   /* 2026-09-11d 頭痛。pg＝ページ（0:いまの頭痛と回数 1:1回の頭痛の様子 2:前ぶれ・目のまわり・きっかけ・薬）。
@@ -3530,9 +3795,18 @@ const QM = {
   {k:"med3m",pg:2,cat:"頭痛の薬",q:"その使い方が、3か月より長く続いていますか？",o:YNU},
  ],
  6:[
-  {k:"when",cat:"ふるえの様子",q:"どんなときに、ふるえが強いですか？",o:["じっとしているとき","手を伸ばしたとき・字を書くとき・コップを持つとき","どちらでも","わからない"]},
+  /* 2026-09-13a：安静・姿勢・動作・課題特異的・等尺性を1問で分ける（従来の4択では姿勢と動作が混ざっていた） */
+  {k:"when",cat:"ふるえの様子",q:"次のとき、ふるえは出ますか？",sub:"あてはまるものすべて",multi:true,o:TR_WHEN},
+  {k:"intent",cat:"ふるえの様子",q:"コップが口に近づくほど、ふるえは大きくなりますか？",o:YNU},
   {k:"where",cat:"ふるえの様子",q:"ふるえる場所は？",sub:"あてはまるものすべて",multi:true,o:["右手","左手","足","頭・首","声"]},
+  {k:"first",cat:"ふるえの様子",q:"最初にふるえ始めたのは、どこですか？",o:["右手","左手","両手が同時","足","頭・首・声","わからない"]},
+  {k:"trick",cat:"頭・首のふるえ",q:"頬や後頭部に手を触れると、ふるえは軽くなりますか？",o:YNU},
+  {k:"neck",cat:"頭・首のふるえ",q:"首のつっぱり・痛み・向きにくさはありますか？",o:YNU},
   {k:"alc",cat:"ふるえの様子",q:"お酒を飲むと、ふるえは？",o:["軽くなる","変わらない","お酒は飲まない","わからない"]},
+  {k:"worse",cat:"ふるえの様子",sec:"trig",q:"ふるえが強くなるのは、どんなときですか？",sub:"あてはまるものすべて",multi:true,
+   o:["緊張したとき・人前","疲れたとき","コーヒー・お茶をたくさん飲んだとき","寒いとき","特にない"]},
+  {k:"adl",cat:"ふるえで困ること",sec:"adl",q:"ふるえで困る動作はありますか？",sub:"あてはまるものすべて",multi:true,
+   o:["字を書く","食事（はし・スプーン）","コップ・湯のみを持つ","ボタン・ひもを結ぶ","特に困らない"]},
  ],
 };
 
@@ -3548,7 +3822,8 @@ const BG_AUTONOMIC=["立ってすぐの強いめまい・立ちくらみ・失�
 const BG_DOPADRUG=["飲んでいる／最近飲んだ","以前飲んでいた","飲んでいない","わからない"];
 /* 症状に関係しうる薬の種類（歩行・脱力・しびれのときだけ聞く） */
 const BG_DRUGKINDS=["血液をさらさらにする薬","コレステロールの薬","がんの治療薬・免疫の治療（点滴を含む）",
-  "吐き気止め・胃薬・精神科の薬（スルピリド・メトクロプラミド・抗精神病薬など）","あてはまらない"];
+  "吐き気止め・胃薬・精神科の薬（スルピリド・メトクロプラミド・抗精神病薬など）",
+  "ぜんそくの吸入薬・気分を安定させる薬・ステロイド","あてはまらない"];
 /* 家族歴を phenotype で聞く（「いる」のとき、または若年×ゆっくり進む・左右対称の手足の先のとき） */
 const FAM_PHENO=["若い頃から歩きにくかった・杖や車いすになった","足の形が特徴的・足が細い","手足がふるえる",
   "若くして物忘れ","若くして脳卒中","けいれん","原因の分からない突然死","同じような症状"];
@@ -3652,20 +3927,51 @@ const QMETA={
  "m1.fall":{tier:1,purpose:["severity"]},
  "m1.falldir":{tier:2,purpose:["localization"],loc:["subcortical","nerve"]},
  "m1.fallinj":{tier:2,purpose:["emergency"]},
+ "m1.hard":{tier:1,purpose:["phenotype","localization"],loc:["subcortical","cerebellum","nerve","muscle"],note:"立ち上がり・歩き出し・方向転換のどこで困るか"},
+ "m1.worse":{tier:2,purpose:["phenotype","localization"],loc:["spinal","nerve","cerebellum","nmj"],note:"暗所での増悪＝深部感覚、朝より夕方＝易疲労性"},
+ "m1.claud":{tier:1,purpose:["localization"],loc:["spinal","root","nonneuro"],note:"姿勢で軽快するかどうか。歩くとしびれ・痛みが出る人にだけ"},
+ "m1.wide":{tier:1,purpose:["phenotype","localization"],loc:["cerebellum","subcortical"]},
+ "m1.stairs":{tier:2,purpose:["localization"],loc:["cerebellum","spinal","muscle"],note:"下り＝深部感覚・小脳、上り＝近位筋力"},
+ "m1.support":{tier:2,purpose:["localization"],loc:["spinal","nerve"],note:"視覚・触覚で代償されるか。歩行の段階が「普通に歩ける」以外のときだけ"},
  "m2.main":{tier:1,purpose:["phenotype"]},
  "m2.area":{tier:1,purpose:["localization"],loc:["cortex","spinal","root","plexus","nerve"]},
  "m2.spread":{tier:1,purpose:["localization","chronology"],loc:["nerve","spinal"]},
  "m2.acts":{tier:1,purpose:["localization","functionalImpact"],loc:["muscle","nmj","nerve","root"]},
+ "m2.handmap":{tier:1,purpose:["localization"],loc:["nerve","root"],note:"手の分布（Katz hand diagram）。追加の問は増やさず図で取る"},
+ "m2.night":{tier:1,purpose:["phenotype"],note:"手の症状の夜間・明け方の増悪"},
+ "m2.thermal":{tier:1,purpose:["localization"],loc:["spinal","nerve"],note:"温痛覚と触覚の解離。触覚だけ聞いていると出てこない"},
+ "m2.morning":{tier:2,purpose:["etiology"],note:"神経以外の原因の切り分け"},
+ "m2.qual":{tier:2,purpose:["phenotype"],note:"神経障害性疼痛の性状（面接項目に対応）"},
  "m2.trig":{tier:2,purpose:["localization"],loc:["root","spinal"]},
+ "m2.rls":{tier:2,purpose:["phenotype"],note:"脚の不快感の必須項目1。脚の症状＋しびれ/痛みの人にだけ出す"},
+ "m2.rlsRest":{tier:2,purpose:["phenotype"],note:"必須項目2（安静で増悪）"},
+ "m2.rlsMove":{tier:2,purpose:["phenotype"],note:"必須項目3（動くと軽快）"},
+ "m2.rlsEve":{tier:2,purpose:["phenotype"],note:"必須項目4（夕方〜夜に優位）"},
+ "m2.rlsMimic":{tier:2,purpose:["phenotype"],note:"必須項目5（紛らわしい所見）。判定は常に医師確認"},
  "m3.main":{tier:1,purpose:["phenotype"]},
  "m3.double":{tier:1,purpose:["localization"],loc:["brainstem","nmj","nonneuro"]},
  "common.diurnal":{tier:1,purpose:["localization","etiology"],loc:["nmj"],note:"目・脱力・飲み込み・ろれつのときだけ"},
  "m3.lid":{tier:2,purpose:["localization"],loc:["nmj","brainstem"]},
+ "m3.monoc":{tier:1,purpose:["localization"],loc:["nmj","brainstem","nonneuro"],note:"両眼性か片眼性かを分ける（片眼性は眼科の領域）"},
+ "m3.dir":{tier:1,purpose:["localization"],loc:["brainstem","nmj"],note:"方向依存。麻痺筋を絞る情報量がいちばん大きい"},
+ "m3.tilt":{tier:2,purpose:["localization"],loc:["brainstem"],note:"頭位傾斜による代償"},
  "m4.feel":{tier:1,purpose:["phenotype","localization"],loc:["brainstem","cerebellum","nonneuro","autonomic"]},
  "m4.dur":{tier:1,purpose:["chronology","phenotype"]},
  "m4.freq":{tier:2,purpose:["chronology"]},
  "m4.trig":{tier:1,purpose:["phenotype","localization"],loc:["nonneuro","autonomic"]},
+ "m4.count":{tier:1,purpose:["phenotype"],note:"基準の「5回以上」「2回以上」に直結"},
+ "m4.sev":{tier:1,purpose:["severity","phenotype"],note:"中等度以上か（ICHD-3 A1.6.6 の C）"},
+ "m4.mig":{tier:1,purpose:["phenotype"],note:"発作の50%以上での片頭痛性の特徴（同 D）"},
+ "m4.migHx":{tier:1,purpose:["phenotype"],note:"頭痛モジュールがないときだけ。ある人には聞き直さない（同 B）"},
+ "m4.latency":{tier:1,purpose:["phenotype"],note:"潜時。寝返り・頭位変換を選んだ人にだけ"},
+ "m4.habit":{tier:1,purpose:["phenotype"],note:"疲労現象（くり返すと弱くなる）。同上"},
+ "m4.between":{tier:2,purpose:["phenotype","chronology"],note:"発作性と持続性の二層構造"},
+ "m4.oscil":{tier:2,purpose:["localization"],loc:["brainstem","nonneuro"],note:"振動視"},
  "m4.ear":{tier:1,purpose:["localization"],loc:["nonneuro","brainstem"]},
+ "m4.earVar":{tier:1,purpose:["phenotype"],note:"耳症状の変動（Bárány 2015）。耳症状ありのときだけ"},
+ "m4.earNew":{tier:2,purpose:["urgency"],note:"急な片耳の症状は注意サインに使う"},
+ "m4.pppd3m":{tier:1,purpose:["chronology","phenotype"],note:"3か月以上ほぼ毎日（Bárány 2017 A）"},
+ "m4.pppdTrig":{tier:1,purpose:["etiology"],note:"先行する出来事（同 C）。A が「はい」のときだけ"},
  "m5.rf":{tier:1,purpose:["urgency","etiology"],note:"二次性頭痛の Red flag。新規発症・悪化・妊娠は既存の回答から導く（聞き直さない）。一部は受付への声かけ（H2）"},
  "m5.peak":{tier:1,purpose:["urgency"],note:"急に始まったときだけ"},
  "m5.count":{tier:1,purpose:["phenotype"],note:"ICHD-3：片頭痛A（5回）・緊張型A（10回）・群発A（5回）"},
@@ -3686,9 +3992,15 @@ const QMETA={
  "m5.trig":{tier:2,purpose:["etiology"],note:"咳・運動・立位は Red flag の問で聞いている"},
  "m5.meds":{tier:1,purpose:["etiology"],note:"種類ごとの使用日数/月（MOH の基準日数が種類で違う）"},
  "m5.med3m":{tier:1,purpose:["chronology"],note:"過剰使用の可能性があるときだけ"},
- "m6.when":{tier:1,purpose:["phenotype","localization"],loc:["subcortical","cerebellum"]},
+ "m6.when":{tier:1,purpose:["phenotype","localization"],loc:["subcortical","cerebellum"],note:"安静／姿勢／動作／課題特異的／等尺性を1問で分ける"},
+ "m6.intent":{tier:1,purpose:["localization"],loc:["cerebellum"],note:"企図振戦。姿勢時・動作時に出る人にだけ"},
+ "m6.first":{tier:2,purpose:["localization"],note:"発症側（左右差とは別の情報）"},
+ "m6.trick":{tier:2,purpose:["phenotype"],note:"感覚トリック。頭・首・声のふるえのときだけ"},
+ "m6.neck":{tier:2,purpose:["phenotype"],note:"同上"},
  "m6.where":{tier:1,purpose:["localization"]},
  "m6.alc":{tier:2,purpose:["phenotype"]},
+ "m6.worse":{tier:2,purpose:["phenotype"]},
+ "m6.adl":{tier:1,purpose:["functionalImpact","severity"]},
  "assoc.*":{tier:1,purpose:["localization"],note:"主訴×始まりの速さで優先表示（ASSOC_PLAN）。残りは任意で畳む"},
  "daily.func":{tier:1,purpose:["functionalImpact"]},
  "daily.collateral":{tier:1,purpose:["collateral"]},
@@ -3784,6 +4096,43 @@ const SHOW_IF={
   "m5.tacFreq":()=>showQ("m5.tac")&&HAM().tac==="はい",
   ...Object.fromEntries(HA_MEDS.filter(x=>x[1]).map(([,id])=>["m5.md_"+id,()=>haMedClasses().includes(id)])),
   "m5.med3m":()=>haMedClasses().length>0&&ICHD3.mohOveruseStatus(headacheFacts().meds)!==ICHD3.NOT,
+  /* めまい（2026-09-12f）。答えても判定が変わらない人には聞かない */
+  "m4.count":()=>DZ().dur!=="ずっと続いている",
+  "m4.mig":()=>DZ().dur!=="ずっと続いている",
+  "m4.migHx":()=>!hasMod(5)&&dzMigFeat(),
+  "m4.earVar":()=>dzHasEar(),
+  "m4.earNew":()=>dzHasEar(),
+  "m4.pppd3m":()=>dzPersist(),
+  "m4.pppdTrig":()=>showQ("m4.pppd3m")&&DZ().pppd3m==="はい",
+  /* しびれ：手の図と、手の症状のときだけ聞くこと */
+  "m2.handmap":()=>m2HasHand(),
+  "m2.night":()=>m2HasHand(),
+  "m2.qual":()=>m2Sensory(),
+  /* 脚の不快感：脚に症状があり、しびれ・痛みの性質のときだけ。2問目からは1問目が「はい」のときだけ */
+  "m2.rls":()=>m2LegSensory(),
+  "m2.rlsRest":()=>rlsYes(),
+  "m2.rlsMove":()=>rlsYes(),
+  "m2.rlsEve":()=>rlsYes(),
+  "m2.rlsMimic":()=>rlsYes(),
+  /* 目：二重の見え方を聞く人にだけ、片眼性かどうかと方向を聞く */
+  "m3.monoc":()=>showQ("m3.double"),
+  "m3.dir":()=>showQ("m3.double"),
+  /* 片眼性とわかった人に頭位の代償を聞いても判断が変わらない */
+  "m3.tilt":()=>showQ("m3.double")&&(D.m[3]||{}).monoc!=="片目をかくすと消える",
+  /* 歩行（2026-09-13a） */
+  "m1.claud":()=>((D.m[1]||{}).what||[]).includes("歩くと足がしびれ・痛み、休むと治まる"),
+  "m1.support":()=>{const a=(D.m[1]||{}).aid;return !!a&&a!=="普通に歩ける";},
+  /* しびれ：感覚の性質を聞く人にだけ、温度の感じ方と朝のこわばりを聞く */
+  "m2.thermal":()=>m2Sensory(),
+  "m2.morning":()=>m2Sensory(),
+  /* めまい：頭位変換で起きる人にだけ潜時と疲労現象を聞く */
+  "m4.latency":()=>dzHeadTrig(),
+  "m4.habit":()=>dzHeadTrig(),
+  "m4.between":()=>!!DZ().dur&&DZ().dur!=="ずっと続いている",
+  /* ふるえ：姿勢時・動作時に出る人にだけ企図を聞く。頭・首・声のふるえのときだけ感覚トリックを聞く */
+  "m6.intent":()=>TR().some(x=>["手を前に伸ばして止めたとき","コップを口へ運ぶとき","字を書くとき"].includes(x)),
+  "m6.trick":()=>trHeadNeck(),
+  "m6.neck":()=>trHeadNeck(),
 };
 function showQ(key,...a){const f=SHOW_IF[key];return !f||!!f(...a);}
 function modQShown(id,it){return showQ("m"+id+"."+it.k);}
@@ -3844,6 +4193,117 @@ function headacheFacts(){
     preexisting:m.count?(m.count!=="初めて"):null,
     redFlags:rf};
 }
+
+/* ===== めまい・脚の不快感・手の図（2026-09-12f）：画面の回答を読むだけの補助関数 =====
+   判定そのものは <script id="criteria-engine"> の CRIT が行う。ここは読み替えだけ。 */
+function DZ(){return (D.m&&D.m[4])||{};}
+function dzHasEar(){return ["右の耳にある","左の耳にある","両方の耳にある"].includes(DZ().ear);}
+function dzMigFeat(){return (DZ().mig||[]).some(x=>x!=="あてはまらない");}
+/* 「ずっと続くふらつき」を聞く人：浮動感・歩行時のふらつき・持続・毎日 */
+function dzPersist(){return ["ふわふわする・体が揺れる","歩くときだけふらつく"].includes(DZ().feel)||
+  DZ().dur==="ずっと続いている"||DZ().freq==="毎日";}
+function dzHeadTrig(){return (DZ().trig||[]).includes("寝返り・頭の向きを変えると");}
+/* ふるえ：出るとき（複数選択）。2026-09-13a に4択の単一選択から作り直した */
+function TR(){const w=((D.m&&D.m[6])||{}).when;return Array.isArray(w)?w:(w?[w]:[]);}
+function trHeadNeck(){const w=((D.m&&D.m[6])||{}).where||[];return w.includes("頭・首")||w.includes("声");}
+function trWhenText(){const a=TR().filter(x=>x!=="あてはまらない");return a.length?a.join("・"):null;}
+function M2(){return (D.m&&D.m[2])||{};}
+function m2Parts(){return M2().bodyparts||[];}
+function m2HasHand(){return m2Parts().some(x=>["handR","handL"].includes(x));}
+function m2Sensory(){return (M2().main||[]).some(x=>["しびれ・鈍さ","痛みを伴う","ピリピリする"].includes(x))||
+  D.symptoms.includes("しびれる・感覚が鈍い");}
+function m2LegSensory(){return m2Parts().some(x=>["legR","legL","footR","footL"].includes(x))&&m2Sensory();}
+function rlsYes(){return m2LegSensory()&&M2().rls==="はい";}
+/* 手の図：選択は "R:d1" の形で持つ（左右をひとつの配列にまとめる） */
+function handSel(){return M2().handparts||[];}
+function handZones(side){return handSel().filter(z=>z.indexOf(side+":")===0).map(z=>z.slice(2))
+  .concat((M2().handDorsum||[]).includes(side)?["dorsum"]:[]);}
+function katzSide(side){return (typeof CRIT==="undefined")?null:CRIT.katz(handZones(side));}
+function handAnswered(){return handSel().length>0||(M2().handDorsum||[]).length>0;}
+function handLabels(side){const z=handZones(side);
+  return z.map(id=>id==="dorsum"?HAND_DORSUM.label.replace("にもある",""):(HAND_ZONES.find(x=>x.id===id)||{}).label)
+    .filter(Boolean);}
+
+/* めまい → 判定に渡す事実。答えのないものは null（＝評価不能）にし、false にしない */
+function dizzyFacts(){
+  const m=DZ(),yn=v=>v==="はい"?true:v==="いいえ"?false:null;
+  const arr=k=>Array.isArray(m[k])?m[k]:[],has=k=>arr(k).length>0;
+  const dur=haRange(VS_DUR,m.dur),count=haRange(VS_COUNT,m.count);
+  const mig=arr("mig").filter(x=>x!=="あてはまらない");
+  /* 頭痛モジュールがあるときは、そちらの判定を使う（同じことを聞き直さない） */
+  let migraineHx=null,from=null;
+  if(hasMod(5)&&typeof ICHD3!=="undefined"){
+    const hf=headacheFacts(),a=ICHD3.evaluateMigraineWithoutAura(hf),b=ICHD3.evaluateMigraineWithAura(hf);
+    if(a.overall===ICHD3.MET||b.overall===ICHD3.MET){migraineHx=true;
+      from="頭痛の回答から："+(a.overall===ICHD3.MET?a.code:b.code)+" 充足";}
+    else if(a.overall===ICHD3.NOT&&b.overall===ICHD3.NOT){migraineHx=false;from="頭痛の回答から：1.1・1.2 とも未充足";}
+    else from="頭痛の回答から：評価不能";
+  }else migraineHx=yn(m.migHx);
+  const sev=m.sev;
+  const moderate=!sev?null:(["動けない・横になるしかない","つらいが、がまんして動ける"].includes(sev)?true:
+    (sev==="気になるが、ふだんどおり動ける"?false:null));
+  const trig=arr("trig"),trigA=has("trig"),tsel=x=>trigA?trig.includes(x):null;
+  const sx=(D.sx||{})["めまい・ふらつき"]||{};
+  const pt=arr("pppdTrig").filter(x=>!["特にない","わからない"].includes(x));
+  const func=(D.func||[]);
+  return {
+    attacks:count,durMin:dur,moderate,migraineHx,migraineHxFrom:from,
+    migFeat:has("mig")?mig.length>0:null,
+    migFeatEv:has("mig")?(mig.length?mig.join("・"):"いずれもなし"):"未回答",
+    rotational:!m.feel?null:(m.feel==="ぐるぐる回る"?true:(m.feel==="わからない"?null:false)),
+    spontaneous:trigA?trig.includes("じっとしていても起きる"):null,
+    earFluct:!m.earVar?null:(m.earVar==="めまいのたびに強さが変わる"?true:(m.earVar==="わからない"?null:false)),
+    earNone:m.earVar==="耳の症状はない"||m.ear==="耳の症状はない",
+    earSide:({"右の耳にある":"右耳","左の耳にある":"左耳","両方の耳にある":"両耳"})[m.ear]||null,
+    over3m:yn(m.pppd3m),
+    /* 2026-09-13a：「人混み・ストレスで」を視覚刺激とストレスに分けたので、視覚刺激だけを B に使う */
+    upright:tsel("立ち上がると"),motion:tsel("寝返り・頭の向きを変えると"),
+    visual:tsel("人混み・スーパーの棚・車や電車の中で"),
+    trigger:has("pppdTrig")?pt.length>0:null,
+    triggerEv:has("pppdTrig")?(pt.length?pt.join("・"):"特にない"):"未回答",
+    impact:func.length?true:(sx.sev?(sx.sev!=="軽い"):null),
+    impactEv:func.length?("生活の支障："+func.slice(0,3).join("・")):(sx.sev?("つらさ："+sx.sev):"未回答")};
+}
+/* 脚の不快感 → 判定に渡す事実 */
+function rlsFacts(){const m=M2(),yn=v=>v==="はい"?true:v==="いいえ"?false:null;
+  return {urge:yn(m.rls),rest:yn(m.rlsRest),move:yn(m.rlsMove),
+    evening:!m.rlsEve?null:(m.rlsEve==="夕方から夜にかけて"?true:(m.rlsEve==="わからない"?null:false)),
+    eveningEv:m.rlsEve||"未回答",
+    mimics:(m.rlsMimic||[]).filter(x=>x!=="あてはまらない")};}
+
+/* ===== 症候別の注意サイン（2026-09-12f）=====
+   病名・受診勧奨は書かない。判定の表は criteria-engine 側（SXRF_TEXT）にある。 */
+function sxRedFlagFacts(){
+  const A=assocAnswers(),yes=n=>A[n]==="y",f={},m2=M2(),m4=DZ(),m6=(D.m&&D.m[6])||{},m3=(D.m&&D.m[3])||{};
+  const bp=m2Parts(),func=D.func||[],auto=(D.bg&&D.bg.autonomic)||[];
+  const bladder=auto.includes("尿が近い・もれる・出にくい")||func.includes("トイレ（排尿・排便）");
+  const bothLeg=["legR","legL"].every(x=>bp.includes(x))||["footR","footL"].every(x=>bp.includes(x));
+  const bothArm=["handR","handL"].every(x=>bp.includes(x))||["armR","armL"].every(x=>bp.includes(x));
+  const gaitTrouble=hasMod(1)||func.includes("一人で歩く");
+  if(hasMod(4)){
+    /* 主症状として選んだものは根拠にしない（「しびれ」を主訴に選んだ人が毎回ひっかかるため）。
+       急に始まった／最近始まっためまいのときだけ見る。 */
+    const newDz=tempoIs("acute")||["今日","数日前","1〜2週間前"].includes(((D.sx||{})["めまい・ふらつき"]||{}).onset);
+    const co=n=>A[n]==="y"&&!linkedSymptoms(n).length;
+    if(newDz&&(co("ものが二重に見える")||co("ろれつが回りにくい")||co("言葉が出ない・言い間違える")||
+       co("しびれ・感覚の鈍さ")||co("顔がゆがむ・動きにくい")))f.dzFocal=true;
+    if(["右の耳にある","左の耳にある"].includes(m4.ear)&&["数日以内","1〜2週間前"].includes(m4.earNew))f.dzEarAcute=m4.earNew;
+    if(func.includes("一人で歩く"))f.dzCantWalk=true;
+  }
+  if(hasMod(2)){
+    if((bothLeg||bp.includes("trunk"))&&bladder)f.nmBladder=true;
+    if((bothArm||bothLeg)&&gaitTrouble)f.nmBilatGait=true;
+    if(["数時間で","数日で"].includes(D.common.tempo)&&yes("息苦しさ"))f.wkRapidResp=true;
+  }
+  if(hasMod(1)&&bladder&&!f.nmBladder)f.gtBladder=true;
+  if(hasMod(6)){const w=m6.where||[];
+    const hands=["右手","左手"].filter(x=>w.includes(x));
+    if(hands.length===1&&!w.includes("頭・首")&&!w.includes("声")&&!w.includes("足"))f.trUnilateral=true;}
+  if(hasMod(3)&&m3.monoc==="片目をかくしても二重が残る")f.eyMono=true;
+  return {sxFlags:f};
+}
+function sxRedFlags(){return (typeof CRIT==="undefined")?[]:CRIT.evaluateSymptomRedFlags(sxRedFlagFacts());}
+function sxStaffAlert(){return sxRedFlags().some(r=>r.urgent);}
 /* 受付への声かけ（ユーザー決定 H2）：1分以内に最大・意識/けいれん・まひ・言葉が出にくい */
 function haStaffAlert(){return hasMod(5)&&ICHD3.evaluateHeadacheRedFlags(headacheFacts()).some(r=>r.urgent);}
 function staffAlertHtml(){return `<div class="staffalert" role="alert">⚠ 入力を続ける前に、この画面を受付スタッフに見せてください</div>`;}
@@ -3898,8 +4358,8 @@ function unconfirmedItems(){
     if(!(m5.with||[]).length)r.push("吐き気・光・音の有無");
     if(!(m5.meds||[]).length)r.push("頭痛薬と使う日数");
     if(r.length)out.push("頭痛の"+r.slice(0,3).join("・"));}
-  if(hasMod(6)&&(!m6.when||m6.when==="わからない"))
-    out.push("ふるえが安静時に強いか、動作・姿勢で強いか");
+  if(hasMod(6)&&!trWhenText())
+    out.push("ふるえが安静時に出るか、姿勢・動作で出るか");
   if(showQ("common.freq")&&(!c.freq||!c.episodeDur))
     out.push("症状が出る頻度・1回の持続時間・きっかけ");
   if(A["物忘れ・性格や行動の変化"]==="y")
@@ -3964,8 +4424,10 @@ const PRUNE={
   "bg.preInfection":()=>{D.bg.preInfection=null;},
   "bg.pregnancy":()=>{D.bg.pregnancy=null;},
 };
-/* 頭痛の条件付きの問は、条件から外れたら答えを消す（QM の順＝親→子の順に消す） */
-QM[5].forEach(it=>{const key="m5."+it.k;if(SHOW_IF[key]&&!PRUNE[key])PRUNE[key]=()=>{if(D.m[5])delete D.m[5][it.k];};});
+PRUNE["m2.handmap"]=()=>{if(D.m[2]){delete D.m[2].handparts;delete D.m[2].handDorsum;}};
+/* モジュールの条件付きの問は、条件から外れたら答えを消す（QM の順＝親→子の順に消す） */
+Object.keys(QM).forEach(id=>QM[id].forEach(it=>{const key="m"+id+"."+it.k;
+  if(SHOW_IF[key]&&!PRUNE[key])PRUNE[key]=()=>{if(D.m[id])delete D.m[id][it.k];};}));
 function pruneHidden(){
   if(isConsult()&&!(D.symptoms&&D.symptoms.length))return;
   Object.keys(PRUNE).forEach(k=>{if(!showQ(k))PRUNE[k]();});
@@ -4129,6 +4591,45 @@ function bodyMapSVG(){
       <div style="color:var(--brand-d);font-weight:700;margin:6px 0">選択：${chosen}</div>
       <span class="mini">手先・足先の丸は「手袋・くつ下のように先の方」を表します。</span></div></div>`;
 }
+/* === 手の図（2026-09-12f）===
+   分布だけで分類できるので、質問を増やさずに情報を増やせる。左右は切り替えて1つずつ大きく出す。 */
+let HAND_SIDE="R";
+function setHandSide(v){HAND_SIDE=v;render();}
+function handMapSVG(){
+  const sel=handSel(),side=HAND_SIDE,dor=(M2().handDorsum||[]).includes(side);
+  /* 右手は手のひら側から見ると母指が左に来る。左手は左右を反転して描く */
+  const flip=side==="L"?` transform="translate(172,0) scale(-1,1)"`:"";
+  const el=HAND_ZONES.map(z=>{
+    const on=sel.includes(side+":"+z.id);
+    return z.shape.replace(/^<(\w+)/,`<$1 class="reg ${on?"sel":""}" onclick="toggleHand('${z.id}')"`);}).join("");
+  const labs=HAND_ZONES.map(z=>{
+    const on=sel.includes(side+":"+z.id),x=side==="L"?172-z.tx:z.tx;
+    return `<text x="${x}" y="${z.ty}" class="zlab" style="${on?"fill:#fff":""}">${z.short}</text>`;}).join("");
+  const cnt=s2=>handZones(s2).length;
+  const tabs=HAND_SIDES.map(([v,l])=>`<button type="button" class="${side===v?"on":""}" onclick="setHandSide('${v}')">${l}${cnt(v)?`<span class="n">${cnt(v)}か所</span>`:""}</button>`).join("");
+  const chosen=handLabels(side);
+  return `<div class="bodywrap handwrap">
+    <div class="handtabs">${tabs}</div>
+    <svg class="handsvg" viewBox="0 0 172 250" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="${side==="R"?"右手":"左手"}の図（手のひら側）">
+      <g${flip}>${el}</g>${labs}</svg>
+    <div class="handdor">
+      <button type="button" class="opt ${dor?"sel":""}" style="max-width:260px" onclick="toggleHandDorsum()">${HAND_DORSUM.label}</button></div>
+    <div class="bodyleg" style="max-width:300px;text-align:center">
+      <b>${side==="R"?"右手":"左手"}（手のひら側）</b>の、症状のあるところをタップしてください
+      <div style="color:var(--brand-d);font-weight:700;margin:6px 0">選択：${chosen.length?esc(chosen.join("・")):"まだ選ばれていません"}</div>
+      <span class="mini">反対の手は、上のボタンで切り替えられます。</span></div></div>`;
+}
+function toggleHand(zid){
+  const m=D.m[2]=D.m[2]||{},a=m.handparts=m.handparts||[],key=HAND_SIDE+":"+zid;
+  const i=a.indexOf(key);if(i>=0)a.splice(i,1);else a.push(key);
+  render();
+}
+function toggleHandDorsum(){
+  const m=D.m[2]=D.m[2]||{},a=m.handDorsum=m.handDorsum||[];
+  const i=a.indexOf(HAND_SIDE);if(i>=0)a.splice(i,1);else a.push(HAND_SIDE);
+  render();
+}
 function toggleBody(id){
   D.m[2]=D.m[2]||{};const a=D.m[2].bodyparts=D.m[2].bodyparts||[];
   const i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);
@@ -4148,6 +4649,8 @@ function scrModule(){
     h+=qhead(++n,it.q,it.sub);
     if(id===2&&it.k==="area"){
       h+=bodyMapSVG();
+    }else if(it.ui==="hand"){
+      h+=handMapSVG();
     }else if(it.ui==="nrs"){
       /* 0〜10 は1段（スマホは2〜3段）の数字ボタン。fitOptGrids は触らない */
       h+=`<div class="opts grid nrs">`+it.o.map(o=>opt(D.m[id][it.k]===o,o,`setM(${id},'${it.k}','${o}')`)).join("")+`</div>`;
@@ -4165,6 +4668,8 @@ function scrModule(){
         h+=`<textarea id="hamed" style="min-height:56px;margin-top:8px" placeholder="薬の名前がわかれば（任意）　例：ロキソニン、イブ" oninput="D.m[5].medName=this.value">${esc(HAM().medName||"")}</textarea>`;
     }
   });
+  /* 症候別の注意サイン（2026-09-12f）。頭痛と同じく、答えた画面の中で受付への声かけを出す */
+  if(id!==5&&sxStaffAlert())h+=staffAlertHtml();
   return card(h);}
 
 /* 任意の画面（一緒に出ている症状・生活への影響・背景）は、先頭で「とばす」を選べるようにする。
@@ -5395,12 +5900,22 @@ function buildSummary(){
   return buildSummaryParts().map(p=>p.t).join("\n");
 }
 const PATTERN_TEXT={"ずっと続いている":"ずっと続いている","出たり消えたりする（発作のように・波がある）":"出たり消えたりをくり返している","一度出て、今は治まっている":"一度出て今は治まっている"};
-const SHEET_LAB={"m1.what":"歩き方","m1.aid":"歩行の段階","m1.fall":"転倒","m1.falldir":"転び方","m1.fallinj":"転倒によるけが",
+const SHEET_LAB={"m1.what":"歩き方","m1.aid":"歩行の段階","m1.hard":"いちばん困る場面","m1.fall":"転倒","m1.falldir":"転び方",
+  "m1.fallinj":"転倒によるけが","m1.worse":"強くなるとき",
+  "m1.claud":"前かがみ・自転車で","m1.wide":"開脚歩行","m1.stairs":"階段","m1.support":"手すり・杖で",
   "m2.main":"主な症状","m2.area":"場所","m2.spread":"広がり方","m2.acts":"やりにくい動作","m2.trig":"きっかけ",
-  "m3.main":"主な症状","m3.double":"二重の見え方","m3.lid":"まぶた",
-  "m4.feel":"めまいの感じ","m4.dur":"1回の持続","m4.freq":"頻度","m4.trig":"きっかけ","m4.ear":"耳の症状",
+  "m2.night":"夜間・明け方","m2.qual":"しびれ・痛みの性状","m2.thermal":"温度の感じ方","m2.morning":"朝のこわばり",
+  "m2.rls":"脚の不快感（動かしたい衝動）","m2.rlsRest":"安静で増悪","m2.rlsMove":"動かすと軽快","m2.rlsEve":"強い時間帯","m2.rlsMimic":"紛らわしい所見",
+  "m3.main":"主な症状","m3.double":"二重の見え方","m3.monoc":"片眼をかくすと","m3.dir":"二重が強くなる向き",
+  "m3.tilt":"首を傾けると","m3.lid":"まぶた",
+  "m4.feel":"めまいの感じ","m4.dur":"1回の持続","m4.count":"これまでの回数","m4.freq":"頻度","m4.sev":"発作中の動作",
+  "m4.mig":"発作の半分以上で伴うこと","m4.migHx":"くり返す頭痛の既往","m4.trig":"きっかけ",
+  "m4.latency":"頭を動かしてから","m4.habit":"くり返すと","m4.between":"発作のあいだ","m4.oscil":"歩くと景色が",
+  "m4.ear":"耳の症状","m4.earVar":"耳症状の変動","m4.earNew":"耳症状が出た時期","m4.pppd3m":"3か月以上ほぼ毎日","m4.pppdTrig":"先行した出来事",
   "m5.trig":"起こりやすい状況",
-  "m6.when":"強いとき","m6.where":"部位","m6.alc":"飲酒で"};
+  "m6.when":"出るとき","m6.intent":"目標に近づくと","m6.where":"部位","m6.first":"最初に出た場所",
+  "m6.trick":"頬・後頭部に触れると","m6.neck":"首のつっぱり・痛み",
+  "m6.alc":"飲酒で","m6.worse":"強くなるとき","m6.adl":"困る動作"};
 function qlab(id,it){return SHEET_LAB["m"+id+"."+it.k]||it.q.replace(/（.*?）/,"").replace(/？$/,"");}
 /* モジュールの回答を「ラベル：値」の配列に（sec 付きの項目は別の見出しに出すので除く） */
 function modPairs(id,withSec){const m=D.m[id]||{},out=[];
@@ -5582,6 +6097,7 @@ function redFlags(){
   if(diuEvening()||diuUse())f.push("夕方の増悪・易疲労性あり");
   if(c.relapse&&c.relapse.includes("くり返"))f.push("出て治まるをくり返す経過");
   if(hasMod(5))ICHD3.evaluateHeadacheRedFlags(headacheFacts()).forEach(r=>f.push("頭痛："+r.text));
+  sxRedFlags().forEach(r=>f.push(r.text));
   return f;
 }
 function haRedFlagCount(){return hasMod(5)?ICHD3.evaluateHeadacheRedFlags(headacheFacts()).length:0;}
@@ -5603,7 +6119,7 @@ function posSummary(){
   if(hasMod(4)&&D.m[4].feel&&D.m[4].feel!=="わからない")seg.push("めまい:"+D.m[4].feel);
   if(hasMod(5)){const m=HAM(),b=[m.days&&m.days!=="わからない"?m.days:null,m.dur&&m.dur!=="わからない"?m.dur:null,
     (m.nrs!=null&&m.nrs!=="")?`NRS${m.nrs}`:null].filter(Boolean);if(b.length)seg.push("頭痛:"+b.join("・"));}
-  if(hasMod(6)&&D.m[6].when&&D.m[6].when!=="わからない")seg.push("ふるえ:"+D.m[6].when);
+  if(hasMod(6)&&trWhenText())seg.push("ふるえ:"+trWhenText());
   /* 症状の選択から反映した随伴（頭が痛い→頭痛 など）は選択症候に書いてあるので重ねない（2026-09-11e） */
   const pos=ASSOC.filter(k=>assocValue(k)==="y"&&!linkedSymptoms(k).length).map(x=>x.replace(/（.*?）/,""));
   if(pos.length)seg.push("随伴＋: "+pos.join("・"));
@@ -5665,7 +6181,7 @@ function syndromePatterns(){
    const ev=[];
    if(yes("動作が遅い・小さくなった"))ev.push("動作が遅い・小さくなった");
    if(yes("安静にしていても手がふるえる"))ev.push("安静時のふるえ");
-   else if(m6.when==="じっとしているとき")ev.push("ふるえはじっとしているときに強い");
+   else if(TR().includes("座って手を膝に置いたとき"))ev.push("ふるえは座って手を膝に置いたときにも出る");
    if(yes("表情が乏しい・声が小さい"))ev.push("表情が乏しい・声が小さい");
    if(inA(m1.what,"足が出ない・すくむ"))ev.push("足が出ない・すくむ");
    if(yes("においが分かりにくい"))ev.push("においが分かりにくい");
@@ -5862,9 +6378,33 @@ function headacheSheetLines(){
     (m.meds||[]).length?`薬：${haMedClasses().map(id=>`${HA_MEDS.find(x=>x[1]===id)[2]} ${m["md_"+id]||"日数未回答"}`).join("・")||"使っていない"}${m.med3m?`（3か月超 ${m.med3m}）`:""}`:null]);
   return out;
 }
+/* モジュールの回答を、質問の見出し（cat）ごとに1行へ束ねる（2026-09-13a）。
+   ここでは判定をしない：拾った所見を並べるだけで、まとめ方も医師に委ねる。 */
+function modSheetLines(id){
+  const m=D.m[id]||{},out=[],idx={};
+  const put=(cat,text)=>{if(idx[cat]===undefined){idx[cat]=out.length;out.push([cat,[]]);}out[idx[cat]][1].push(text);};
+  QM[id].forEach(it=>{if(it.sec)return;if(!modQShown(id,it))return;
+    let v=m[it.k];
+    /* 束ねた行では、選択肢の中の「・」と区切りが混ざらないよう「、」でつなぐ（例：頭・首） */
+    if(Array.isArray(v))v=v.filter(x=>x!=="あてはまらない").join("、");
+    if(!v)return;
+    put(it.cat||MODS[id],qlab(id,it)+"："+v);});
+  if(id===2){
+    if(handAnswered())handPairs().forEach(([k,v])=>put("場所",k+"："+v));
+    if(m.prox)put("場所","近い方／先の方（動作から）："+m.prox);
+  }
+  return out.map(([k,a])=>[k,a.join(" ／ ")]);
+}
 function modSheetPairs(id){if(id===5)return headacheSheetPairs(false);const pr=modPairs(id,false);
   if(id===2&&(D.m[2]||{}).prox)pr.push(["近い方／先の方（動作から）",D.m[2].prox]);
+  if(id===2&&handAnswered())handPairs().forEach(x=>pr.push(x));
   return pr;}
+/* 手の図の行。分布のまとまり（Katz hand diagram の分類）は分布の記述であって診断ではない */
+function handPairs(){const out=[];
+  HAND_SIDES.forEach(([v,l])=>{const z=handZones(v);if(!z.length)return;
+    const k=katzSide(v);
+    out.push(["手の分布（"+l+"）",handLabels(v).join("・")+(k&&k.id!=="none"?`　→ ${k.label}`:"")]);});
+  return out;}
 /* ⑩ 頭痛：ICHD-3 criteria support。判定は ICHD3（別ブロック）が行い、ここは表示だけ。
    患者さん向けの画面・まとめには出さない（ユーザー決定 H1）。ICHD_SUPPORT=false で出さない。 */
 function ichdResult(){
@@ -5909,6 +6449,54 @@ function ichdPlainLines(){
   L.push(ICHD_NOTE+`（${r.version}）`);
   return L;
 }
+
+/* ⑪ めまい・脚の不快感：診断基準の充足。判定は CRIT（別ブロック）が行い、ここは表示だけ。
+   ★ユーザー決定 2026-09-12：疾患名は出さず、基準の出典と記号・所見のまとまりの記述だけを出す。
+   患者さん向けの画面・まとめには出さない。CRIT_SUPPORT=false で出さない。 */
+function critResult(){
+  if(!CRIT_SUPPORT||typeof CRIT==="undefined")return null;
+  const ents=[];
+  if(hasMod(4))CRIT.evaluateDizzy(dizzyFacts()).forEach(e=>ents.push(e));
+  if(rlsYes())ents.push(CRIT.evaluateRLS(rlsFacts()));
+  if(!ents.length)return null;
+  const order={[CRIT.MET]:0,[CRIT.UNK]:1,[CRIT.NOT]:2};
+  ents.forEach((e,i)=>{e._i=i;});
+  ents.sort((a,b)=>(order[a.overall]-order[b.overall])||(a._i-b._i));
+  return {version:CRIT.version,entities:ents,redFlags:sxRedFlags()};
+}
+const CRIT_NOTE="✓ 充足　× 未充足　? 評価不能（未回答・わからない）。回答のない項目は「未充足」にしていません。患者・家族の自己申告だけを機械的に照合したもので、診察所見・検査は含みません。最後の criterion（ほかの疾患でうまく説明されない）は常に医師が確認してください。診断ではありません。疾患名は出していません（基準の出典と記号のみ）。";
+function critSheetHtml(){
+  const r=critResult();if(!r)return "";const S=CRIT.SYM;
+  const verdict={[CRIT.MET]:"充足",[CRIT.NOT]:"未充足",[CRIT.UNK]:"評価不能"};
+  const why=e=>{const t=String(e.text).replace(/^(基準未充足|評価不能)：/,"").split("／")[0];
+    return esc(t.length>34?t.slice(0,34)+"…":t);};
+  const body=e=>`<div class="ie-c">${e.criteria.map(c=>`<div><b>${esc(c.id)}.</b> ${esc(c.label)}　<span class="st ${c.status}">${S[c.status]}</span> ${esc(c.ev)}</div>`).join("")}</div>
+      <div class="ie-t">→ ${esc(e.text)}</div>`;
+  const row=e=>`<div class="ie ${e.overall}"><details class="more"><summary><span class="ie-h">${esc(e.code)}</span>
+      <span class="ic">${e.criteria.map(c=>`${esc(c.id)}<span class="st ${c.status}">${S[c.status]}</span>`).join("")}</span>
+      <span class="iv ${e.overall}">${verdict[e.overall]}</span><span class="iw">${esc(e.name)}${e.overall===CRIT.MET?"":"／"+why(e)}</span></summary>
+      <div class="morein">${body(e)}</div></details>
+      ${e.notes.map(n=>`<div class="ie-n">${esc(n)}</div>`).join("")}</div>`;
+  const shown=r.entities.filter(e=>e.overall!==CRIT.NOT),rest=r.entities.filter(e=>e.overall===CRIT.NOT);
+  const ent=shown.map(row).join("")+
+    (rest.length?more(`基準を満たさない枠（${rest.length}）：${rest.map(e=>esc(e.code)).join("・")}`,
+      rest.map(e=>`<div class="ie not_met"><div class="ie-h">${esc(e.code)}</div><div class="ie-t">${esc(e.name)}<br>→ ${esc(e.text)}</div></div>`).join(""),"ichd-rest"):"");
+  const rf=r.redFlags.length?`<div class="ie-rf">⚠ 注意サインあり（${r.redFlags.length}項目・上の注意サイン）：基準の評価とは別に、診察で確認が必要</div>`:"";
+  return `<div class="sec ichd critsec"><div class="lab">⑪ めまい・脚の不快感：診断基準の充足（診断ではありません）</div>${rf}${ent}
+    ${more("この欄の見かた",`<div class="mini">${esc(CRIT_NOTE)}（${esc(r.version)}）</div>`)}</div>`;
+}
+function critPlainLines(){
+  const r=critResult();if(!r)return [];const S=CRIT.SYM,L=[],bar="─".repeat(24);
+  L.push(bar);L.push("【診断基準の充足（めまい・脚の不快感）】（診断ではありません・疾患名は出していません）");L.push(bar);
+  if(r.redFlags.length)L.push(`⚠ 注意サインあり（${r.redFlags.length}項目・注意サイン参照）：基準の評価とは別に、診察で確認が必要`);
+  r.entities.forEach(e=>{
+    if(e.overall===CRIT.NOT){L.push(`■ ${e.code}（${e.name}） → ${e.text}`);return;}
+    L.push(`■ ${e.code}（${e.name}）`);
+    e.criteria.forEach(c=>L.push(`  ${c.id}. ${c.label}  ${S[c.status]} ${c.ev}`));
+    L.push(`  → ${e.text}`);e.notes.forEach(n=>L.push(`  ${n}`));});
+  L.push(CRIT_NOTE+`（${r.version}）`);
+  return L;
+}
 function doctorSheet(){
   pruneHidden();
   const c=D.common;
@@ -5925,7 +6513,12 @@ function doctorSheet(){
       return `<div style="margin:3px 0">${head}<div class="kv">${kvRows(lines)}</div>
         ${more("頭痛の回答をすべて開く",`<div class="kv">${kvRows(full)}</div>`)}</div>`;}
     const pr=modSheetPairs(id);
-    return pr.length?`<div style="margin:3px 0">${head}<div class="kv">${kvRows(pr)}</div></div>`:"";}).join("");
+    if(!pr.length)return "";
+    /* 回答が多いモジュールは見出しごとに束ね、1問1行の全リストは折りたたむ（2026-09-13a） */
+    if(pr.length>=5){const lines=modSheetLines(id);
+      return `<div style="margin:3px 0">${head}<div class="kv">${kvRows(lines)}</div>
+        ${more(MODS_PT[id]+"の回答をすべて開く",`<div class="kv">${kvRows(pr)}</div>`)}</div>`;}
+    return `<div style="margin:3px 0">${head}<div class="kv">${kvRows(pr)}</div></div>`;}).join("");
   const u=unconfirmedItems();
   const pats=syndromePatterns();
   const patBox=pats.length?`<div class="patbox">
@@ -6000,6 +6593,7 @@ function doctorSheet(){
      <div class="quote">${D.free?esc(D.free):'<span class="mini">記載なし</span>'}</div></div>
 
    ${ichdSheetHtml()}
+   ${critSheetHtml()}
 
    <div class="foot">本シートは患者・家族の自己申告を整理したものです。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。　ID: ${id4}　版: ${APP_VERSION}</div>
   </div>`;
@@ -6062,6 +6656,7 @@ function plainSheet(){
   L.push("⑨ ほかに伝えたいこと（本人・家族の言葉）");
   L.push(`  ${D.free||"（なし）"}`);
   {const ic=ichdPlainLines();if(ic.length){L.push("");ic.forEach(x=>L.push(x));}}
+  {const cc=critPlainLines();if(cc.length){L.push("");cc.forEach(x=>L.push(x));}}
   L.push(sep);
   L.push("本シートは自己申告の整理です。病名・診断・治療方針の判断は医師が行ってください。個人情報は保存していません。");
   return L.join("\n");
